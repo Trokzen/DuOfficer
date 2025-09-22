@@ -1,11 +1,12 @@
 # db/postgresql_manager.py
 import psycopg2
 from psycopg2 import sql
+import re
 # from psycopg2.extras import RealDictCursor # Для получения результатов как dict
-# Убедитесь, что установили библиотеку: pip install Werkzeug
 from werkzeug.security import check_password_hash, generate_password_hash
 from typing import Optional, Dict, Any, List
 import logging
+import datetime
 
 # Настройка логирования для отладки
 logger = logging.getLogger(__name__)
@@ -972,14 +973,51 @@ class PostgreSQLDatabaseManager:
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
+            # Используем полное имя таблицы с указанием схемы
             cursor.execute(
                 f"SELECT id, algorithm_id, description, start_offset, end_offset, contact_phones, report_materials, created_at, updated_at FROM {self.SCHEMA_NAME}.actions WHERE algorithm_id = %s ORDER BY start_offset ASC;",
                 (algorithm_id,)
             )
             rows = cursor.fetchall()
+            # Получаем названия колонок
             colnames = [desc[0] for desc in cursor.description]
             cursor.close()
-            actions_list = [dict(zip(colnames, row)) for row in rows]
+            
+            # --- ИЗМЕНЕНО: Преобразование timedelta в строки ---
+            actions_list = []
+            for row in rows:
+                # Создаем словарь из строки результата
+                action_dict = dict(zip(colnames, row))
+                
+                # Преобразуем start_offset и end_offset, если они являются timedelta
+                for time_field in ['start_offset', 'end_offset']:
+                    if isinstance(action_dict[time_field], datetime.timedelta):
+                        # timedelta можно преобразовать в строку в формате, понятном QML
+                        # Например, "1 day, 2:30:45" -> "1 day 02:30:45"
+                        # Или можно использовать strftime, если нужно определенное форматирование
+                        # Для простоты используем стандартное строковое представление
+                        # action_dict[time_field] = str(action_dict[time_field]) 
+                        # Или более контролируемый формат:
+                        td = action_dict[time_field]
+                        # Форматируем как "DD:HH:MM:SS"
+                        days = td.days
+                        hours, remainder = divmod(td.seconds, 3600)
+                        minutes, seconds = divmod(remainder, 60)
+                        action_dict[time_field] = f"{days}:{hours:02d}:{minutes:02d}:{seconds:02d}"
+                        logger.debug(f"Преобразован {time_field} из timedelta в строку: {action_dict[time_field]}")
+                    elif action_dict[time_field] is None:
+                         # Если значение NULL в БД, преобразуем в пустую строку или оставляем None
+                         # В зависимости от вашей логики в QML
+                         action_dict[time_field] = "" # или None
+                         logger.debug(f"{time_field} был None, преобразован в пустую строку")
+                    else:
+                        # Если это уже строка (например, из интервала типа '1 hour 30 minutes'),
+                        # оставляем как есть или преобразуем в строку принудительно
+                        action_dict[time_field] = str(action_dict[time_field])
+                        
+                actions_list.append(action_dict)
+            # --- ---
+            
             logger.debug(f"Получен список {len(actions_list)} действий для алгоритма ID {algorithm_id}.")
             return actions_list
         except psycopg2.Error as e:
@@ -987,6 +1025,8 @@ class PostgreSQLDatabaseManager:
             return []
         except Exception as e:
             logger.error(f"Неизвестная ошибка при получении списка действий для алгоритма {algorithm_id}: {e}")
+            import traceback
+            traceback.print_exc() # Для более детального лога ошибок
             return []
 
     def get_action_by_id(self, action_id: int) -> Optional[Dict[str, Any]]:
@@ -1024,35 +1064,112 @@ class PostgreSQLDatabaseManager:
             logger.error(f"Неизвестная ошибка при получении данных действия по ID {action_id}: {e}")
             return None
 
+    def _convert_time_string_to_interval(self, time_str: str) -> str:
+        """
+        Преобразует строку времени формата 'dd:hh:mm:ss' или 'hh:mm:ss' 
+        в формат INTERVAL PostgreSQL, например '1 day 02:30:45' или '02:30:45'.
+        Также поддерживает 'dd:h:m:s' (без ведущих нулей).
+        :param time_str: Строка времени.
+        :return: Форматированная строка INTERVAL для PostgreSQL или исходная строка, если формат не распознан.
+        """
+        if not time_str:
+            return '0 seconds' 
+
+        # 1. Попробуем сначала формат dd:hh:mm:ss (с ведущими нулями или без)
+        # Регулярное выражение для dd:hh:mm:ss или dd:h:m:s
+        # \d+ - один или более цифр для дней
+        # \d{1,2} - одна или две цифры для часов/минут/секунд
+        match_dd_hh_mm_ss = re.fullmatch(r'(\d+):(\d{1,2}):(\d{1,2}):(\d{1,2})', time_str)
+        if match_dd_hh_mm_ss:
+            days, hours, minutes, seconds = match_dd_hh_mm_ss.groups()
+            days_int = int(days)
+            hours_int = int(hours)
+            minutes_int = int(minutes)
+            seconds_int = int(seconds)
+            
+            # Формируем строку для PostgreSQL
+            interval_parts = []
+            if days_int > 0:
+                interval_parts.append(f"{days_int} day{'s' if days_int != 1 else ''}")
+            
+            # Форматируем время как HH:MM:SS с ведущими нулями
+            time_part = f"{hours_int:02d}:{minutes_int:02d}:{seconds_int:02d}"
+            interval_parts.append(time_part)
+            
+            return " ".join(interval_parts) # Например: "1 day 02:30:45"
+
+        # 2. Попробуем формат hh:mm:ss (с ведущими нулями или без)
+        # \d{1,2} - одна или две цифры
+        match_hh_mm_ss = re.fullmatch(r'(\d{1,2}):(\d{1,2}):(\d{1,2})', time_str)
+        if match_hh_mm_ss:
+            hours, minutes, seconds = match_hh_mm_ss.groups()
+            # Форматируем как HH:MM:SS с ведущими нулями, это должно быть понятно PostgreSQL
+            return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}" 
+            
+        # Если формат не распознан, возвращаем исходную строку
+        logger.warning(f"Нераспознанный формат времени '{time_str}'. Передаю как есть.")
+        return time_str
+
     def create_action(self, action_data: Dict[str, Any]) -> int:
         """
         Создает новое действие в БД.
         :param action_data: Словарь с данными нового действия.
-                            Должен содержать ключи: algorithm_id, description.
-                            Может содержать: start_offset, end_offset, contact_phones, report_materials.
+                             Должен содержать ключи: algorithm_id, description.
+                             Может содержать: start_offset, end_offset, contact_phones, report_materials.
         :return: ID нового действия, если успешно, иначе -1.
         """
+        # ... (проверки на существование action_data и обязательных полей) ...
         if not action_data:
             logger.warning("Попытка создания действия с пустыми данными.")
             return -1
 
         required_fields = ['algorithm_id', 'description']
-        missing_fields = [field for field in required_fields if field not in action_data or not action_data[field]]
+        missing_fields = [field for field in required_fields if not action_data.get(field)]
         if missing_fields:
             logger.error(f"Отсутствуют обязательные поля для создания действия: {missing_fields}")
             return -1
+        # ... (остальные проверки) ...
 
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
 
+            # --- ИЗМЕНЕНО: Подготовка полей и значений с преобразованием времени ---
+            # Определяем поля, которые будут вставлены
             allowed_fields = ['algorithm_id', 'description', 'start_offset', 'end_offset', 'contact_phones', 'report_materials']
             fields = [field for field in allowed_fields if field in action_data]
+            
+            # Создаем список %s плейсхолдеров
             placeholders = ['%s'] * len(fields)
-            values = [action_data.get(field) for field in fields]
+            
+            # Формируем значения для вставки, обрабатывая типы данных
+            values = []
+            for field in fields:
+                val = action_data.get(field)
+                # --- ДОБАВЛЕНО: Преобразование времени ---
+                if field in ['start_offset', 'end_offset']:
+                    # Преобразуем строку времени в формат INTERVAL PostgreSQL
+                    formatted_interval = self._convert_time_string_to_interval(str(val) if val is not None else "")
+                    values.append(formatted_interval) # Передаем преобразованную строку
+                    logger.debug(f"Преобразовано {field} из '{val}' в INTERVAL '{formatted_interval}'")
+                # --- ---
+                else: # algorithm_id, description, contact_phones, report_materials
+                    # Для текстовых полей None -> NULL, пустые строки -> NULL
+                    processed_val = val if val is not None else None
+                    if isinstance(processed_val, str) and processed_val == "":
+                         processed_val = None
+                    values.append(processed_val)
+
+            if not fields:
+                logger.error("Нет корректных полей для вставки.")
+                return -1
+            # --- ---
+
+            # ... (формирование и выполнение SQL-запроса) ...
 
             columns_str = ', '.join(fields)
             placeholders_str = ', '.join(placeholders)
+            # Используем RETURNING id для получения ID нового пользователя
             sql_query = f"INSERT INTO {self.SCHEMA_NAME}.actions ({columns_str}) VALUES ({placeholders_str}) RETURNING id;"
             
             logger.debug(f"Выполнение SQL создания действия: {cursor.mogrify(sql_query, values)}")
@@ -1085,9 +1202,11 @@ class PostgreSQLDatabaseManager:
         Обновляет данные существующего действия в БД.
         :param action_id: ID действия для обновления.
         :param action_data: Словарь с новыми данными действия.
-                            Может содержать: description, start_offset, end_offset, contact_phones, report_materials.
+                            Может содержать: algorithm_id, description, start_offset, end_offset,
+                                           contact_phones, report_materials.
         :return: True, если успешно, иначе False.
         """
+        # ... (проверки на существование action_data и action_id) ...
         if not action_data:
             logger.warning("Попытка обновления действия с пустыми данными.")
             return False
@@ -1095,21 +1214,46 @@ class PostgreSQLDatabaseManager:
         if not isinstance(action_id, int) or action_id <= 0:
             logger.error("Некорректный ID действия для обновления.")
             return False
+        # ... (остальные проверки) ...
 
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            allowed_fields = ['description', 'start_offset', 'end_offset', 'contact_phones', 'report_materials']
+            # --- ИЗМЕНЕНО: Подготовка данных с преобразованием времени ---
+            # Фильтруем и готовим только разрешенные поля
+            allowed_fields = ['algorithm_id', 'description', 'start_offset', 'end_offset', 'contact_phones', 'report_materials']
             fields_to_update = [field for field in allowed_fields if field in action_data]
             
             if not fields_to_update:
                 logger.warning("Нет полей для обновления действия.")
                 return False
 
-            set_clauses = [f"{field} = %s" for field in fields_to_update]
-            values = [action_data[field] for field in fields_to_update]
+            set_clauses = []
+            values = []
+            for field in fields_to_update:
+                val = action_data.get(field)
+                # --- ДОБАВЛЕНО: Преобразование времени ---
+                if field in ['start_offset', 'end_offset']:
+                    # Преобразуем строку времени в формат INTERVAL PostgreSQL
+                    formatted_interval = self._convert_time_string_to_interval(str(val) if val is not None else "")
+                    values.append(formatted_interval) # Передаем преобразованную строку
+                    logger.debug(f"Преобразовано {field} из '{val}' в INTERVAL '{formatted_interval}'")
+                # --- ---
+                else: # algorithm_id, description, contact_phones, report_materials
+                    # Обработка текстовых полей: пустая строка -> None -> NULL
+                    processed_val = val if val is not None else None
+                    if isinstance(processed_val, str) and processed_val == "":
+                         processed_val = None
+                    values.append(processed_val)
+                
+                set_clauses.append(f"{field} = %s")
+
+            # Добавляем action_id в конец списка значений для WHERE
             values.append(action_id)
+            # --- ---
+
+            # ... (формирование и выполнение SQL-запроса) ...
             
             set_clause_str = ', '.join(set_clauses)
             sql_query = f"UPDATE {self.SCHEMA_NAME}.actions SET {set_clause_str} WHERE id = %s;"

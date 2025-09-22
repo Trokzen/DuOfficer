@@ -6,9 +6,17 @@ import QtQuick.Layouts 6.5
 Item {
     id: algorithmActionsViewRoot
 
-    // Свойство для получения ID текущего алгоритма
+    // Свойства для получения ID и типа времени текущего алгоритма
     property int currentAlgorithmId: -1
-    property alias currentAlgorithmName: algorithmNameLabel.text
+    property string currentAlgorithmName: ""
+    property string currentAlgorithmTimeType: "" // Для отображения типа времени
+    property int currentActionRow: -1
+    property int currentActionIndex: -1
+
+    ListModel {
+        id: actionsModel
+        // Модель будет заполнена данными из Python
+    }
 
     // Сигналы для уведомления родителя о действиях
     signal addActionRequested()
@@ -16,157 +24,252 @@ Item {
     signal deleteActionRequested(var actionId)
     signal duplicateActionRequested(var actionId)
 
-    ColumnLayout {
+    RowLayout {
         anchors.fill: parent
         spacing: 10
 
-        // Заголовок с названием алгоритма
-        RowLayout {
-            Layout.fillWidth: true
+        // --- Основная область: Заголовок и список действий (75% ширины) ---
+        ColumnLayout {
+            Layout.preferredWidth: parent.width * 0.75 // 75% ширины
+            Layout.fillHeight: true
+            spacing: 10
+
+            // --- ИЗМЕНЕН ЗАГОЛОВОК ---
             Label {
-                id: algorithmNameLabel
-                text: "Алгоритм: ..."
+                // text: "Действия алгоритма: " + currentAlgorithmName + " (" + currentAlgorithmTimeType + ")" // Старый вариант
+                text: "Время: " + currentAlgorithmTimeType // Новый вариант
                 font.pointSize: 14
                 font.bold: true
                 elide: Text.ElideRight
             }
-            Item {
+            // --- ---
+
+            // --- ТАБЛИЦА ДЕЙСТВИЙ (заменить существующую секцию) ---
+            ColumnLayout {
                 Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 0
+
+                // Заголовки таблицы
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 30
+                    color: "#e0e0e0"
+                    border.color: "#ccc"
+                    
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 1
+                        spacing: 1
+                        
+                        Rectangle {
+                            Layout.preferredWidth: parent.width * 0.5 - 2
+                            height: parent.height
+                            color: "transparent"
+                            border.color: "#ccc"
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Наименование"
+                                font.bold: true
+                                font.pixelSize: 12
+                            }
+                        }
+                        Rectangle {
+                            Layout.preferredWidth: parent.width * 0.25 - 1
+                            height: parent.height
+                            color: "transparent"
+                            border.color: "#ccc"
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Время начала"
+                                font.bold: true
+                                font.pixelSize: 12
+                            }
+                        }
+                        Rectangle {
+                            Layout.preferredWidth: parent.width * 0.25 - 1
+                            height: parent.height
+                            color: "transparent"
+                            border.color: "#ccc"
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Время окончания"
+                                font.bold: true
+                                font.pixelSize: 12
+                            }
+                        }
+                    }
+                }
+
+                // Содержимое таблицы (ListView с горизонтальным делегатом)
+                ScrollView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    
+                    ListView {
+                        id: actionsListView
+                        model: actionsModel
+                        boundsBehavior: Flickable.StopAtBounds
+
+                        delegate: Item {
+                            width: actionsListView.width
+                            height: 35 // Немного увеличенная высота для лучшей читаемости
+
+                            Rectangle {
+                                anchors.fill: parent
+                                // Цвет фона строки (чередующийся + выделение)
+                                color: index % 2 ? "#f9f9f9" : "#ffffff"
+                                border.color: actionsListView.currentIndex === index ? "#3498db" : "#ddd"
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 1
+                                    spacing: 1
+
+                                    // --- Столбец 1: Наименование ---
+                                    Rectangle {
+                                        Layout.preferredWidth: parent.width * 0.5 - 2
+                                        height: parent.height
+                                        color: "transparent"
+                                        Text {
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 5
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 5
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            color: "black" // Всегда черный
+                                            text: model.description || ""
+                                            elide: Text.ElideRight
+                                            font.pixelSize: 11
+                                            font.bold: true // Оставляем жирный шрифт
+                                        }
+                                    }
+                                    // --- Столбец 2: Время начала ---
+                                    Rectangle {
+                                        Layout.preferredWidth: parent.width * 0.25 - 1
+                                        height: parent.height
+                                        color: "transparent"
+                                        Text {
+                                            anchors.centerIn: parent
+                                            color: "gray" // Всегда серый
+                                            // --- ---
+                                            text: {
+                                                var startTime = model.start_offset;
+                                                if (startTime === undefined || startTime === null || startTime === "") {
+                                                    return "00:00:00";
+                                                }
+                                                return String(startTime);
+                                            }
+                                            elide: Text.ElideRight
+                                            font.pixelSize: 11
+                                        }
+                                    }
+                                    // --- Столбец 3: Время окончания ---
+                                    Rectangle {
+                                        Layout.preferredWidth: parent.width * 0.25 - 1
+                                        height: parent.height
+                                        color: "transparent"
+                                        Text {
+                                            anchors.centerIn: parent
+                                            color: "gray" // Всегда серый
+                                            // --- ---
+                                            text: {
+                                                var endTime = model.end_offset;
+                                                if (endTime === undefined || endTime === null || endTime === "") {
+                                                    return "00:00:00";
+                                                }
+                                                return String(endTime);
+                                            }
+                                            elide: Text.ElideRight
+                                            font.pixelSize: 11
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        actionsListView.currentIndex = index;
+                                    }
+                                    onDoubleClicked: {
+                                        actionsListView.currentIndex = index;
+                                        // Убедитесь, что actionsModel определен в корне AlgorithmActionsView
+                                        var actionData = actionsModel.get(index); 
+                                        algorithmActionsViewRoot.editActionRequested(actionData);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
+            // --- ---
+        }
+        // --- ---
+
+        // --- Панель кнопок справа (25% ширины) ---
+        ColumnLayout {
+            Layout.preferredWidth: parent.width * 0.25 // 25% ширины
+            Layout.fillHeight: true
+            Layout.alignment: Qt.AlignTop
+            spacing: 10
+
             Button {
-                text: "Добавить действие"
+                text: "Добавить"
+                Layout.fillWidth: true
                 onClicked: algorithmActionsViewRoot.addActionRequested()
             }
-        }
 
-        // Список действий
-        ScrollView {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            clip: true
-
-            ListView {
-                id: actionsListView
-                model: ListModel {
-                    id: actionsModel
-                }
-                delegate: Rectangle {
-                    width: ListView.view.width
-                    height: 60
-                    // --- Выделение выбранного элемента (скопировано из AlgorithmsListView) ---
-                    color: {
-                        if (actionsListView.currentIndex === index) {
-                            return "#3498db"; 
-                        } else {
-                            return index % 2 ? "#f9f9f9" : "#ffffff"; 
-                        }
-                    }
-                    border.color: actionsListView.currentIndex === index ? "#2980b9" : "#ddd"
-                    Behavior on color { ColorAnimation { duration: 100 } }
-                    Behavior on border.color { ColorAnimation { duration: 100 } }
-                    // --- ---
-                    
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 5
-                        spacing: 2
-
-                        Text {
-                            Layout.fillWidth: true
-                            // --- Цвет текста для выделенного элемента ---
-                            color: actionsListView.currentIndex === index ? "white" : "black"
-                            // --- ---
-                            text: "Шаг " + (index+1) + ": " + model.description
-                            font.bold: true
-                            elide: Text.ElideRight
-                        }
-                        RowLayout {
-                            Text {
-                                // --- Цвет текста для выделенного элемента ---
-                                color: actionsListView.currentIndex === index ? "#e0e0e0" : "gray"
-                                // --- ---
-                                // Отображение времени начала и окончания
-                                // Предполагается, что start_offset и end_offset приходят как строки INTERVAL
-                                text: "Начало: " + (model.start_offset || "0") + " | Окончание: " + (model.end_offset || "0")
-                                font.pixelSize: 10
-                            }
-                            Item {
-                                Layout.fillWidth: true
-                            }
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: {
-                            actionsListView.currentIndex = index;
-                        }
-                        onDoubleClicked: {
-                            actionsListView.currentIndex = index;
-                            var actionData = actionsModel.get(index);
-                            // Передаем копию данных действия
-                            algorithmActionsViewRoot.editActionRequested({
-                                "id": actionData.id,
-                                "algorithm_id": actionData.algorithm_id,
-                                "description": actionData.description,
-                                "start_offset": actionData.start_offset,
-                                "end_offset": actionData.end_offset,
-                                "contact_phones": actionData.contact_phones,
-                                "report_materials": actionData.report_materials
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        // Панель кнопок действий (видна, если выбрано действие)
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
-            enabled: actionsListView.currentIndex !== -1 && currentAlgorithmId > 0
-
+            // Обновить обработчики кнопок (найти и заменить в файле)
             Button {
                 text: "Редактировать"
+                Layout.fillWidth: true
+                enabled: actionsListView.currentIndex >= 0 && actionsListView.currentIndex < actionsModel.count
                 onClicked: {
                     var index = actionsListView.currentIndex;
-                    if (index !== -1) {
+                    if (index >= 0 && index < actionsModel.count) {
                         var actionData = actionsModel.get(index);
-                        algorithmActionsViewRoot.editActionRequested({
-                            "id": actionData.id,
-                            "algorithm_id": actionData.algorithm_id,
-                            "description": actionData.description,
-                            "start_offset": actionData.start_offset,
-                            "end_offset": actionData.end_offset,
-                            "contact_phones": actionData.contact_phones,
-                            "report_materials": actionData.report_materials
-                        });
+                        algorithmActionsViewRoot.editActionRequested(actionData);
                     }
                 }
             }
+
             Button {
                 text: "Удалить"
+                Layout.fillWidth: true
+                enabled: actionsListView.currentIndex >= 0 && actionsListView.currentIndex < actionsModel.count
                 onClicked: {
                     var index = actionsListView.currentIndex;
-                    if (index !== -1) {
-                        // TODO: Добавить подтверждение
+                    if (index >= 0 && index < actionsModel.count) {
                         var actionId = actionsModel.get(index).id;
                         algorithmActionsViewRoot.deleteActionRequested(actionId);
                     }
                 }
             }
+
             Button {
                 text: "Дублировать"
+                Layout.fillWidth: true
+                enabled: actionsListView.currentIndex >= 0 && actionsListView.currentIndex < actionsModel.count
                 onClicked: {
                     var index = actionsListView.currentIndex;
-                    if (index !== -1) {
+                    if (index >= 0 && index < actionsModel.count) {
                         var actionId = actionsModel.get(index).id;
                         algorithmActionsViewRoot.duplicateActionRequested(actionId);
                     }
                 }
             }
+            
+            Item {
+                Layout.fillHeight: true // Заполнитель для выравнивания кнопок сверху
+            }
         }
+        // --- ---
     }
+
+    // ... (остальные функции loadActions, updateOrAddAction, removeAction остаются без изменений) ...
+    // Или копируются из вашего текущего файла если они были изменены.
 
     /**
      * Загружает список действий для текущего алгоритма из Python
@@ -177,53 +280,130 @@ Item {
             return;
         }
         
-        console.log("QML AlgorithmActionsView: Запрос списка действий для алгоритма ID", currentAlgorithmId, "у Python...");
+        console.log("QML AlgorithmActionsView: === НАЧАЛО ЗАГРУЗКИ СПИСКА ДЕЙСТВИЙ ===");
+        console.log("QML AlgorithmActionsView: 1. Запрос списка действий для алгоритма ID", currentAlgorithmId, "у Python...");
+        
         var actionsList = appData.getActionsByAlgorithmId(currentAlgorithmId);
-        console.log("QML AlgorithmActionsView: Получен список действий из Python (сырой):", JSON.stringify(actionsList).substring(0, 500));
+        
+        console.log("QML AlgorithmActionsView: 2. Получен список действий из Python (сырой):", JSON.stringify(actionsList).substring(0, 500));
 
-        // Преобразование QJSValue/QVariant в массив JS
-        if (actionsList && typeof actionsList === 'object' && actionsList.hasOwnProperty('toVariant')) {
+        // --- Преобразование QJSValue/QVariant в массив JS ---
+        console.log("QML AlgorithmActionsView: 3. Проверка необходимости преобразования QJSValue...");
+        if (actionsList && typeof actionsList === 'object' && typeof actionsList.hasOwnProperty === 'function' && actionsList.hasOwnProperty('toVariant')) {
+            console.log("QML AlgorithmActionsView: 3a. Обнаружен QJSValue, преобразование в QVariant/JS...");
             actionsList = actionsList.toVariant();
-            console.log("QML AlgorithmActionsView: QJSValue (actionsList) преобразован в:", JSON.stringify(actionsList).substring(0, 500));
+            console.log("QML AlgorithmActionsView: 3b. QJSValue (actionsList) преобразован в:", JSON.stringify(actionsList).substring(0, 500));
+        } else {
+            console.log("QML AlgorithmActionsView: 3a. Преобразование не требуется или невозможно.");
         }
+        // --- ---
 
-        // Очищаем текущую модель
+        // --- Очистка модели ---
+        console.log("QML AlgorithmActionsView: 4. Очистка модели ListView действий...");
+        if (typeof actionsModel === 'undefined') {
+            console.error("QML AlgorithmActionsView: 4a. ОШИБКА - actionsModel не определен!");
+            console.log("QML AlgorithmActionsView: === КОНЕЦ ЗАГРУЗКИ СПИСКА ДЕЙСТВИЙ (С ОШИБКОЙ) ===");
+            return;
+        }
+        var oldCount = actionsModel.count;
         actionsModel.clear();
-        console.log("QML AlgorithmActionsView: Модель ListView действий очищена.");
+        console.log("QML AlgorithmActionsView: 4b. Модель очищена. Было элементов:", oldCount, "Стало:", actionsModel.count);
+        // --- ---
 
-        // --- Более гибкая проверка на "массивоподобность" ---
+        // --- Заполнение модели ---
+        console.log("QML AlgorithmActionsView: 5. Попытка заполнения модели...");
+        
+        // --- ИЗМЕНЕНО: Более гибкая проверка на "массивоподобность" ---
+        // Вместо Array.isArray, проверяем, есть ли у объекта свойство length (не undefined)
+        // Это работает как для JS Array, так и для QVariantList, переданного из Python
         if (actionsList && typeof actionsList === 'object' && actionsList.length !== undefined) {
         // --- ---
             var count = actionsList.length;
-            console.log("QML AlgorithmActionsView: Полученный список действий является массивоподобным. Количество элементов:", count);
+            console.log("QML AlgorithmActionsView: 5a. Полученный список является массивоподобным. Количество элементов:", count);
             
+            if (count === 0) {
+                console.log("QML AlgorithmActionsView: 5b. Список действий пуст.");
+            }
+            
+            // --- Заполняем модель данными по одному ---
             for (var i = 0; i < count; i++) {
                 var action = actionsList[i];
-                console.log("QML AlgorithmActionsView: Обрабатываем действие", i, ":", JSON.stringify(action).substring(0, 200));
+                console.log("QML AlgorithmActionsView: 5c. Обрабатываем элемент", i, ":", JSON.stringify(action).substring(0, 200)); // Лог каждого элемента
                 
+                // --- Убедимся, что элемент - это объект ---
                 if (typeof action === 'object' && action !== null) {
+                // --- ---
+                    // --- ИЗМЕНЕНО: Явное копирование свойств с обработкой времени ---
+                    // Вместо actionsModel.append(action), создаем новый JS объект
+                    // Это помогает избежать проблем с QJSValue/QVariantMap, которые могут
+                    // не сериализоваться корректно внутри ListModel.
+                    // Также обрабатываем пустые строки для start_offset и end_offset.
                     try {
-                        actionsModel.append({
+                        var startOffsetValue = action["start_offset"];
+                        var endOffsetValue = action["end_offset"];
+                        
+                        // Логика обработки значений времени:
+                        // 1. Если значение undefined, null или пустая строка, оставляем как есть для делегата
+                        //    (делегат должен отображать "00:00:00" или другое значение по умолчанию).
+                        // 2. Если это валидная строка (не пустая), передаем ее как есть.
+                        // ВАЖНО: Не заменяем на "00:00:00" здесь, пусть делегат решает, что показывать.
+                        // Просто убедимся, что это строки или null/undefined.
+                        
+                        // Преобразуем в строку, если это не undefined/null
+                        if (startOffsetValue !== undefined && startOffsetValue !== null) {
+                            startOffsetValue = String(startOffsetValue);
+                        }
+                        if (endOffsetValue !== undefined && endOffsetValue !== null) {
+                            endOffsetValue = String(endOffsetValue);
+                        }
+                        
+                        var actionCopy = ({
                             "id": action["id"],
                             "algorithm_id": action["algorithm_id"],
                             "description": action["description"] || "",
-                            "start_offset": action["start_offset"] || "", // Может прийти как строка INTERVAL
-                            "end_offset": action["end_offset"] || "",     // Может прийти как строка INTERVAL
+                            "start_offset": startOffsetValue, // Может быть строкой, null или undefined
+                            "end_offset": endOffsetValue,     // Может быть строкой, null или undefined
                             "contact_phones": action["contact_phones"] || "",
                             "report_materials": action["report_materials"] || ""
+                            // Добавьте другие поля, если они нужны для отображения в списке
                         });
-                        console.log("QML AlgorithmActionsView: Действие", i, "добавлено в модель.");
-                    } catch (e) {
-                        console.error("QML AlgorithmActionsView: Ошибка при добавлении действия", i, "в модель:", e.toString(), "Данные:", JSON.stringify(action));
+                        // --- ---
+                        
+                        actionsModel.append(actionCopy); // <-- Добавляем КОПИЮ
+                        console.log("QML AlgorithmActionsView: 5d. Элемент", i, "добавлен в модель.");
+                    } catch (e_append) {
+                        console.error("QML AlgorithmActionsView: 5e. ОШИБКА при добавлении элемента", i, "в модель:", e_append.toString(), "Данные:", JSON.stringify(action));
                     }
                 } else {
-                    console.warn("QML AlgorithmActionsView: Действие", i, "не является корректным объектом:", typeof action, action);
+                    console.warn("QML AlgorithmActionsView: 5f. Элемент", i, "не является корректным объектом:", typeof action, action);
+                }
+                // --- ---
+            }
+            // --- ---
+        } else {
+            // --- ИЗМЕНЕНО: Сообщение об ошибке ---
+            console.error("QML AlgorithmActionsView: 5b. ОШИБКА: Python не вернул корректный массивоподобный объект. Получен тип:", typeof actionsList, "Значение:", actionsList);
+            // --- ---
+        }
+        console.log("QML AlgorithmActionsView: 6. Модель ListView действий обновлена. Элементов:", actionsModel.count);
+        // --- ---
+
+        // --- ДОБАВЛЕНО: Отладка содержимого модели ---
+        if (actionsModel.count > 0) {
+            try {
+                console.log("QML AlgorithmActionsView: 7. Первый элемент в модели (попытка):", JSON.stringify(actionsModel.get(0)));
+            } catch (e_get) {
+                console.warn("QML AlgorithmActionsView: 7a. Не удалось сериализовать первый элемент модели для лога:", e_get.toString());
+                // Попробуем получить отдельные свойства
+                var firstItem = actionsModel.get(0);
+                if (firstItem) {
+                    console.log("QML AlgorithmActionsView: 7b. Первый элемент в модели (свойства): id=", firstItem.id, "description=", firstItem.description, "start_offset=", firstItem.start_offset, "end_offset=", firstItem.end_offset);
                 }
             }
-        } else {
-            console.error("QML AlgorithmActionsView: Python не вернул корректный массивоподобный объект для действий. Получен тип:", typeof actionsList, "Значение:", actionsList);
         }
-        console.log("QML AlgorithmActionsView: Модель ListView действий обновлена. Элементов:", actionsModel.count);
+        // --- ---
+        
+        console.log("QML AlgorithmActionsView: === КОНЕЦ ЗАГРУЗКИ СПИСКА ДЕЙСТВИЙ ===");
     }
 
     /**

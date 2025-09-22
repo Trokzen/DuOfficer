@@ -84,6 +84,12 @@ Popup {
                 Layout.fillHeight: true
                 placeholderText: "Введите описание алгоритма..."
                 wrapMode: TextArea.Wrap
+                background: Rectangle {
+                    border.color: descriptionArea.activeFocus ? "#3498db" : "#ccc" // Цвет границы при фокусе (синий) и без (серый)
+                    border.width: 1 // Толщина границы в пикселях
+                    radius: 2 // Небольшое скругление углов (опционально)
+                    color: "white" // Цвет фона поля ввода
+                }
             }
         }
 

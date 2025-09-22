@@ -5,10 +5,10 @@ import QtQuick.Window 6.5
 
 ApplicationWindow {
     id: window
-    width: 1000
-    height: 700
-    minimumWidth: 800
-    minimumHeight: 600
+    width: 1200
+    height: 900
+    minimumWidth: 1000
+    minimumHeight: 700
     visible: true
     title: "ВПО «Алгоритм-ДЧ»"
 

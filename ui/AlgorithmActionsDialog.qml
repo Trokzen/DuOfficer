@@ -8,8 +8,8 @@ Popup {
     id: algorithmActionsDialog
     x: (parent.width - width) / 2
     y: (parent.height - height) / 2
-    width: Math.min(parent.width * 0.9, 800)
-    height: Math.min(parent.height * 0.9, 600)
+    width: Math.max(800, Math.min(parent.width * 1, 900))
+    height: Math.max(600, Math.min(parent.height * 1, 600))
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape // | Popup.CloseOnPressOutsideParent // Отключим закрытие по клику снаружи
@@ -17,6 +17,7 @@ Popup {
     // Свойства
     property int currentAlgorithmId: -1
     property string currentAlgorithmName: ""
+    property string currentAlgorithmTimeType: "" 
 
     background: Rectangle {
         color: "white"
@@ -58,6 +59,7 @@ Popup {
             Layout.fillHeight: true
             currentAlgorithmId: algorithmActionsDialog.currentAlgorithmId
             currentAlgorithmName: algorithmActionsDialog.currentAlgorithmName
+            currentAlgorithmTimeType: algorithmActionsDialog.currentAlgorithmTimeType
             
             // Подключаем сигналы
             onAddActionRequested: {
@@ -122,12 +124,15 @@ Popup {
         console.log("QML AlgorithmActionsDialog: Загрузка данных для алгоритма:", JSON.stringify(algorithmData));
         currentAlgorithmId = algorithmData.id;
         currentAlgorithmName = algorithmData.name || "Без названия";
+        // --- НОВОЕ: Установка типа времени ---
+        currentAlgorithmTimeType = algorithmData.time_type || "Не задан"; 
+        // --- ---
         // После установки currentAlgorithmId, AlgorithmActionsView автоматически попытается загрузить действия
         // Но лучше вызвать явно, чтобы быть уверенным
         if (algorithmActionsView && typeof algorithmActionsView.loadActions === 'function') {
             algorithmActionsView.loadActions();
         } else {
-             console.warn("QML AlgorithmActionsDialog: AlgorithmActionsView или его метод loadActions не найдены при загрузке данных.");
+            console.warn("QML AlgorithmActionsDialog: AlgorithmActionsView или его метод loadActions не найдены при загрузке данных.");
         }
     }
 
