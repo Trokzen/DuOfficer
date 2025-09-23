@@ -1297,19 +1297,6 @@ class PostgreSQLDatabaseManager:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            # Проверяем, существуют ли выполнения этого действия
-            cursor.execute(
-                f"SELECT COUNT(*) FROM {self.SCHEMA_NAME}.action_executions WHERE action_id = %s;",
-                (action_id,)
-            )
-            execution_count = cursor.fetchone()[0]
-            
-            if execution_count > 0:
-                logger.warning(f"Невозможно удалить действие ID {action_id}, так как существуют ({execution_count}) записей о его выполнении.")
-                cursor.close()
-                # Можно вернуть False или выбросить исключение
-                # return False 
-
             sql_query = f"DELETE FROM {self.SCHEMA_NAME}.actions WHERE id = %s;"
             
             logger.debug(f"Выполнение SQL удаления действия {action_id}: {cursor.mogrify(sql_query, (action_id,))}")

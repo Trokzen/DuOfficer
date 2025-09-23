@@ -46,6 +46,9 @@ CREATE TABLE IF NOT EXISTS app_schema.algorithms (
     category VARCHAR(100) NOT NULL CHECK (category IN ('повседневная деятельность', 'боевая готовность', 'противодействие терроризму', 'кризисные ситуации')), -- Категория алгоритма
     time_type VARCHAR(50) NOT NULL CHECK (time_type IN ('оперативное', 'астрономическое')), -- Тип времени выполнения алгоритма
     description TEXT,                                  -- Описание алгоритма
+    -- --- НОВОЕ: Поле для ранжирования ---
+    sort_order INTEGER DEFAULT 0,                     -- Порядковый номер для сортировки алгоритмов в списке
+    -- --- ---
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,    -- Дата и время создания записи алгоритма
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP     -- Дата и время последнего обновления записи алгоритма
 );
@@ -60,30 +63,67 @@ CREATE TABLE IF NOT EXISTS app_schema.actions (
     contact_phones TEXT,                               -- Телефоны для связи, связанные с этим действием
     report_materials TEXT,                             -- Пути или ссылки на отчетные материалы
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,    -- Дата и время создания записи действия
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP     -- Дата и время последнего обновления записи действия
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,    -- Дата и время последнего обновления записи действия
+    -- --- НОВОЕ: Ограничение на порядок времени ---
+    CONSTRAINT check_action_time_order CHECK (
+        start_offset IS NULL OR
+        end_offset IS NULL OR
+        start_offset <= end_offset
+    )
+    -- --- ---
 );
 
 -- Таблица для хранения запущенных/выполняемых экземпляров алгоритмов
+-- Изменена в соответствии с Snapshot-подходом.
 CREATE TABLE IF NOT EXISTS app_schema.algorithm_executions (
     id SERIAL PRIMARY KEY,                             -- Уникальный идентификатор экземпляра выполнения алгоритма
-    algorithm_id INTEGER NOT NULL REFERENCES app_schema.algorithms(id), -- Ссылка на выполняемый алгоритм
+    -- --- ССЫЛКА на исходный алгоритм сохраняется для трассировки ---
+    algorithm_id INTEGER NOT NULL REFERENCES app_schema.algorithms(id), -- Ссылка на выполняемый алгоритм (для трассировки)
+    -- --- ПОЛЯ ДЛЯ SNAPSHOT'А ДАННЫХ АЛГОРИТМА НА МОМЕНТ ЗАПУСКА ---
+    -- Эти поля хранят копию данных алгоритма на момент создания execution'а
+    snapshot_name VARCHAR(255) NOT NULL,              -- Копия name алгоритма на момент запуска
+    snapshot_category VARCHAR(100) NOT NULL,           -- Копия category алгоритма на момент запуска
+    snapshot_time_type VARCHAR(50) NOT NULL,          -- Копия time_type алгоритма на момент запуска
+    snapshot_description TEXT,                         -- Копия description алгоритма на момент запуска
+    -- --- ---
     started_at TIMESTAMP,                              -- Фактическое время начала выполнения экземпляра
     completed_at TIMESTAMP,                            -- Фактическое время завершения выполнения экземпляра
     status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'completed', 'cancelled')), -- Статус выполнения экземпляра
-    created_by INTEGER REFERENCES app_schema.users(id), -- Ссылка на пользователя, запустившего алгоритм
+    -- --- ОБНОВЛЕНО: Информация о пользователе на момент запуска ---
+    created_by_user_id INTEGER,                        -- ID пользователя на момент запуска (для трассировки, может быть NULL если пользователь удален)
+    created_by_user_display_name TEXT,                -- Отображаемое имя пользователя на момент запуска (Фамилия И.О.)
+    -- --- ---
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,    -- Дата и время создания записи выполнения
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP     -- Дата и время последнего обновления записи выполнения
 );
 
 -- Таблица для хранения выполнения действий в рамках запущенного алгоритма
+-- Изменена кардинально в соответствии с Snapshot-подходом и уточнениями.
 CREATE TABLE IF NOT EXISTS app_schema.action_executions (
     id SERIAL PRIMARY KEY,                             -- Уникальный идентификатор выполнения действия
+    -- --- ССЫЛКА на execution, а не на action ---
     execution_id INTEGER NOT NULL REFERENCES app_schema.algorithm_executions(id) ON DELETE CASCADE, -- Ссылка на экземпляр выполнения алгоритма
-    action_id INTEGER NOT NULL REFERENCES app_schema.actions(id), -- Ссылка на описание выполняемого действия
-    calculated_start_time TIMESTAMP,                   -- Рассчитанное (планируемое) время начала действия
-    calculated_end_time TIMESTAMP,                     -- Рассчитанное (планируемое) время окончания действия
-    actual_start_time TIMESTAMP,                       -- Фактическое время начала выполнения действия
-    actual_end_time TIMESTAMP,                         -- Фактическое время окончания выполнения действия
+    -- --- ---
+    
+    -- --- ПОЛЯ ДЛЯ SNAPSHOT'А СТАТИЧЕСКИХ ДАННЫХ ДЕЙСТВИЯ НА МОМЕНТ ПЛАНИРОВАНИЯ ---
+    -- Эти поля хранят копию данных действия на момент планирования его выполнения
+    -- Они позволяют action_execution существовать независимо от оригинального шаблона действия
+    snapshot_description TEXT NOT NULL,              -- Копия description действия на момент планирования
+    snapshot_contact_phones TEXT,                     -- Копия contact_phones действия на момент планирования
+    snapshot_report_materials TEXT,                   -- Копия report_materials действия на момент планирования
+    -- --- ---
+    
+    -- --- РАССЧИТАННЫЕ АБСОЛЮТНЫЕ ВРЕМЕНА (вместо snapshot смещений) ---
+    -- Рассчитываются один раз на основе snapshot_*_offset шаблона действия и времени запуска алгоритма
+    calculated_start_time TIMESTAMP,                   -- Рассчитанное (планируемое) АБСОЛЮТНОЕ время начала действия
+    calculated_end_time TIMESTAMP,                     -- Рассчитанное (планируемое) АБСОЛЮТНОЕ время окончания действия
+    -- --- ---
+    
+    -- --- ФАКТИЧЕСКИЕ ВРЕМЕНА ВЫПОЛНЕНИЯ ---
+    -- actual_start_time TIMESTAMP,                    -- Фактическое время начала выполнения действия (УБРАНО по требованию)
+    actual_end_time TIMESTAMP,                         -- Фактическое время окончания выполнения действия (ОБЯЗАТЕЛЬНО)
+    -- --- ---
+    
     status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'skipped')), -- Статус выполнения действия
     reported_to TEXT,                                  -- Информация о том, кому было доложено о выполнении действия
     notes TEXT,                                        -- Дополнительные заметки по выполнению действия
@@ -100,8 +140,12 @@ CREATE INDEX IF NOT EXISTS idx_actions_algorithm_id ON app_schema.actions(algori
 CREATE INDEX IF NOT EXISTS idx_algorithm_executions_algorithm_id ON app_schema.algorithm_executions(algorithm_id);
 CREATE INDEX IF NOT EXISTS idx_algorithm_executions_status ON app_schema.algorithm_executions(status);
 CREATE INDEX IF NOT EXISTS idx_action_executions_execution_id ON app_schema.action_executions(execution_id);
-CREATE INDEX IF NOT EXISTS idx_action_executions_action_id ON app_schema.action_executions(action_id);
+-- CREATE INDEX IF NOT EXISTS idx_action_executions_action_id ON app_schema.action_executions(action_id); -- ИНДЕКС УДАЛЕН
 CREATE INDEX IF NOT EXISTS idx_action_executions_status ON app_schema.action_executions(status);
+
+-- --- НОВЫЙ ИНДЕКС: Для сортировки алгоритмов ---
+CREATE INDEX IF NOT EXISTS idx_algorithms_sort_order ON app_schema.algorithms(sort_order);
+-- --- ---
 
 -- === ФУНКЦИИ И ТРИГГЕРЫ ===
 
@@ -210,4 +254,7 @@ DO $$ BEGIN
     RAISE NOTICE 'Схема ''app_schema'' создана (если не существовала).';
     RAISE NOTICE 'Таблицы (users, post_settings, algorithms, actions, algorithm_executions, action_executions) и начальные данные созданы в схеме ''app_schema''.';
     RAISE NOTICE 'Пожалуйста, замените плейсхолдер хэша пароля для пользователя ''admin'' на реальный хэш.';
+    RAISE NOTICE 'Таблица algorithms обновлена: добавлено поле sort_order и индекс idx_algorithms_sort_order.';
+    RAISE NOTICE 'Таблицы algorithm_executions и action_executions обновлены в соответствии с Snapshot-подходом и уточнениями.';
+    RAISE NOTICE 'В таблицу actions добавлено ограничение check_action_time_order.';
 END $$;
