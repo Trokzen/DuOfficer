@@ -1,5 +1,6 @@
 # main.py
 import sys
+import traceback
 from pathlib import Path
 from PySide6.QtCore import Qt, QUrl, QDateTime, QTimer, Slot, QSettings
 from PySide6.QtGui import QGuiApplication, QIcon, QAction
@@ -26,6 +27,12 @@ class ApplicationData(QObject):
     settingsChanged = Signal() # Новый сигнал для уведомления об изменении настроек
     postNumberChanged = Signal()
     postNameChanged = Signal()
+    localTimeChanged = Signal()
+    moscowTimeChanged = Signal()
+    localDateChanged = Signal()   # Сигнал для изменения местной даты
+    moscowDateChanged = Signal()  # Сигнал для изменения московской даты    
+    timeSettingsChanged = Signal() # Сигнал для обновления настроек времени
+
 
     def load_initial_settings(self):
         """Загружает начальные настройки при запуске приложения"""
@@ -46,9 +53,43 @@ class ApplicationData(QObject):
                         self._post_name = settings['post_name']
                         self.postNameChanged.emit()
                     
-                    print(f"Python: Начальные настройки загружены: workplace='{self._workplace_name}', post_number='{self._post_number}', post_name='{self._post_name}'")
+                    updated_time_props = False
+                    
+                    if 'custom_time_label' in settings and settings['custom_time_label']:
+                        self._custom_time_label = settings['custom_time_label']
+                        updated_time_props = True
+                        print(f"Python: Загружено custom_time_label: '{self._custom_time_label}'")
+
+                    # Загружаем смещение как число секунд
+                    if 'custom_time_offset_seconds' in settings and isinstance(settings['custom_time_offset_seconds'], int):
+                        self._custom_time_offset_seconds = settings['custom_time_offset_seconds']
+                        updated_time_props = True
+                        print(f"Python: Загружено custom_time_offset_seconds: {self._custom_time_offset_seconds}")
+
+                    if 'show_moscow_time' in settings:
+                        # Преобразуем 1/0 из SQLite в True/False
+                        self._show_moscow_time = bool(settings['show_moscow_time'])
+                        updated_time_props = True
+                        print(f"Python: Загружено show_moscow_time: {self._show_moscow_time}")
+
+                    # Загружаем смещение Москвы как число секунд
+                    if 'moscow_time_offset_seconds' in settings and isinstance(settings['moscow_time_offset_seconds'], int):
+                        self._moscow_time_offset_seconds = settings['moscow_time_offset_seconds']
+                        updated_time_props = True
+                        print(f"Python: Загружено moscow_time_offset_seconds: {self._moscow_time_offset_seconds}")
+
+                    if updated_time_props:
+                        print("Python: Некоторые настройки времени обновлены из БД.")
+                        # Принудительно обновляем рассчитываемые времена
+                        self.update_time()
+                        # Уведомляем QML об изменении настроек времени
+                        self.timeSettingsChanged.emit()
+                    # --- ---
+                    
+                    print(f"Python: Начальные настройки (включая время) загружены.")
         except Exception as e:
-            print(f"Python: Ошибка при загрузке начальных настроек: {e}")
+            print(f"Python: Ошибка при загрузке начальных настроек (включая время): {e}")
+            traceback.print_exc()
 
     def __init__(self, app, engine, sqlite_config_manager):
         """
@@ -74,6 +115,16 @@ class ApplicationData(QObject):
         self._current_date = QDateTime.currentDateTime().toString("dd.MM.yyyy")
         self._post_number = "1"  # Значение по умолчанию
         self._post_name = "Дежурство по части"  # Значение по умолчанию
+                # --- НОВЫЕ свойства для времени ---
+        self._local_time = self._current_time # Инициализируем как текущее
+        self._moscow_time = self._current_time # Инициализируем как текущее
+        self._custom_time_label = "Местное время" # Значение по умолчанию
+        self._custom_time_offset_seconds = 0 # Смещение в секундах (удобнее для расчетов)
+        self._show_moscow_time = True
+        self._moscow_time_offset_seconds = 0 # Смещение Москвы в секундах
+        # --- ИНИЦИАЛИЗАЦИЯ НОВЫХ СВОЙСТВ ДЛЯ ДАТ ---
+        self._local_date = self._current_date # <-- Новое внутреннее свойство
+        self._moscow_date = self._current_date # <-- Новое внутреннее свойство
         # --- ---
 
     # Загружаем начальные настройки
@@ -132,12 +183,42 @@ class ApplicationData(QObject):
         print("Иконка в трее создана и показана.")
 
     def update_time(self):
-        """Обновляет текущее время и дату."""
-        now = QDateTime.currentDateTime()
-        self._current_time = now.toString("hh:mm:ss")
-        self._current_date = now.toString("dd.MM.yyyy")
+        """Обновляет текущее время, местное время и московское время."""
+        now_system = QDateTime.currentDateTime() # Время системы QDateTime
+        
+        # --- Обновляем основное (системное) время и ДАТУ ---
+        self._current_time = now_system.toString("hh:mm:ss")
+        # --- ОБНОВЛЕНО: Обновляем и системную дату ---
+        self._current_date = now_system.toString("dd.MM.yyyy") 
+        # --- ---
         self.currentTimeChanged.emit()
-        self.currentDateChanged.emit()
+        # --- ОБНОВЛЕНО: Эмитируем сигнал о смене системной даты ---
+        self.currentDateChanged.emit() 
+        # --- ---
+
+        # --- Рассчитываем и обновляем местное время и ДАТУ ---
+        # Создаем QDateTime для местного времени на основе системного
+        local_dt = now_system.addSecs(self._custom_time_offset_seconds)
+        self._local_time = local_dt.toString("hh:mm:ss")
+        # --- НОВОЕ: Рассчитываем и обновляем местную дату ---
+        self._local_date = local_dt.toString("dd.MM.yyyy") 
+        # --- ---
+        self.localTimeChanged.emit()
+        # --- НОВОЕ: Эмитируем сигнал о смене местной даты ---
+        self.localDateChanged.emit() 
+        # --- ---
+
+        # --- Рассчитываем и обновляем московское время и ДАТУ ---
+        # Создаем QDateTime для московского времени на основе системного
+        moscow_dt = now_system.addSecs(self._moscow_time_offset_seconds)
+        self._moscow_time = moscow_dt.toString("hh:mm:ss")
+        # --- НОВОЕ: Рассчитываем и обновляем московскую дату ---
+        self._moscow_date = moscow_dt.toString("dd.MM.yyyy") 
+        # --- ---
+        self.moscowTimeChanged.emit()
+        # --- НОВОЕ: Эмитируем сигнал о смене московской даты ---
+        self.moscowDateChanged.emit() 
+        # --- ---
 
     # --- Свойства для QML ---
     @Property(str, notify=workplaceNameChanged)
@@ -163,6 +244,34 @@ class ApplicationData(QObject):
     @Property(str, notify=postNameChanged)
     def postName(self):
         return self._post_name
+
+    @Property(str, notify=localTimeChanged)
+    def localTime(self):
+        return self._local_time
+
+    @Property(str, notify=moscowTimeChanged)
+    def moscowTime(self):
+        return self._moscow_time
+
+    # --- СВОЙСТВА ДЛЯ ДАТ ---
+    @Property(str, notify=localDateChanged) # <-- Новый сигнал
+    def localDate(self):
+        """Настраиваемая местная дата."""
+        return self._local_date # <-- Новое внутреннее свойство
+
+    @Property(str, notify=moscowDateChanged) # <-- Новый сигнал
+    def moscowDate(self):
+        """Московская дата."""
+        return self._moscow_date # <-- Новое внутреннее свойство
+    # --- ---
+
+    @Property(str, notify=timeSettingsChanged)
+    def customTimeLabel(self):
+        return self._custom_time_label
+
+    @Property(bool, notify=timeSettingsChanged)
+    def showMoscowTime(self):
+        return self._show_moscow_time
 
     @Slot(str)
     def setDutyOfficer(self, name):
@@ -429,7 +538,9 @@ class ApplicationData(QObject):
                 success = self.sqlite_config_manager.update_app_settings(new_settings)
                 if success:
                     print("Python: Настройки приложения успешно обновлены в SQLite.")
-                    
+                    # --- Обновляем локальные свойства ApplicationData в реальном времени ---
+                    updated_props = False
+                    updated_time_props = False # Флаг для отслеживания изменений времени
                     # Обновляем локальные свойства ApplicationData в реальном времени
                     updated_properties = False
                     if 'workplace_name' in new_settings and new_settings['workplace_name'] is not None:
@@ -450,8 +561,52 @@ class ApplicationData(QObject):
                         updated_properties = True
                         print(f"Python: Обновлен post_name: {self._post_name}")
                     
+                    if 'custom_time_label' in new_settings:
+                        self._custom_time_label = str(new_settings['custom_time_label'])
+                        self.timeSettingsChanged.emit() # Уведомляем об изменении метки
+                        updated_props = True
+                        updated_time_props = True
+                        print(f"Python: Обновлен custom_time_label: {self._custom_time_label}")
+
+                    if 'custom_time_offset_seconds' in new_settings:
+                         # Убедимся, что это целое число
+                         try:
+                             offset_secs = int(new_settings['custom_time_offset_seconds'])
+                             self._custom_time_offset_seconds = offset_secs
+                             updated_props = True
+                             updated_time_props = True
+                             print(f"Python: Обновлен custom_time_offset_seconds: {self._custom_time_offset_seconds}")
+                         except (ValueError, TypeError):
+                             print(f"Python: Ошибка преобразования custom_time_offset_seconds: {new_settings['custom_time_offset_seconds']}")
+
+                    if 'show_moscow_time' in new_settings:
+                        # Преобразуем в булево
+                        self._show_moscow_time = bool(new_settings['show_moscow_time'])
+                        self.timeSettingsChanged.emit() # Уведомляем об изменении флага показа
+                        updated_props = True
+                        updated_time_props = True
+                        print(f"Python: Обновлен show_moscow_time: {self._show_moscow_time}")
+                        
+                    if 'moscow_time_offset_seconds' in new_settings:
+                         # Убедимся, что это целое число
+                         try:
+                             moscow_offset_secs = int(new_settings['moscow_time_offset_seconds'])
+                             self._moscow_time_offset_seconds = moscow_offset_secs
+                             updated_props = True
+                             updated_time_props = True
+                             print(f"Python: Обновлен moscow_time_offset_seconds: {self._moscow_time_offset_seconds}")
+                         except (ValueError, TypeError):
+                             print(f"Python: Ошибка преобразования moscow_time_offset_seconds: {new_settings['moscow_time_offset_seconds']}")
+
                     if updated_properties:
-                        print("Python: Свойства обновлены и сигналы отправлены в QML")
+                        print("Python: Локальные свойства обновлены.")
+                        # --- Если изменялись настройки времени, обновляем рассчитываемые времена ---
+                        if updated_time_props:
+                            print("Python: Обнаружены изменения настроек времени. Пересчет localTime/moscowTime...")
+                            self.update_time() # Пересчитываем localTime и moscowTime
+                        # --- ---
+                        # Уведомляем QML об общем изменении настроек (если нужно)
+                        # self.settingsChanged.emit() # (если такой сигнал используется глобально)
                     
                     return True
                 else:
@@ -807,6 +962,439 @@ class ApplicationData(QObject):
             self.close_confirmation_shown = False # Сброс флага
             print("Окно восстановлено") # Для отладки
 
+
+    # --- СЛОТЫ ДЛЯ РАБОТЫ С ALGORITHMS ---
+
+    @Slot(result=list)
+    def getAllAlgorithmsList(self) -> list:
+        """Возвращает список всех алгоритмов для QML."""
+        try:
+            if self.pg_database_manager:
+                algorithms = self.pg_database_manager.get_all_algorithms()
+            else:
+                # Заглушка, если нет подключения
+                algorithms = [
+                    {'id': 1, 'name': 'Алгоритм 1 (заглушка)', 'category': 'повседневная деятельность', 'time_type': 'оперативное', 'description': 'Описание алгоритма 1'},
+                    {'id': 2, 'name': 'Алгоритм 2 (заглушка)', 'category': 'кризисные ситуации', 'time_type': 'астрономическое', 'description': 'Описание алгоритма 2'},
+                ]
+            print(f"Python: QML запросил список алгоритмов. Найдено: {len(algorithms)}")
+            result = []
+            for alg in algorithms:
+                if isinstance(alg, dict):
+                    result.append(alg)
+                else:
+                    result.append(dict(alg))
+            return result
+        except Exception as e:
+            print(f"Python: Ошибка при получении списка алгоритмов: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    @Slot(int, result='QVariant')
+    def getAlgorithmById(self, algorithm_id: int) -> 'QVariant':
+        """Возвращает данные алгоритма по ID для QML."""
+        try:
+            if not isinstance(algorithm_id, int) or algorithm_id <= 0:
+                print(f"Python: Ошибка - Некорректный ID алгоритма: {algorithm_id}")
+                return None
+
+            if self.pg_database_manager:
+                algorithm = self.pg_database_manager.get_algorithm_by_id(algorithm_id)
+                if algorithm:
+                    print(f"Python: QML запросил алгоритм ID {algorithm_id}. Найден: {algorithm['name']}")
+                    return algorithm
+                else:
+                    print(f"Python: Алгоритм ID {algorithm_id} не найден.")
+                    return None
+            else:
+                print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+                return None
+        except Exception as e:
+            print(f"Python: Ошибка при получении алгоритма ID {algorithm_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    @Slot('QVariant', result=int)
+    def addAlgorithm(self, algorithm_data: 'QVariant') -> int:
+        """Добавляет новый алгоритм."""
+        print("Python: QML отправил запрос на добавление нового алгоритма.")
+        
+        if hasattr(algorithm_data, 'toVariant'):
+            algorithm_data = algorithm_data.toVariant()
+            print(f"Python: QJSValue (algorithm_data) преобразован в: {algorithm_data}")
+
+        if not isinstance(algorithm_data, dict):
+            print(f"Python: Ошибка - algorithm_data не является словарем. Получен тип: {type(algorithm_data)}")
+            return -1
+        if not algorithm_data:
+            print("Python: Ошибка - algorithm_data пуст.")
+            return -1
+
+        if self.pg_database_manager:
+            try:
+                # Подготовка данных
+                required_fields = ['name', 'category', 'time_type']
+                missing_fields = [field for field in required_fields if field not in algorithm_data or not algorithm_data[field]]
+                if missing_fields:
+                    print(f"Python: Ошибка - Отсутствуют обязательные поля: {missing_fields}")
+                    return -1
+
+                prepared_data = {
+                    'name': str(algorithm_data.get('name', '')).strip(),
+                    'category': str(algorithm_data.get('category', '')).strip(),
+                    'time_type': str(algorithm_data.get('time_type', '')).strip(),
+                    'description': str(algorithm_data.get('description', '')).strip() if algorithm_data.get('description') is not None else ""
+                }
+
+                if not all([prepared_data['name'], prepared_data['category'], prepared_data['time_type']]):
+                    print("Python: Ошибка - Название, категория и тип времени не могут быть пустыми.")
+                    return -1
+
+                new_id = self.pg_database_manager.create_algorithm(prepared_data)
+                if isinstance(new_id, int) and new_id > 0:
+                    print(f"Python: Новый алгоритм успешно добавлен с ID: {new_id}")
+                    return new_id
+                else:
+                    print(f"Python: Менеджер БД вернул некорректный ID: {new_id}")
+                    return -1
+            except Exception as e:
+                print(f"Python: Исключение при добавлении алгоритма: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                return -1
+        else:
+            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            return -1
+
+    @Slot(int, 'QVariant', result=bool)
+    def updateAlgorithm(self, algorithm_id: int, algorithm_data: 'QVariant') -> bool:
+        """Обновляет существующий алгоритм."""
+        print(f"Python: QML отправил запрос на обновление алгоритма ID {algorithm_id}.")
+        
+        if hasattr(algorithm_data, 'toVariant'):
+            algorithm_data = algorithm_data.toVariant()
+            print(f"Python: QJSValue (algorithm_data) преобразован в: {algorithm_data}")
+
+        if not isinstance(algorithm_data, dict):
+            print(f"Python: Ошибка - algorithm_data не является словарем. Получен тип: {type(algorithm_data)}")
+            return False
+        if not algorithm_data:
+            print("Python: Ошибка - algorithm_data пуст.")
+            return False
+        if not isinstance(algorithm_id, int) or algorithm_id <= 0:
+            print(f"Python: Ошибка - Некорректный ID алгоритма: {algorithm_id}")
+            return False
+
+        if self.pg_database_manager:
+            try:
+                # Подготовка данных (фильтрация разрешенных полей)
+                allowed_fields = ['name', 'category', 'time_type', 'description']
+                prepared_data = {}
+                for key, value in algorithm_data.items():
+                    if key in allowed_fields:
+                        if key in ['name', 'category', 'time_type']:
+                            prepared_data[key] = str(value).strip() if value is not None else ""
+                        else: # description
+                            prepared_data[key] = str(value).strip() if value is not None else ""
+
+                if not prepared_data:
+                    print("Python: Ошибка - Нет данных для обновления.")
+                    return False
+
+                success = self.pg_database_manager.update_algorithm(algorithm_id, prepared_data)
+                if success:
+                    print(f"Python: Алгоритм ID {algorithm_id} успешно обновлен.")
+                    return True
+                else:
+                    print(f"Python: Не удалось обновить алгоритм ID {algorithm_id}.")
+                    return False
+            except Exception as e:
+                print(f"Python: Исключение при обновлении алгоритма {algorithm_id}: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+        else:
+            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            return False
+
+    @Slot(int, result=bool)
+    def deleteAlgorithm(self, algorithm_id: int) -> bool:
+        """Удаляет алгоритм."""
+        print(f"Python: QML отправил запрос на удаление алгоритма ID {algorithm_id}.")
+        
+        if not isinstance(algorithm_id, int) or algorithm_id <= 0:
+            print(f"Python: Ошибка - Некорректный ID алгоритма: {algorithm_id}")
+            return False
+
+        if self.pg_database_manager:
+            try:
+                success = self.pg_database_manager.delete_algorithm(algorithm_id)
+                if success:
+                    print(f"Python: Алгоритм ID {algorithm_id} успешно удален.")
+                    return True
+                else:
+                    print(f"Python: Не удалось удалить алгоритм ID {algorithm_id}. Возможно, есть выполнения или другие ограничения.")
+                    return False # QML может показать сообщение пользователю
+            except Exception as e:
+                print(f"Python: Исключение при удалении алгоритма {algorithm_id}: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+        else:
+            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            return False
+
+    @Slot(int, result=int)
+    def duplicateAlgorithm(self, original_algorithm_id: int) -> int:
+        """Создает копию алгоритма."""
+        print(f"Python: QML отправил запрос на дублирование алгоритма ID {original_algorithm_id}.")
+        
+        if not isinstance(original_algorithm_id, int) or original_algorithm_id <= 0:
+            print(f"Python: Ошибка - Некорректный ID оригинального алгоритма: {original_algorithm_id}")
+            return -1
+
+        if self.pg_database_manager:
+            try:
+                new_algorithm_id = self.pg_database_manager.duplicate_algorithm(original_algorithm_id)
+                if new_algorithm_id != -1:
+                    print(f"Python: Алгоритм ID {original_algorithm_id} успешно дублирован. Новый ID: {new_algorithm_id}")
+                    return new_algorithm_id
+                else:
+                    print(f"Python: Не удалось дублировать алгоритм ID {original_algorithm_id}.")
+                    return -1
+            except Exception as e:
+                print(f"Python: Исключение при дублировании алгоритма {original_algorithm_id}: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                return -1
+        else:
+            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            return -1
+
+    # --- СЛОТЫ ДЛЯ РАБОТЫ С ACTIONS ---
+
+    @Slot(int, result=list)
+    def getActionsByAlgorithmId(self, algorithm_id: int) -> list:
+        """Возвращает список действий для заданного алгоритма."""
+        try:
+            if not isinstance(algorithm_id, int) or algorithm_id <= 0:
+                print(f"Python: Ошибка - Некорректный ID алгоритма: {algorithm_id}")
+                return []
+
+            if self.pg_database_manager:
+                actions = self.pg_database_manager.get_actions_by_algorithm_id(algorithm_id)
+                print(f"Python: QML запросил действия для алгоритма ID {algorithm_id}. Найдено: {len(actions)}")
+                result = []
+                for action in actions:
+                    if isinstance(action, dict):
+                        result.append(action)
+                    else:
+                        result.append(dict(action))
+                return result
+            else:
+                print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+                return []
+        except Exception as e:
+            print(f"Python: Ошибка при получении действий для алгоритма ID {algorithm_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    @Slot(int, result='QVariant')
+    def getActionById(self, action_id: int) -> 'QVariant':
+        """Возвращает данные действия по ID."""
+        try:
+            if not isinstance(action_id, int) or action_id <= 0:
+                print(f"Python: Ошибка - Некорректный ID действия: {action_id}")
+                return None
+
+            if self.pg_database_manager:
+                action = self.pg_database_manager.get_action_by_id(action_id)
+                if action:
+                    print(f"Python: QML запросил действие ID {action_id}.")
+                    return action
+                else:
+                    print(f"Python: Действие ID {action_id} не найдено.")
+                    return None
+            else:
+                print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+                return None
+        except Exception as e:
+            print(f"Python: Ошибка при получении действия ID {action_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    @Slot('QVariant', result=int)
+    def addAction(self, action_data: 'QVariant') -> int:
+        """Добавляет новое действие."""
+        print("Python: QML отправил запрос на добавление нового действия.")
+        
+        if hasattr(action_data, 'toVariant'):
+            action_data = action_data.toVariant()
+            print(f"Python: QJSValue (action_data) преобразован в: {action_data}")
+
+        if not isinstance(action_data, dict):
+            print(f"Python: Ошибка - action_data не является словарем. Получен тип: {type(action_data)}")
+            return -1
+        if not action_data:
+            print("Python: Ошибка - action_data пуст.")
+            return -1
+
+        if self.pg_database_manager:
+            try:
+                required_fields = ['algorithm_id', 'description']
+                missing_fields = [field for field in required_fields if field not in action_data or not action_data[field]]
+                if missing_fields:
+                    print(f"Python: Ошибка - Отсутствуют обязательные поля: {missing_fields}")
+                    return -1
+
+                # Подготовка данных, включая преобразование INTERVAL из строки QML
+                prepared_data = {}
+                for key, value in action_data.items():
+                    if key in ['algorithm_id', 'description', 'contact_phones', 'report_materials']:
+                        prepared_data[key] = str(value).strip() if value is not None else (None if key in ['contact_phones', 'report_materials'] else "")
+                    elif key in ['start_offset', 'end_offset']:
+                        # Ожидаем, что QML передаст строку вроде '2 days 3 hours' или '03:30:00'
+                        # psycopg2 может автоматически преобразовать строку в INTERVAL, если поле в БД типа INTERVAL
+                        # Но для надежности можно оставить как строку, БД сама преобразует
+                        prepared_data[key] = value if value is not None else None
+                
+                # Особая обработка algorithm_id
+                try:
+                    prepared_data['algorithm_id'] = int(prepared_data['algorithm_id'])
+                except (ValueError, TypeError):
+                    print("Python: Ошибка - algorithm_id должен быть целым числом.")
+                    return -1
+
+                new_id = self.pg_database_manager.create_action(prepared_data)
+                if isinstance(new_id, int) and new_id > 0:
+                    print(f"Python: Новое действие успешно добавлено с ID: {new_id}")
+                    return new_id
+                else:
+                    print(f"Python: Менеджер БД вернул некорректный ID: {new_id}")
+                    return -1
+            except Exception as e:
+                print(f"Python: Исключение при добавлении действия: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                return -1
+        else:
+            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            return -1
+
+    @Slot(int, 'QVariant', result=bool)
+    def updateAction(self, action_id: int, action_data: 'QVariant') -> bool:
+        """Обновляет существующее действие."""
+        print(f"Python: QML отправил запрос на обновление действия ID {action_id}.")
+        
+        if hasattr(action_data, 'toVariant'):
+            action_data = action_data.toVariant()
+            print(f"Python: QJSValue (action_data) преобразован в: {action_data}")
+
+        if not isinstance(action_data, dict):
+            print(f"Python: Ошибка - action_data не является словарем. Получен тип: {type(action_data)}")
+            return False
+        if not action_data:
+            print("Python: Ошибка - action_data пуст.")
+            return False
+        if not isinstance(action_id, int) or action_id <= 0:
+            print(f"Python: Ошибка - Некорректный ID действия: {action_id}")
+            return False
+
+        if self.pg_database_manager:
+            try:
+                # Подготовка данных (фильтрация разрешенных полей)
+                allowed_fields = ['description', 'start_offset', 'end_offset', 'contact_phones', 'report_materials']
+                prepared_data = {}
+                for key, value in action_data.items():
+                    if key in allowed_fields:
+                        if key in ['description', 'contact_phones', 'report_materials']:
+                            prepared_data[key] = str(value).strip() if value is not None else (None if key in ['contact_phones', 'report_materials'] else "")
+                        elif key in ['start_offset', 'end_offset']:
+                            # Аналогично добавлению
+                            prepared_data[key] = value if value is not None else None
+
+                if not prepared_data:
+                    print("Python: Ошибка - Нет данных для обновления.")
+                    return False
+
+                success = self.pg_database_manager.update_action(action_id, prepared_data)
+                if success:
+                    print(f"Python: Действие ID {action_id} успешно обновлено.")
+                    return True
+                else:
+                    print(f"Python: Не удалось обновить действие ID {action_id}.")
+                    return False
+            except Exception as e:
+                print(f"Python: Исключение при обновлении действия {action_id}: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+        else:
+            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            return False
+
+    @Slot(int, result=bool)
+    def deleteAction(self, action_id: int) -> bool:
+        """Удаляет действие."""
+        print(f"Python: QML отправил запрос на удаление действия ID {action_id}.")
+        
+        if not isinstance(action_id, int) or action_id <= 0:
+            print(f"Python: Ошибка - Некорректный ID действия: {action_id}")
+            return False
+
+        if self.pg_database_manager:
+            try:
+                success = self.pg_database_manager.delete_action(action_id)
+                if success:
+                    print(f"Python: Действие ID {action_id} успешно удалено.")
+                    return True
+                else:
+                    print(f"Python: Не удалось удалить действие ID {action_id}. Возможно, есть выполнения или другие ограничения.")
+                    return False
+            except Exception as e:
+                print(f"Python: Исключение при удалении действия {action_id}: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+        else:
+            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            return False
+
+    @Slot(int, result=int) # Для дублирования в том же алгоритме
+    @Slot(int, int, result=int) # Для дублирования в другом алгоритме
+    def duplicateAction(self, original_action_id: int, new_algorithm_id: int = None) -> int:
+        """Создает копию действия."""
+        print(f"Python: QML отправил запрос на дублирование действия ID {original_action_id} (новый алгоритм ID: {new_algorithm_id}).")
+        
+        if not isinstance(original_action_id, int) or original_action_id <= 0:
+            print(f"Python: Ошибка - Некорректный ID оригинального действия: {original_action_id}")
+            return -1
+
+        if self.pg_database_manager:
+            try:
+                # Передаем None как есть, если new_algorithm_id не передан или равен 0
+                final_new_alg_id = new_algorithm_id if new_algorithm_id is not None and new_algorithm_id > 0 else None
+                new_action_id = self.pg_database_manager.duplicate_action(original_action_id, final_new_alg_id)
+                if new_action_id != -1:
+                    print(f"Python: Действие ID {original_action_id} успешно дублировано. Новый ID: {new_action_id}")
+                    return new_action_id
+                else:
+                    print(f"Python: Не удалось дублировать действие ID {original_action_id}.")
+                    return -1
+            except Exception as e:
+                print(f"Python: Исключение при дублировании действия {original_action_id}: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                return -1
+        else:
+            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            return -1
+
+    
     def minimize_window(self):
         if self.window:
             self.window.showMinimized()

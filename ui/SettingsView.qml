@@ -29,7 +29,7 @@ Item {
             }
             // --- Вкладка 3: Мероприятия ---
             TabButton {
-                text: "Мероприятия"
+                text: "Алгоритмы"
             }
             // --- Вкладка 4: Дополнительно ---
             TabButton {
@@ -129,13 +129,72 @@ Item {
                             GroupBox {
                                 title: "Коррекция времени и даты"
                                 Layout.fillWidth: true
-
                                 ColumnLayout {
-                                    CheckBox {
-                                        id: useCustomTimeCheckBox
-                                        text: "Использовать пользовательское время"
+                                    // --- Название местного времени ---
+                                    Label {
+                                        text: "Название местного времени:"
                                     }
-                                    // TODO: Реализовать условное отображение
+                                    TextField {
+                                        id: customTimeLabelField
+                                        Layout.fillWidth: true
+                                        placeholderText: "Например: Местное время, Свердловское..."
+                                        // text будет установлен в loadSettings
+                                    }
+                                    // --- ---
+                                    
+                                    // --- Смещение местного времени (часы) ---
+                                    Label {
+                                        text: "Смещение местного времени от системного (часы):"
+                                        ToolTip.text: "Положительное значение - время вперёд, отрицательное - назад. Например, -2 для Калининграда, +2 для Самары относительно Москвы."
+                                        ToolTip.visible: hovered
+                                    }
+                                    // Используем SpinBox для ввода целого числа со смещением
+                                    SpinBox {
+                                        id: customTimeOffsetSpinBox
+                                        Layout.fillWidth: true
+                                        from: -24 // Разумный диапазон
+                                        to: 24
+                                        stepSize: 1
+                                        // value будет установлен в loadSettings
+                                        // Добавим суффикс " ч" для наглядности
+                                        property string suffix: " ч"
+                                        textFromValue: function(value) { return value + suffix; }
+                                        valueFromText: function(text) { return parseInt(text.replace(suffix, '')) || 0; }
+                                    }
+                                    // --- ---
+                                    
+                                    // --- Показывать московское время ---
+                                    CheckBox {
+                                        id: showMoscowTimeCheckBox
+                                        text: "Показывать московское время"
+                                        // checked будет установлен в loadSettings
+                                    }
+                                    // --- ---
+                                    
+                                    // --- Смещение московского времени (часы) ---
+                                    // (Отображается, если включена опция показа)
+                                    ColumnLayout {
+                                        visible: showMoscowTimeCheckBox.checked
+                                        spacing: 5
+                                        
+                                        Label {
+                                            text: "Смещение московского времени от системного (часы):"
+                                            ToolTip.text: "Обычно 0. Укажите, если нужно скорректировать показ Москвы."
+                                            ToolTip.visible: hovered
+                                        }
+                                        SpinBox {
+                                            id: moscowTimeOffsetSpinBox
+                                            Layout.fillWidth: true
+                                            from: -24
+                                            to: 24
+                                            stepSize: 1
+                                            // value будет установлен в loadSettings
+                                            property string suffix: " ч"
+                                            textFromValue: function(value) { return value + suffix; }
+                                            valueFromText: function(text) { return parseInt(text.replace(suffix, '')) || 0; }
+                                        }
+                                    }
+                                    // --- ---
                                 }
                             }
 
@@ -338,13 +397,94 @@ Item {
                 // --- ---
             }
 
-            // --- Вкладка 3: Мероприятия ---
+            // --- Вкладка 3: Алгоритмы ---
             Item {
-                id: eventsTab
-                Text {
-                    anchors.centerIn: parent
-                    text: "Настройка мероприятий (будет реализована позже)"
-                    color: "gray"
+                id: algorithmsTab
+                
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 15
+                    spacing: 10
+                    
+                    // Импортируем наш новый компонент
+                    AlgorithmsListView {
+                        id: algorithmsListView
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        
+                        // Подключаем сигналы
+                        onAddAlgorithmRequested: {
+                            console.log("QML SettingsView: Запрошено добавление алгоритма")
+                            algorithmEditorDialog.resetForAdd()
+                            algorithmEditorDialog.open()
+                        }
+                        
+                        onEditAlgorithmRequested: {
+                            console.log("QML SettingsView: Запрошено редактирование алгоритма:", algorithmData)
+                            algorithmEditorDialog.loadDataForEdit(algorithmData)
+                            algorithmEditorDialog.open()
+                        }
+                        
+                        onDeleteAlgorithmRequested: {
+                            console.log("QML SettingsView: Запрошено удаление алгоритма ID:", algorithmId)
+                            // TODO: Добавить подтверждение
+                            var confirmDelete = true // Пока без подтверждения
+                            if (confirmDelete) {
+                                var result = appData.deleteAlgorithm(algorithmId)
+                                if (result === true) {
+                                    console.log("QML SettingsView: Алгоритм ID", algorithmId, "удален успешно.")
+                                    // Обновляем список в ListView
+                                    algorithmsListView.removeAlgorithm(algorithmId)
+                                } else if (typeof result === 'string') {
+                                    console.warn("QML SettingsView: Ошибка удаления алгоритма:", result)
+                                    // TODO: Отобразить ошибку пользователю
+                                } else {
+                                    console.error("QML SettingsView: Неизвестная ошибка удаления алгоритма. Результат:", result)
+                                }
+                            }
+                        }
+                        
+                        onDuplicateAlgorithmRequested: {
+                            console.log("QML SettingsView: Запрошено дублирование алгоритма ID:", algorithmId)
+                            var newAlgorithmId = appData.duplicateAlgorithm(algorithmId)
+                            if (typeof newAlgorithmId === 'number' && newAlgorithmId > 0) {
+                                console.log("QML SettingsView: Алгоритм ID", algorithmId, "дублирован успешно. Новый ID:", newAlgorithmId)
+                                // Перезагружаем список, чтобы увидеть новую копию
+                                algorithmsListView.loadAlgorithms()
+                            } else {
+                                console.warn("QML SettingsView: Ошибка дублирования алгоритма ID", algorithmId, ". Результат:", newAlgorithmId)
+                                // TODO: Отобразить ошибку пользователю
+                            }
+                        }
+                        onEditActionsRequested: {
+                            console.log("QML SettingsView: Запрошено редактирование действий для алгоритма:", JSON.stringify(algorithmData));
+                            // Предполагается, что algorithmActionsDialog уже создан и доступен в этой области видимости
+                            // как это сделано в предыдущем примере кода.
+                            if (typeof algorithmActionsDialog !== 'undefined' && algorithmActionsDialog) {
+                                algorithmActionsDialog.loadData(algorithmData);
+                                algorithmActionsDialog.open();
+                            } else {
+                                console.error("QML SettingsView: ОШИБКА - algorithmActionsDialog не найден!");
+                                // TODO: Открыть диалог каким-то другим способом или показать сообщение об ошибке
+                            }
+                        }
+                    }
+                    
+                    // Диалог редактора алгоритма
+                    AlgorithmEditorDialog {
+                        id: algorithmEditorDialog
+                        // Подключаемся к сигналу сохранения, чтобы обновить список
+                        onAlgorithmSaved: {
+                            console.log("QML SettingsView: Получен сигнал algorithmSaved от AlgorithmEditorDialog. Перезагружаем список.")
+                            algorithmsListView.loadAlgorithms()
+                            // Или можно обновить только конкретный элемент, если известен ID
+                            // algorithmsListView.updateOrAddAlgorithm(...)
+                        }
+                    }
+                    // Диалог для редактирования действий алгоритма
+                    AlgorithmActionsDialog {
+                        id: algorithmActionsDialog
+                    }
                 }
             }
 
@@ -375,63 +515,205 @@ Item {
     }
 
     function saveSettings() {
-        console.log("QML: Сохранение настроек...");
+        console.log("QML SettingsView: === НАЧАЛО СОХРАНЕНИЯ НАСТРОЕК ===");
         
-        // Собираем настройки с вкладки "Пост"
-        var postSettings = {
-            'workplace_name': workplaceNameField.text,  // <- Закомментируй это
-            'post_number': postNumberField.text,
-            'post_name': postNameField.text,
-            'use_persistent_reminders': persistentRemindersCheckBox.checked ? 1 : 0, // SQLite хранит BOOLEAN как 1/0
-            'sound_enabled': soundEnabledCheckBox.checked ? 1 : 0
-        };
-        
-        console.log("QML: Отправляемые настройки:", JSON.stringify(postSettings));
-        
-        // Вызываем метод Python для сохранения
-        var result = appData.updateSettings(postSettings);
-        
-        console.log("QML: Результат сохранения:", result);
-        
+        console.log("QML SettingsView: 1. Сбор настроек из полей ввода...");
+        // --- СБОР НАСТРОЕК "ПОСТ" ---
+        console.log("QML SettingsView: 2. Сбор настроек раздела 'Пост'...");
+        var postSettings = {};
+        postSettings['post_number'] = postNumberField.text.trim();
+        postSettings['post_name'] = postNameField.text.trim();
+        postSettings['workplace_name'] = workplaceNameField.text.trim();
+        console.log("QML SettingsView: 2. Собраны настройки 'Пост':", JSON.stringify(postSettings));
+        // --- ---
+
+        // --- СБОР НАСТРОЕК "НАПОМИНАНИЙ И ЗВУКА" ---
+        console.log("QML SettingsView: 3. Сбор настроек раздела 'Напоминания и звук'...");
+        var reminderSoundSettings = {};
+        // SQLite хранит BOOLEAN как 1/0
+        reminderSoundSettings['use_persistent_reminders'] = persistentRemindersCheckBox.checked ? 1 : 0;
+        reminderSoundSettings['sound_enabled'] = soundEnabledCheckBox.checked ? 1 : 0;
+        console.log("QML SettingsView: 3. Собраны настройки 'Напоминания и звук':", JSON.stringify(reminderSoundSettings));
+        // --- ---
+
+        // --- СБОР НОВЫХ НАСТРОЕК ВРЕМЕНИ ---
+        console.log("QML SettingsView: 4. Сбор настроек раздела 'Время'...");
+        var timeSettings = {};
+        timeSettings['custom_time_label'] = customTimeLabelField.text.trim();
+        // Преобразуем часы из SpinBox в секунды для хранения в БД
+        timeSettings['custom_time_offset_seconds'] = customTimeOffsetSpinBox.value * 3600;
+        // SQLite хранит BOOLEAN как 1/0
+        timeSettings['show_moscow_time'] = showMoscowTimeCheckBox.checked ? 1 : 0;
+        // Преобразуем часы из SpinBox в секунды для хранения в БД
+        timeSettings['moscow_time_offset_seconds'] = moscowTimeOffsetSpinBox.value * 3600;
+        console.log("QML SettingsView: 4. Собраны настройки 'Время':", JSON.stringify(timeSettings));
+        // --- ---
+
+        // --- СБОР НАСТРОЕК "ДОПОЛНИТЕЛЬНО" (если есть другие) ---
+        // console.log("QML SettingsView: 5. Сбор настроек раздела 'Дополнительно'...");
+        // var generalSettings = {};
+        // ... (здесь можно добавить сбор других настроек, если они будут)
+        // console.log("QML SettingsView: 5. Собраны настройки 'Дополнительно':", JSON.stringify(generalSettings));
+        // --- ---
+
+        // --- ОБЪЕДИНЕНИЕ ВСЕХ НАСТРОЕК В ОДИН СЛОВАРЬ ---
+        console.log("QML SettingsView: 6. Объединение всех настроек в один словарь...");
+        var allSettings = {};
+        // Добавляем настройки "Пост"
+        for (var key in postSettings) {
+            if (postSettings.hasOwnProperty(key)) {
+                allSettings[key] = postSettings[key];
+            }
+        }
+        // Добавляем настройки "Напоминания и звук"
+        for (var key_rs in reminderSoundSettings) {
+            if (reminderSoundSettings.hasOwnProperty(key_rs)) {
+                allSettings[key_rs] = reminderSoundSettings[key_rs];
+            }
+        }
+        // Добавляем настройки "Время"
+        for (var key_t in timeSettings) {
+            if (timeSettings.hasOwnProperty(key_t)) {
+                allSettings[key_t] = timeSettings[key_t];
+            }
+        }
+        // Добавляем настройки "Дополнительно" (если есть)
+        // for (var key_g in generalSettings) {
+        //     if (generalSettings.hasOwnProperty(key_g)) {
+        //         allSettings[key_g] = generalSettings[key_g];
+        //     }
+        // }
+        console.log("QML SettingsView: 6. Все настройки объединены. Отправляемый словарь:", JSON.stringify(allSettings).substring(0, 500));
+        // --- ---
+
+        console.log("QML SettingsView: 7. Отправка настроек в Python для сохранения...");
+        var result = appData.updateSettings(allSettings);
+        console.log("QML SettingsView: 8. Получен результат сохранения из Python:", result);
+
         if (result === true) {
-            console.log("QML: Настройки успешно сохранены");
+            console.log("QML SettingsView: === НАСТРОЙКИ УСПЕШНО СОХРАНЕНЫ ===");
             showSuccessMessage("Настройки сохранены успешно");
         } else {
-            console.log("QML: Ошибка сохранения настроек:", result);
-            showErrorMessage("Ошибка сохранения настроек: " + result);
+            var errorMsgSave = "Неизвестная ошибка";
+            if (typeof result === 'string') {
+                errorMsgSave = result;
+            } else if (result === false) {
+                errorMsgSave = "Не удалось выполнить операцию. Проверьте данные.";
+            } else if (result === -1) {
+                errorMsgSave = "Ошибка при сохранении настроек.";
+            }
+            console.error("QML SettingsView: === ОШИБКА СОХРАНЕНИЯ НАСТРОЕК ===", errorMsgSave);
+            showErrorMessage("Ошибка сохранения настроек: " + errorMsgSave);
         }
     }
 
     function loadSettings() {
-        console.log("QML: Загрузка настроек...");
-        
-        // Получаем все настройки из Python
+        console.log("QML SettingsView: === НАЧАЛО ЗАГРУЗКИ НАСТРОЕК ===");
+        console.log("QML SettingsView: 1. Запрос полных настроек у Python...");
         var settings = appData.getFullSettings();
-        
-        console.log("QML: Полученные настройки:", JSON.stringify(settings));
-        
-        if (settings && typeof settings === 'object') {
-            // Заполняем поля вкладки "Пост"
-            if (settings.workplace_name !== undefined) {
-                workplaceNameField.text = settings.workplace_name;
-            }
-            if (settings.post_number !== undefined) {
-                postNumberField.text = settings.post_number;
-            }
-            if (settings.post_name !== undefined) {
-                postNameField.text = settings.post_name;
-            }
-            // Проверяем, существуют ли ключи, и устанавливаем значения CheckBox
-            if (settings.use_persistent_reminders !== undefined) {
-                // Преобразуем 1/0 из SQLite в true/false для QML
-                persistentRemindersCheckBox.checked = (settings.use_persistent_reminders === 1 || settings.use_persistent_reminders === true);
-            }
-            if (settings.sound_enabled !== undefined) {
-                soundEnabledCheckBox.checked = (settings.sound_enabled === 1 || settings.sound_enabled === true);
-            }
-            console.log("QML: Настройки загружены");
+        console.log("QML SettingsView: 2. Полученные настройки (сырой):", JSON.stringify(settings).substring(0, 500));
+
+        // --- Преобразование QJSValue/QVariant в словарь JS ---
+        console.log("QML SettingsView: 3. Проверка необходимости преобразования QJSValue...");
+        if (settings && typeof settings === 'object' && typeof settings.hasOwnProperty === 'function' && settings.hasOwnProperty('toVariant')) {
+            console.log("QML SettingsView: 3a. Обнаружен QJSValue, преобразование в QVariant/JS...");
+            settings = settings.toVariant();
+            console.log("QML SettingsView: 3b. QJSValue (settings) преобразован в:", JSON.stringify(settings).substring(0, 500));
         } else {
-            console.log("QML: Не удалось загрузить настройки или они пусты");
+            console.log("QML SettingsView: 3a. Преобразование не требуется или невозможно.");
+        }
+        // --- ---
+
+        if (settings && typeof settings === 'object') {
+            console.log("QML SettingsView: 4. Настройки получены в виде объекта. Начало заполнения полей ввода...");
+            
+            // --- ЗАГРУЗКА НАСТРОЕК "ПОСТ" ---
+            console.log("QML SettingsView: 5. Загрузка настроек раздела 'Пост'...");
+            // Номер поста
+            if (settings.post_number !== undefined) {
+                postNumberField.text = String(settings.post_number);
+                console.log("QML SettingsView: 5a. Загружен post_number:", postNumberField.text);
+            }
+            // Название поста
+            if (settings.post_name !== undefined) {
+                postNameField.text = String(settings.post_name);
+                console.log("QML SettingsView: 5b. Загружен post_name:", postNameField.text);
+            }
+            // Название рабочего места
+            if (settings.workplace_name !== undefined) {
+                workplaceNameField.text = String(settings.workplace_name);
+                console.log("QML SettingsView: 5c. Загружено workplace_name:", workplaceNameField.text);
+            }
+            console.log("QML SettingsView: 5. Загрузка настроек раздела 'Пост' завершена.");
+            // --- ---
+
+            // --- ЗАГРУЗКА НАСТРОЕК "НАПОМИНАНИЙ И ЗВУКА" ---
+            console.log("QML SettingsView: 6. Загрузка настроек раздела 'Напоминания и звук'...");
+            // Настойчивые напоминания
+            if (settings.use_persistent_reminders !== undefined) {
+                // Преобразуем 1/0 из SQLite в true/false для QML CheckBox
+                persistentRemindersCheckBox.checked = (settings.use_persistent_reminders === 1 || settings.use_persistent_reminders === true);
+                console.log("QML SettingsView: 6a. Загружено use_persistent_reminders:", persistentRemindersCheckBox.checked);
+            }
+            // Звук
+            if (settings.sound_enabled !== undefined) {
+                // Преобразуем 1/0 из SQLite в true/false для QML CheckBox
+                soundEnabledCheckBox.checked = (settings.sound_enabled === 1 || settings.sound_enabled === true);
+                console.log("QML SettingsView: 6b. Загружено sound_enabled:", soundEnabledCheckBox.checked);
+            }
+            console.log("QML SettingsView: 6. Загрузка настроек раздела 'Напоминания и звук' завершена.");
+            // --- ---
+
+            // --- ЗАГРУЗКА НОВЫХ НАСТРОЕК ВРЕМЕНИ ---
+            console.log("QML SettingsView: 7. Загрузка настроек раздела 'Время'...");
+            // Название местного времени
+            if (settings.custom_time_label !== undefined) {
+                customTimeLabelField.text = String(settings.custom_time_label);
+                console.log("QML SettingsView: 7a. Загружено custom_time_label:", customTimeLabelField.text);
+            }
+            // Смещение местного времени (секунды -> часы для SpinBox)
+            if (settings.custom_time_offset_seconds !== undefined) {
+                var offsetSecs = parseInt(settings.custom_time_offset_seconds);
+                if (!isNaN(offsetSecs)) {
+                    var offsetHours = Math.floor(offsetSecs / 3600);
+                    customTimeOffsetSpinBox.value = offsetHours;
+                    console.log("QML SettingsView: 7b. Загружено custom_time_offset_seconds:", offsetSecs, "->", offsetHours, "ч");
+                } else {
+                    console.warn("QML SettingsView: 7b. Ошибка преобразования custom_time_offset_seconds:", settings.custom_time_offset_seconds);
+                }
+            }
+            // Показывать московское время
+            if (settings.show_moscow_time !== undefined) {
+                // Преобразуем 1/0 из SQLite в true/false для QML CheckBox
+                showMoscowTimeCheckBox.checked = (settings.show_moscow_time === 1 || settings.show_moscow_time === true);
+                console.log("QML SettingsView: 7c. Загружено show_moscow_time:", showMoscowTimeCheckBox.checked);
+            }
+            // Смещение московского времени (секунды -> часы для SpinBox)
+            if (settings.moscow_time_offset_seconds !== undefined) {
+                var moscowOffsetSecs = parseInt(settings.moscow_time_offset_seconds);
+                if (!isNaN(moscowOffsetSecs)) {
+                    var moscowOffsetHours = Math.floor(moscowOffsetSecs / 3600);
+                    moscowTimeOffsetSpinBox.value = moscowOffsetHours;
+                    console.log("QML SettingsView: 7d. Загружено moscow_time_offset_seconds:", moscowOffsetSecs, "->", moscowOffsetHours, "ч");
+                } else {
+                    console.warn("QML SettingsView: 7d. Ошибка преобразования moscow_time_offset_seconds:", settings.moscow_time_offset_seconds);
+                }
+            }
+            console.log("QML SettingsView: 7. Загрузка настроек раздела 'Время' завершена.");
+            // --- ---
+
+            // --- ЗАГРУЗКА НАСТРОЕК "ДОПОЛНИТЕЛЬНО" (если есть другие) ---
+            // console.log("QML SettingsView: 8. Загрузка настроек раздела 'Дополнительно'...");
+            // ... (здесь можно добавить загрузку других настроек, если они будут)
+            // console.log("QML SettingsView: 8. Загрузка настроек раздела 'Дополнительно' завершена.");
+            // --- ---
+
+            console.log("QML SettingsView: === ЗАГРУЗКА НАСТРОЕК ЗАВЕРШЕНА ===");
+        } else {
+            var errorMsgLoad = "Не удалось загрузить настройки или они пусты.";
+            console.error("QML SettingsView: === ОШИБКА ЗАГРУЗКИ НАСТРОЕК ===", errorMsgLoad);
+            // TODO: Отобразить ошибку пользователю, например:
+            // showErrorMessage(errorMsgLoad);
         }
     }
 
@@ -527,16 +809,23 @@ Item {
                 console.log("QML SettingsView: Вкладка 'Должностные лица' активирована. Загрузка списка...");
                 loadDutyOfficers(); // Загружаем список при активации вкладки
             }
+            // Индекс вкладки "Алгоритмы" - 2 (третья вкладка, индекс с 0)
+            if (settingsTabBar.currentIndex === 2) {
+                console.log("QML SettingsView: Вкладка 'Алгоритмы' активирована. Загрузка списка...");
+                // Проверяем, существует ли функция, и вызываем её
+                // algorithmsListView - это id компонента AlgorithmsListView в algorithmsTab
+                if (algorithmsListView && typeof algorithmsListView.loadAlgorithms === 'function') {
+                    algorithmsListView.loadAlgorithms();
+                } else {
+                    console.error("QML SettingsView: ОШИБКА - algorithmsListView или algorithmsListView.loadAlgorithms не найдены!");
+                }
+            }
         }
     }
-    // --- ---
-
     // --- Автоматическая загрузка при открытии SettingsView ---
     Component.onCompleted: {
         // Этот код выполнится, когда компонент SettingsView будет полностью создан
         console.log("QML SettingsView: Загружен. Инициализация...");
         loadSettings();
-        // loadDutyOfficers(); // Загружаем список сразу при открытии окна настроек (можно, но лучше при активации вкладки)
     }
-    // --- ---
 }

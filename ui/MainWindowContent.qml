@@ -33,7 +33,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: Math.max(5, Math.floor(10 * scaleFactor)) // Динамические внешние отступы
 
-                // Левая часть заголовка
+                // --- Левая часть заголовка: НАСТРАИВАЕМОЕ Местное время и ДАТА ---
                 Column {
                     id: leftHeaderContent
                     anchors.left: parent.left
@@ -42,18 +42,77 @@ Item {
                     spacing: Math.max(2, Math.floor(5 * scaleFactor)) // Динамический внутренний отступ
 
                     Text {
-                        text: "Московское время"
+                        // text: "Московское время" // <-- СТАРОЕ
+                        text: appData.customTimeLabel // <-- НОВОЕ: Настраиваемая метка
+                        // --- ЕДИНОЕ ФОРМАТИРОВАНИЕ ---
                         font.pixelSize: rootItem.scaleFactor * 14
                         color: "white" // Белый шрифт
+                        // --- ---
                     }
                     Text {
-                        text: appData.currentTime + " " + appData.currentDate // Получаем из Python
+                        // text: appData.currentTime + " " + appData.currentDate // <-- СТАРОЕ
+                        text: appData.localTime // <-- НОВОЕ: Настраиваемое местное время
+                        // --- ЕДИНОЕ ФОРМАТИРОВАНИЕ ---
                         font.pixelSize: rootItem.scaleFactor * 16
                         color: "#2ecc71" // Светло-зеленый
+                        font.bold: true
+                        // --- ---
                     }
+                    // --- НОВОЕ: Добавляем дату отдельно ---
+                    Text {
+                        text: appData.localDate // Настраиваемая местная дата
+                        // --- ЕДИНОЕ ФОРМАТИРОВАНИЕ ---
+                        font.pixelSize: rootItem.scaleFactor * 10
+                        color: "#2ecc71"
+                        // --- ---
+                    }
+                    // --- ---
                 }
+                // --- ---
 
-                // Центральная часть - Эмблема (строго по центру)
+                // --- НОВАЯ Центральная Левая часть: Московское время и ДАТА (условно) ---
+                // Размещаем её между левой частью и эмблемой
+                Column {
+                    id: moscowTimeHeaderContent
+                    // Привязываемся к правому краю левой части + небольшой отступ
+                    anchors.left: leftHeaderContent.right
+                    anchors.leftMargin: parent.width * 0.03 // 3% отступ от левой части
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: Math.max(2, Math.floor(5 * scaleFactor))
+                    // --- УСЛОВНОЕ ОТОБРАЖЕНИЕ ---
+                    visible: appData.showMoscowTime // Отображаем ТОЛЬКО если флаг установлен
+                    // --- ---
+
+                    Text {
+                        text: "Московское время" // Фиксированная подпись для Москвы
+                        // --- ЕДИНОЕ ФОРМАТИРОВАНИЕ ---
+                        font.pixelSize: rootItem.scaleFactor * 14
+                        color: "white" // Белый шрифт
+                        // --- ---
+                    }
+                    Text {
+                        text: appData.moscowTime // НовоеМосковское время
+                        // --- ЕДИНОЕ ФОРМАТИРОВАНИЕ ---
+                        font.pixelSize: rootItem.scaleFactor * 16
+                        color: "#2ecc71" // Светло-зеленый
+                        font.bold: true
+                        // --- ---
+                    }
+                    // --- НОВОЕ: Добавляем дату отдельно для Москвы (если нужно) ---
+                    // Предполагая, что у нас есть отдельное свойство moscowDate или мы рассчитываем его
+                    // Пока используем ту же дату, что и для местного времени, так как дата обычно одна
+                    Text {
+                        text: appData.moscowDate // Московская дата
+                        font.pixelSize: rootItem.scaleFactor * 10
+                        color: "#2ecc71"
+                        // --- ---
+                    }
+                    // --- ---
+                }
+                // --- ---
+
+                // --- Центральная часть - Эмблема (строго по центру) ---
+                // (Остается без изменений)
                 Image {
                     id: emblem
                     anchors.centerIn: parent
@@ -63,8 +122,9 @@ Item {
                     height: parent.height * 0.96 // 0.8 * 1.2 = 0.96
                     width: height // Сохраняем пропорции
                 }
+                // --- ---
 
-                // Правая часть заголовка
+                // --- Правая часть заголовка (информация о посте и дежурный) ---
                 Column {
                     id: rightHeaderContent
                     anchors.right: parent.right
@@ -152,8 +212,10 @@ Item {
                     }
                     // --- ---
                 }
+                // --- ---
             }
         }
+        // --- ---
 
         // --- 2) Средняя панель (80% высоты теперь) ---
         Rectangle {
