@@ -2,6 +2,7 @@
 import QtQuick 6.5
 import QtQuick.Controls 6.5
 import QtQuick.Layouts 6.5
+import QtQuick.Dialogs 6.5
 // --- Импорт для OfficerEditorDialog ---
 import "." // Импорт из той же директории (ui/)
 // --- ---
@@ -199,52 +200,166 @@ Item {
                             }
 
                             // Настройки внешнего вида
+                            // --- FileDialog для выбора эмблемы ---
+                            FileDialog {
+                                id: emblemFileDialog
+                                title: "Выберите файл эмблемы"
+                                // Ограничиваем выбор только изображениями
+                                nameFilters: ["Изображения (*.png *.jpg *.jpeg *.bmp *.gif *.svg)"]
+                                // Выбираем один файл
+                                fileMode: FileDialog.OpenFile
+                                onAccepted: {
+                                    console.log("QML SettingsView: FileDialog (эмблема) принят. Выбранный файл:", selectedFile)
+                                    // Обновляем путь к эмблеме в поле ввода
+                                    // selectedFile - это URL вида "file:///path/to/image.png"
+                                    // Нам нужен локальный путь
+                                    var localPath = selectedFile.toString()
+                                    if (localPath.startsWith("file:///")) {
+                                        // Для Windows убираем "file:///", для других ОС может потребоваться другая обработка
+                                        localPath = localPath.substring(8)
+                                    }
+                                    backgroundImagePathField.text = localPath
+                                    console.log("QML SettingsView: Установлен путь к эмблеме:", localPath)
+                                }
+                                onRejected: {
+                                    console.log("QML SettingsView: FileDialog (эмблема) отклонен")
+                                }
+                            }
+                            // --- ---
+
+                            // --- Обновленная группа "Внешний вид" ---
                             GroupBox {
                                 title: "Внешний вид"
                                 Layout.fillWidth: true
-
                                 ColumnLayout {
+                                    // --- Эмблема ---
                                     Label {
                                         text: "Фоновое изображение (эмблема):"
                                     }
                                     RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 10
+                                        
                                         Button {
                                             text: "Выбрать файл..."
-                                            // TODO: onClicked - открыть диалог выбора файла
+                                            onClicked: {
+                                                console.log("QML SettingsView: Нажата кнопка 'Выбрать файл...' для эмблемы")
+                                                emblemFileDialog.open()
+                                            }
                                         }
-                                        Text {
-                                            text: "..." // TODO: Путь к выбранному файлу
+                                        
+                                        // Поле для отображения пути к файлу
+                                        TextField {
+                                            id: backgroundImagePathField
+                                            Layout.fillWidth: true
+                                            placeholderText: "Путь к файлу эмблемы..."
+                                            readOnly: true // Сделаем поле только для чтения, чтобы путь нельзя было испортить вручную
+                                            // text будет установлен в loadSettings
+                                        }
+                                        
+                                        // Предварительный просмотр эмблемы
+                                        Image {
+                                            id: emblemPreview
+                                            source: backgroundImagePathField.text ? "file:///" + backgroundImagePathField.text : "../resources/images/placeholder_emblem.png"
+                                            fillMode: Image.PreserveAspectFit
+                                            // Установим максимальные размеры для предпросмотра
+                                            Layout.preferredWidth: 50
+                                            Layout.preferredHeight: 50
+                                            // Обновляем источник при изменении пути
+                                            Binding {
+                                                target: emblemPreview
+                                                property: "source"
+                                                value: backgroundImagePathField.text ? "file:///" + backgroundImagePathField.text : "../resources/images/placeholder_emblem.png"
+                                            }
                                         }
                                     }
-
+                                    // --- ---
+                                    
+                                    // --- Шрифт интерфейса ---
                                     Label {
                                         text: "Шрифт интерфейса:"
                                     }
                                     ComboBox {
-                                        model: ["Arial", "Times New Roman", "Courier New"]
+                                        id: fontFamilyComboBox
+                                        Layout.fillWidth: true
+                                        model: ["Arial", "Times New Roman", "Courier New"] // Заглушка, будет обновлена динамически
+                                        // currentIndex и model будут установлены в loadSettings
                                     }
-
+                                    // --- ---
+                                    
+                                    // --- Размер шрифта интерфейса ---
                                     Label {
-                                        text: "Размер шрифта:"
+                                        text: "Размер шрифта интерфейса:"
                                     }
                                     SpinBox {
+                                        id: fontSizeSpinBox
+                                        Layout.fillWidth: true
                                         from: 8
                                         to: 24
-                                        value: 12
+                                        value: 12 // Значение по умолчанию, будет обновлено в loadSettings
                                     }
-
+                                    // --- ---
+                                    
+                                    // --- Начертание шрифта интерфейса ---
+                                    Label {
+                                        text: "Начертание шрифта интерфейса:"
+                                    }
+                                    ComboBox {
+                                        id: fontStyleComboBox
+                                        Layout.fillWidth: true
+                                        // Модель с описаниями и значениями
+                                        model: ListModel {
+                                            ListElement { name: "Обычный"; value: "normal" }
+                                            ListElement { name: "Жирный"; value: "bold" }
+                                            ListElement { name: "Курсив"; value: "italic" }
+                                            ListElement { name: "Жирный курсив"; value: "bold_italic" }
+                                        }
+                                        textRole: "name" // Отображаем поле 'name'
+                                        // currentIndex будет установлен в loadSettings
+                                    }
+                                    // --- ---
+                                    
+                                    // --- Цвет фона ---
                                     Label {
                                         text: "Цвет фона:"
                                     }
                                     Rectangle {
-                                        width: 50
-                                        height: 25
-                                        color: "#ecf0f1"
+                                        Layout.fillWidth: true
+                                        height: 30
+                                        color: backgroundColorField.text || "#ecf0f1" // Цвет из поля ввода или по умолчанию
                                         border.color: "black"
+                                        radius: 5
+                                        
+                                        // Отображение hex-кода цвета поверх прямоугольника
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: backgroundColorField.text || "#ecf0f1"
+                                            color: "black" // Можно сделать динамическим в зависимости от яркости фона
+                                            font.pixelSize: 12
+                                        }
+                                        
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: {
+                                                console.log("QML SettingsView: Нажат цветовой прямоугольник. Текущий цвет:", backgroundColorField.text)
+                                                // TODO: Открыть диалог выбора цвета (ColorDialog)
+                                                // Пока просто покажем сообщение
+                                                showInfoMessage("Выбор цвета (TODO): " + (backgroundColorField.text || "#ecf0f1"))
+                                            }
+                                        }
                                     }
+                                    TextField {
+                                        id: backgroundColorField
+                                        Layout.fillWidth: true
+                                        placeholderText: "Введите HEX-код цвета (например, #ecf0f1)..."
+                                        // text будет установлен в loadSettings
+                                        // Добавим валидацию HEX-кода
+                                        //validator: RegExpValidator { regExp: /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/ }
+                                    }
+                                    // --- ---
                                 }
                             }
-                            // --- Конец перенесенных настроек ---
+                            // --- ---
                             
                             // Заполнитель для правильного скроллинга
                             Item {
@@ -549,15 +664,33 @@ Item {
         console.log("QML SettingsView: 4. Собраны настройки 'Время':", JSON.stringify(timeSettings));
         // --- ---
 
-        // --- СБОР НАСТРОЕК "ДОПОЛНИТЕЛЬНО" (если есть другие) ---
-        // console.log("QML SettingsView: 5. Сбор настроек раздела 'Дополнительно'...");
-        // var generalSettings = {};
-        // ... (здесь можно добавить сбор других настроек, если они будут)
-        // console.log("QML SettingsView: 5. Собраны настройки 'Дополнительно':", JSON.stringify(generalSettings));
+        // --- СБОР НАСТРОЕК "ВНЕШНЕГО ВИДА" ---
+        console.log("QML SettingsView: 5. Сбор настроек раздела 'Внешний вид'...");
+        var appearanceSettings = {};
+        appearanceSettings['background_image_path'] = backgroundImagePathField.text.trim() || null; // Пустая строка -> NULL
+        appearanceSettings['font_family'] = fontFamilyComboBox.currentText.trim() || "Arial"; // Значение по умолчанию
+        appearanceSettings['font_size'] = fontSizeSpinBox.value;
+        // Получаем значение 'value' из выбранного элемента модели
+        if (fontStyleComboBox.currentIndex !== -1 && fontStyleComboBox.model.get(fontStyleComboBox.currentIndex)) {
+            appearanceSettings['font_style'] = fontStyleComboBox.model.get(fontStyleComboBox.currentIndex).value;
+        } else {
+            appearanceSettings['font_style'] = "normal"; // Значение по умолчанию
+        }
+        appearanceSettings['background_color'] = backgroundColorField.text.trim() || "#ecf0f1"; // Значение по умолчанию
+        console.log("QML SettingsView: 5. Собраны настройки 'Внешний вид':", JSON.stringify(appearanceSettings));
+        // --- ---
+
+        // --- СБОР НАСТРОЕК "ПЕЧАТИ" ---
+        console.log("QML SettingsView: 6. Сбор настроек раздела 'Печать'...");
+        var printSettings = {};
+        // Пока используем те же значения, что и для интерфейса, или отдельные, если будут поля
+        printSettings['print_font_family'] = fontFamilyComboBox.currentText.trim() || "Arial"; // Пока так
+        printSettings['print_font_size'] = fontSizeSpinBox.value; // Пока так
+        console.log("QML SettingsView: 6. Собраны настройки 'Печать':", JSON.stringify(printSettings));
         // --- ---
 
         // --- ОБЪЕДИНЕНИЕ ВСЕХ НАСТРОЕК В ОДИН СЛОВАРЬ ---
-        console.log("QML SettingsView: 6. Объединение всех настроек в один словарь...");
+        console.log("QML SettingsView: 7. Объединение всех настроек в один словарь...");
         var allSettings = {};
         // Добавляем настройки "Пост"
         for (var key in postSettings) {
@@ -577,22 +710,31 @@ Item {
                 allSettings[key_t] = timeSettings[key_t];
             }
         }
-        // Добавляем настройки "Дополнительно" (если есть)
-        // for (var key_g in generalSettings) {
-        //     if (generalSettings.hasOwnProperty(key_g)) {
-        //         allSettings[key_g] = generalSettings[key_g];
-        //     }
-        // }
-        console.log("QML SettingsView: 6. Все настройки объединены. Отправляемый словарь:", JSON.stringify(allSettings).substring(0, 500));
+        // Добавляем настройки "Внешнего вида"
+        for (var key_a in appearanceSettings) {
+            if (appearanceSettings.hasOwnProperty(key_a)) {
+                allSettings[key_a] = appearanceSettings[key_a];
+            }
+        }
+        // Добавляем настройки "Печати"
+        for (var key_p in printSettings) {
+            if (printSettings.hasOwnProperty(key_p)) {
+                allSettings[key_p] = printSettings[key_p];
+            }
+        }
+        console.log("QML SettingsView: 7. Все настройки объединены. Отправляемый словарь:", JSON.stringify(allSettings).substring(0, 500));
         // --- ---
 
-        console.log("QML SettingsView: 7. Отправка настроек в Python для сохранения...");
+        console.log("QML SettingsView: 8. Отправка настроек в Python для сохранения...");
         var result = appData.updateSettings(allSettings);
-        console.log("QML SettingsView: 8. Получен результат сохранения из Python:", result);
+        console.log("QML SettingsView: 9. Получен результат сохранения из Python:", result);
 
         if (result === true) {
             console.log("QML SettingsView: === НАСТРОЙКИ УСПЕШНО СОХРАНЕНЫ ===");
             showSuccessMessage("Настройки сохранены успешно");
+            // --- НОВОЕ: Уведомляем об изменении внешнего вида ---
+            // appData.appearanceSettingsChanged.emit(); // Если такой сигнал будет добавлен
+            // --- ---
         } else {
             var errorMsgSave = "Неизвестная ошибка";
             if (typeof result === 'string') {
@@ -605,6 +747,7 @@ Item {
             console.error("QML SettingsView: === ОШИБКА СОХРАНЕНИЯ НАСТРОЕК ===", errorMsgSave);
             showErrorMessage("Ошибка сохранения настроек: " + errorMsgSave);
         }
+        console.log("QML SettingsView: === КОНЕЦ СОХРАНЕНИЯ НАСТРОЕК ===");
     }
 
     function loadSettings() {
@@ -702,18 +845,82 @@ Item {
             console.log("QML SettingsView: 7. Загрузка настроек раздела 'Время' завершена.");
             // --- ---
 
-            // --- ЗАГРУЗКА НАСТРОЕК "ДОПОЛНИТЕЛЬНО" (если есть другие) ---
-            // console.log("QML SettingsView: 8. Загрузка настроек раздела 'Дополнительно'...");
-            // ... (здесь можно добавить загрузку других настроек, если они будут)
-            // console.log("QML SettingsView: 8. Загрузка настроек раздела 'Дополнительно' завершена.");
+            // --- ЗАГРУЗКА НАСТРОЕК "ВНЕШНЕГО ВИДА" ---
+            console.log("QML SettingsView: 8. Загрузка настроек раздела 'Внешний вид'...");
+            // Путь к фоновому изображению/эмблеме
+            if (settings.background_image_path !== undefined) {
+                backgroundImagePathField.text = String(settings.background_image_path);
+                console.log("QML SettingsView: 8a. Загружен background_image_path:", backgroundImagePathField.text);
+            }
+            // Шрифт интерфейса
+            if (settings.font_family !== undefined) {
+                var fontFamily = String(settings.font_family);
+                // Проверяем, есть ли такой шрифт в комбо-боксе
+                var fontFamilyIndex = fontFamilyComboBox.find(fontFamily);
+                if (fontFamilyIndex !== -1) {
+                    fontFamilyComboBox.currentIndex = fontFamilyIndex;
+                } else {
+                    // Если шрифт не найден, добавляем его в список (на случай кастомных шрифтов)
+                    fontFamilyComboBox.model.append({"text": fontFamily});
+                    fontFamilyComboBox.currentIndex = fontFamilyComboBox.count - 1;
+                }
+                console.log("QML SettingsView: 8b. Загружен font_family:", fontFamily);
+            }
+            // Размер шрифта интерфейса
+            if (settings.font_size !== undefined) {
+                var fontSize = parseInt(settings.font_size);
+                if (!isNaN(fontSize) && fontSize >= fontSizeSpinBox.from && fontSize <= fontSizeSpinBox.to) {
+                    fontSizeSpinBox.value = fontSize;
+                } else {
+                    fontSizeSpinBox.value = 12; // Значение по умолчанию
+                }
+                console.log("QML SettingsView: 8c. Загружен font_size:", fontSize);
+            }
+            // Начертание шрифта интерфейса
+            if (settings.font_style !== undefined) {
+                var fontStyle = String(settings.font_style);
+                // Ищем значение в модели комбо-бокса
+                for (var i = 0; i < fontStyleComboBox.model.count; i++) {
+                    if (fontStyleComboBox.model.get(i).value === fontStyle) {
+                        fontStyleComboBox.currentIndex = i;
+                        break;
+                    }
+                }
+                console.log("QML SettingsView: 8d. Загружено font_style:", fontStyle);
+            }
+            // Цвет фона
+            if (settings.background_color !== undefined) {
+                backgroundColorField.text = String(settings.background_color);
+                console.log("QML SettingsView: 8e. Загружен background_color:", backgroundColorField.text);
+            }
+            console.log("QML SettingsView: 8. Загрузка настроек раздела 'Внешний вид' завершена.");
             // --- ---
 
-            console.log("QML SettingsView: === ЗАГРУЗКА НАСТРОЕК ЗАВЕРШЕНА ===");
+            // --- ЗАГРУЗКА НАСТРОЕК "ПЕЧАТИ" ---
+            console.log("QML SettingsView: 9. Загрузка настроек раздела 'Печать'...");
+            // Шрифт для печати
+            if (settings.print_font_family !== undefined) {
+                var printFontFamily = String(settings.print_font_family);
+                // Проверяем, есть ли такой шрифт в комбо-боксе для печати (если будет отдельный)
+                // Пока используем тот же комбо-бокс, что и для интерфейса, или создаем отдельный
+                // Для простоты, пока используем общий (но в будущем может понадобиться отдельный)
+                // printFontFamilyComboBox.currentIndex = printFontFamilyComboBox.find(printFontFamily);
+                console.log("QML SettingsView: 9a. Загружен print_font_family:", printFontFamily);
+            }
+            // Размер шрифта для печати
+            if (settings.print_font_size !== undefined) {
+                var printFontSize = parseInt(settings.print_font_size);
+                if (!isNaN(printFontSize)) {
+                    // printFontSizeSpinBox.value = printFontSize; // Если будет отдельный SpinBox
+                    console.log("QML SettingsView: 9b. Загружен print_font_size:", printFontSize);
+                }
+            }
+            console.log("QML SettingsView: 9. Загрузка настроек раздела 'Печать' завершена.");
+            // --- ---
+
+            console.log("QML SettingsView: === КОНЕЦ ЗАГРУЗКИ НАСТРОЕК ===");
         } else {
-            var errorMsgLoad = "Не удалось загрузить настройки или они пусты.";
-            console.error("QML SettingsView: === ОШИБКА ЗАГРУЗКИ НАСТРОЕК ===", errorMsgLoad);
-            // TODO: Отобразить ошибку пользователю, например:
-            // showErrorMessage(errorMsgLoad);
+            console.log("QML SettingsView: Не удалось загрузить настройки или они пусты");
         }
     }
 

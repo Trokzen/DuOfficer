@@ -106,7 +106,8 @@ class SQLiteConfigManager:
             'custom_time_label': "TEXT DEFAULT 'Местное время'",
             'custom_time_offset_seconds': "INTEGER DEFAULT 0",
             'show_moscow_time': "INTEGER DEFAULT 1",
-            'moscow_time_offset_seconds': "INTEGER DEFAULT 0"
+            'moscow_time_offset_seconds': "INTEGER DEFAULT 0",
+            'font_style': "TEXT DEFAULT 'normal'"
         }
 
         # Проверяем и добавляем каждую новую колонку, если её нет
