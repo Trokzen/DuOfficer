@@ -34,6 +34,9 @@ class ApplicationData(QObject):
     timeSettingsChanged = Signal() # Сигнал для обновления настроек времени
     backgroundImagePathChanged = Signal()
     algorithmsListChanged = Signal()
+    printFontFamilyChanged = Signal()
+    printFontSizeChanged = Signal()
+    printFontStyleChanged = Signal()
 
 
     def load_initial_settings(self):
@@ -107,6 +110,27 @@ class ApplicationData(QObject):
 
                     # ... (здесь можно добавить загрузку других настроек внешнего вида: font_family, font_size и т.д.) ...
                     
+                    # --- НОВОЕ: Загрузка настроек шрифта печати ---
+                    updated_print_props = False
+                    if 'print_font_family' in settings and settings['print_font_family']:
+                        self._print_font_family = settings['print_font_family']
+                        self.printFontFamilyChanged.emit()
+                        updated_print_props = True
+                        print(f"Python: Загружен print_font_family: {self._print_font_family}")
+
+                    if 'print_font_size' in settings and isinstance(settings['print_font_size'], int):
+                        self._print_font_size = settings['print_font_size']
+                        self.printFontSizeChanged.emit()
+                        updated_print_props = True
+                        print(f"Python: Загружен print_font_size: {self._print_font_size}")
+                    
+                    # --- ДОБАВЛЕНО: Загрузка начертания шрифта печати ---
+                    if 'print_font_style' in settings and settings['print_font_style']:
+                        self._print_font_style = settings['print_font_style']
+                        self.printFontStyleChanged.emit() # <-- Добавлено
+                        updated_print_props = True
+                        print(f"Python: Загружен print_font_style: {self._print_font_style}")
+
                     if updated_appearance_props:
                         print("Python: Некоторые настройки внешнего вида обновлены из БД.")
                         # Уведомляем QML об общем изменении настроек (если нужно)
@@ -153,6 +177,10 @@ class ApplicationData(QObject):
         # --- ИНИЦИАЛИЗАЦИЯ НОВЫХ СВОЙСТВ ДЛЯ ДАТ ---
         self._local_date = self._current_date # <-- Новое внутреннее свойство
         self._moscow_date = self._current_date # <-- Новое внутреннее свойство
+        self._print_font_family = "Arial" # Значение по умолчанию
+        self._print_font_size = 12        # Значение по умолчанию
+        # --- НОВОЕ СВОЙСТВО ДЛЯ НАЧЕРТАНИЯ ШРИФТА ПЕЧАТИ ---
+        self._print_font_style = "normal" # Значение по умолчанию # <-- Добавлено
         # --- ---
         # Инициализируем путь к эмблеме значением по умолчанию или None
         self._background_image_path = None # <-- ИЛИ путь к дефолтной эмблеме, если нужно
@@ -306,6 +334,19 @@ class ApplicationData(QObject):
     @Property(str, notify=backgroundImagePathChanged)
     def backgroundImagePath(self):
         return self._background_image_path
+
+    @Property(str, notify=printFontFamilyChanged)
+    def printFontFamily(self):
+        return self._print_font_family
+
+    @Property(int, notify=printFontSizeChanged)
+    def printFontSize(self):
+        return self._print_font_size
+
+    # --- НОВОЕ СВОЙСТВО ДЛЯ НАЧЕРТАНИЯ ШРИФТА ПЕЧАТИ ---
+    @Property(str, notify=printFontStyleChanged) # <-- Добавлено
+    def printFontStyle(self):                   # <-- Добавлено
+        return self._print_font_style           # <-- Добавлено
 
     @Slot(str)
     def setDutyOfficer(self, name):
@@ -649,6 +690,27 @@ class ApplicationData(QObject):
                         # --- ---
                         # Уведомляем QML об общем изменении настроек (если нужно)
                         # self.settingsChanged.emit() # (если такой сигнал используется глобально)
+
+                    # --- НОВОЕ: Обновление локальных свойств ApplicationData для шрифта печати ---
+                    updated_print_props = False
+                    if 'print_font_family' in new_settings:
+                        self._print_font_family = new_settings['print_font_family']
+                        self.printFontFamilyChanged.emit()
+                        updated_print_props = True
+                        print(f"Python: Обновлен print_font_family: {self._print_font_family}")
+
+                    if 'print_font_size' in new_settings:
+                        self._print_font_size = new_settings['print_font_size']
+                        self.printFontSizeChanged.emit()
+                        updated_print_props = True
+                        print(f"Python: Обновлен print_font_size: {self._print_font_size}")
+                    
+                    # --- ДОБАВЛЕНО: Обновление начертания шрифта печати ---
+                    if 'print_font_style' in new_settings:
+                        self._print_font_style = new_settings['print_font_style']
+                        self.printFontStyleChanged.emit() # <-- Добавлено
+                        updated_print_props = True
+                        print(f"Python: Обновлен print_font_style: {self._print_font_style}")
                     
                     return True
                 else:

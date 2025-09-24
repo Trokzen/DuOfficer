@@ -359,8 +359,54 @@ Item {
                                     // --- ---
                                 }
                             }
-                            // --- ---
                             
+                            // --- НОВЫЙ БЛОК: Шрифт для печати ---
+                            GroupBox {
+                                title: "Шрифт для печати"
+                                Layout.fillWidth: true
+                                ColumnLayout {
+                                    // --- Поля для настройки шрифта печати ---
+                                    Label {
+                                        text: "Шрифт интерфейса печати:"
+                                    }
+                                    ComboBox {
+                                        id: printFontFamilyComboBox
+                                        Layout.fillWidth: true
+                                        model: ["Arial", "Times New Roman", "Courier New", "Verdana", "Tahoma"] // Можно расширить
+                                        // currentIndex будет установлен в loadSettings
+                                    }
+
+                                    Label {
+                                        text: "Размер шрифта печати:"
+                                    }
+                                    SpinBox {
+                                        id: printFontSizeSpinBox
+                                        Layout.fillWidth: true
+                                        from: 8
+                                        to: 72 // Можно увеличить диапазон
+                                        value: 12 // Значение по умолчанию, будет обновлено в loadSettings
+                                    }
+                                    // --- НОВОЕ: Начертание шрифта печати ---
+                                    Label {
+                                        text: "Начертание шрифта печати:"
+                                    }
+                                    ComboBox {
+                                        id: printFontStyleComboBox
+                                        Layout.fillWidth: true
+                                        // Модель с описаниями и значениями для начертания
+                                        model: ListModel {
+                                            ListElement { name: "Обычный"; value: "normal" }
+                                            ListElement { name: "Жирный"; value: "bold" }
+                                            ListElement { name: "Курсив"; value: "italic" }
+                                            ListElement { name: "Жирный курсив"; value: "bold_italic" }
+                                        }
+                                        textRole: "name" // Отображаем поле 'name'
+                                        // currentIndex будет установлен в loadSettings
+                                    }
+                                }
+                            }
+                            // --- ---
+
                             // Заполнитель для правильного скроллинга
                             Item {
                                 Layout.fillHeight: true
@@ -689,6 +735,22 @@ Item {
         console.log("QML SettingsView: 6. Собраны настройки 'Печать':", JSON.stringify(printSettings));
         // --- ---
 
+        // --- СБОР НАСТРОЕК "ШРИФТА ДЛЯ ПЕЧАТИ" ---
+        console.log("QML SettingsView: 6. Сбор настроек раздела 'Шрифт для печати'...");
+        var printSettings = {};
+        printSettings['print_font_family'] = printFontFamilyComboBox.currentText.trim() || "Arial"; // Значение по умолчанию
+        printSettings['print_font_size'] = printFontSizeSpinBox.value;
+        // --- НОВОЕ: Сбор начертания шрифта для печати ---
+        // Получаем значение 'value' из выбранного элемента модели
+        if (printFontStyleComboBox.currentIndex !== -1 && printFontStyleComboBox.model.get(printFontStyleComboBox.currentIndex)) {
+            printSettings['print_font_style'] = printFontStyleComboBox.model.get(printFontStyleComboBox.currentIndex).value;
+        } else {
+            printSettings['print_font_style'] = "normal"; // Значение по умолчанию
+        }
+        // --- ---
+        console.log("QML SettingsView: 6. Собраны настройки 'Шрифт для печати':", JSON.stringify(printSettings));
+        // --- ---
+
         // --- ОБЪЕДИНЕНИЕ ВСЕХ НАСТРОЕК В ОДИН СЛОВАРЬ ---
         console.log("QML SettingsView: 7. Объединение всех настроек в один словарь...");
         var allSettings = {};
@@ -916,7 +978,57 @@ Item {
                 }
             }
             console.log("QML SettingsView: 9. Загрузка настроек раздела 'Печать' завершена.");
+
+            // --- ЗАГРУЗКА НАСТРОЕК "ШРИФТА ДЛЯ ПЕЧАТИ" ---
+            console.log("QML SettingsView: 9. Загрузка настроек раздела 'Шрифт для печати'...");
+            // Шрифт для печати
+            if (settings.print_font_family !== undefined) {
+                var printFontFamily = String(settings.print_font_family);
+                // Проверяем, есть ли такой шрифт в комбо-боксе
+                var printFontFamilyIndex = printFontFamilyComboBox.find(printFontFamily);
+                if (printFontFamilyIndex !== -1) {
+                    printFontFamilyComboBox.currentIndex = printFontFamilyIndex;
+                } else {
+                    // Если шрифт не найден, добавляем его в список (на случай кастомных шрифтов)
+                    printFontFamilyComboBox.model.append(printFontFamily);
+                    printFontFamilyComboBox.currentIndex = printFontFamilyComboBox.count - 1;
+                }
+                console.log("QML SettingsView: 9a. Загружен print_font_family:", printFontFamily);
+            }
+            // Размер шрифта для печати
+            if (settings.print_font_size !== undefined) {
+                var printFontSize = parseInt(settings.print_font_size);
+                if (!isNaN(printFontSize) && printFontSize >= printFontSizeSpinBox.from && printFontSize <= printFontSizeSpinBox.to) {
+                    printFontSizeSpinBox.value = printFontSize;
+                } else {
+                    printFontSizeSpinBox.value = 12; // Значение по умолчанию
+                }
+                console.log("QML SettingsView: 9b. Загружен print_font_size:", printFontSize);
+            }
+            // --- НОВОЕ: Начертание шрифта для печати ---
+            if (settings.print_font_style !== undefined) {
+                var printFontStyle = String(settings.print_font_style);
+                // Ищем значение в модели комбо-бокса начертания
+                var foundPrintFontStyleIndex = -1;
+                for (var i_pfs = 0; i_pfs < printFontStyleComboBox.model.count; i_pfs++) {
+                    // Проверяем свойство 'value' каждого элемента модели
+                    if (printFontStyleComboBox.model.get(i_pfs).value === printFontStyle) {
+                        foundPrintFontStyleIndex = i_pfs;
+                        break;
+                    }
+                }
+                if (foundPrintFontStyleIndex !== -1) {
+                    printFontStyleComboBox.currentIndex = foundPrintFontStyleIndex;
+                } else {
+                    // Если стиль не найден, устанавливаем "Обычный" (индекс 0 в стандартной модели)
+                    printFontStyleComboBox.currentIndex = 0;
+                }
+                console.log("QML SettingsView: 9c. Загружено print_font_style:", printFontStyle, "Индекс:", foundPrintFontStyleIndex);
+            }
             // --- ---
+            console.log("QML SettingsView: 9. Загрузка настроек раздела 'Шрифт для печати' завершена.");
+            // --- ---
+
 
             console.log("QML SettingsView: === КОНЕЦ ЗАГРУЗКИ НАСТРОЕК ===");
         } else {
