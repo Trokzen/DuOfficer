@@ -33,6 +33,7 @@ class ApplicationData(QObject):
     moscowDateChanged = Signal()  # Сигнал для изменения московской даты    
     timeSettingsChanged = Signal() # Сигнал для обновления настроек времени
     backgroundImagePathChanged = Signal()
+    algorithmsListChanged = Signal()
 
 
     def load_initial_settings(self):
@@ -1435,7 +1436,71 @@ class ApplicationData(QObject):
             print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
             return -1
 
-    
+
+    @Slot(int, result=bool)
+    def moveAlgorithmUp(self, algorithm_id: int) -> bool:
+        """
+        Перемещает алгоритм вверх в списке.
+        :param algorithm_id: ID алгоритма для перемещения.
+        :return: True, если успешно, иначе False.
+        """
+        print(f"Python: QML отправил запрос на перемещение алгоритма ID {algorithm_id} вверх.")
+        if not isinstance(algorithm_id, int) or algorithm_id <= 0:
+            print(f"Python: Ошибка - Некорректный ID алгоритма: {algorithm_id}")
+            return False
+
+        if self.pg_database_manager:
+            try:
+                success = self.pg_database_manager.move_algorithm_up(algorithm_id)
+                if success:
+                    print(f"Python: Алгоритм ID {algorithm_id} успешно перемещен вверх.")
+                    # Перезагружаем список алгоритмов в QML
+                    self.algorithmsListChanged.emit()
+                    return True
+                else:
+                    print(f"Python: Не удалось переместить алгоритм ID {algorithm_id} вверх.")
+                    return False
+            except Exception as e:
+                print(f"Python: Исключение при перемещении алгоритма {algorithm_id} вверх: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+        else:
+            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            return False
+
+    @Slot(int, result=bool)
+    def moveAlgorithmDown(self, algorithm_id: int) -> bool:
+        """
+        Перемещает алгоритм вниз в списке.
+        :param algorithm_id: ID алгоритма для перемещения.
+        :return: True, если успешно, иначе False.
+        """
+        print(f"Python: QML отправил запрос на перемещение алгоритма ID {algorithm_id} вниз.")
+        if not isinstance(algorithm_id, int) or algorithm_id <= 0:
+            print(f"Python: Ошибка - Некорректный ID алгоритма: {algorithm_id}")
+            return False
+
+        if self.pg_database_manager:
+            try:
+                success = self.pg_database_manager.move_algorithm_down(algorithm_id)
+                if success:
+                    print(f"Python: Алгоритм ID {algorithm_id} успешно перемещен вниз.")
+                    # Перезагружаем список алгоритмов в QML
+                    self.algorithmsListChanged.emit()
+                    return True
+                else:
+                    print(f"Python: Не удалось переместить алгоритм ID {algorithm_id} вниз.")
+                    return False
+            except Exception as e:
+                print(f"Python: Исключение при перемещении алгоритма {algorithm_id} вниз: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+        else:
+            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            return False
+
     def minimize_window(self):
         if self.window:
             self.window.showMinimized()

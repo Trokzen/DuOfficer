@@ -633,7 +633,7 @@ class PostgreSQLDatabaseManager:
             conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute(
-                f"SELECT id, name, category, time_type, description, created_at, updated_at FROM {self.SCHEMA_NAME}.algorithms ORDER BY name ASC;"
+                f"SELECT id, name, category, time_type, description, created_at, updated_at FROM {self.SCHEMA_NAME}.algorithms ORDER BY sort_order ASC;"
             )
             rows = cursor.fetchall()
             colnames = [desc[0] for desc in cursor.description]
@@ -1360,6 +1360,166 @@ class PostgreSQLDatabaseManager:
             
         return new_action_id
     # --- ---
+    def move_algorithm_up(self, algorithm_id: int) -> bool:
+        """
+        Перемещает алгоритм вверх в списке (уменьшает sort_order на 1).
+        :param algorithm_id: ID алгоритма для перемещения.
+        :return: True, если успешно, иначе False.
+        """
+        if not isinstance(algorithm_id, int) or algorithm_id <= 0:
+            logger.error("Некорректный ID алгоритма для перемещения вверх.")
+            return False
+
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # 1. Получаем текущий sort_order алгоритма
+            cursor.execute(
+                f"SELECT sort_order FROM {self.SCHEMA_NAME}.algorithms WHERE id = %s;",
+                (algorithm_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                logger.warning(f"Алгоритм ID {algorithm_id} не найден для перемещения вверх.")
+                return False
+
+            current_sort_order = row[0]
+            logger.debug(f"Текущий sort_order алгоритма {algorithm_id}: {current_sort_order}")
+
+            # 2. Найдем алгоритм с sort_order на 1 меньше
+            cursor.execute(
+                f"SELECT id, sort_order FROM {self.SCHEMA_NAME}.algorithms WHERE sort_order = %s;",
+                (current_sort_order - 1,)
+            )
+            swap_candidate = cursor.fetchone()
+
+            if swap_candidate:
+                # 3a. Если такой алгоритм есть, меняем их sort_order местами
+                swap_algorithm_id, swap_sort_order = swap_candidate
+                logger.debug(f"Найден алгоритм {swap_algorithm_id} с sort_order={swap_sort_order} для обмена.")
+
+                # Начинаем транзакцию
+                cursor.execute("BEGIN;")
+
+                # Обновляем sort_order у текущего алгоритма
+                cursor.execute(
+                    f"UPDATE {self.SCHEMA_NAME}.algorithms SET sort_order = %s WHERE id = %s;",
+                    (swap_sort_order, algorithm_id)
+                )
+                # Обновляем sort_order у алгоритма, с которым меняемся
+                cursor.execute(
+                    f"UPDATE {self.SCHEMA_NAME}.algorithms SET sort_order = %s WHERE id = %s;",
+                    (current_sort_order, swap_algorithm_id)
+                )
+
+                conn.commit()
+                cursor.close()
+                logger.info(f"Алгоритм ID {algorithm_id} успешно перемещен вверх (sort_order: {current_sort_order} -> {swap_sort_order}). Алгоритм ID {swap_algorithm_id} перемещен вниз (sort_order: {swap_sort_order} -> {current_sort_order}).")
+                return True
+            else:
+                # 3b. Если алгоритма с sort_order-1 нет, просто уменьшаем sort_order текущего
+                logger.debug(f"Алгоритм с sort_order={current_sort_order - 1} не найден. Уменьшаем sort_order текущего алгоритма.")
+                cursor.execute(
+                    f"UPDATE {self.SCHEMA_NAME}.algorithms SET sort_order = sort_order - 1 WHERE id = %s;",
+                    (algorithm_id,)
+                )
+                conn.commit()
+                cursor.close()
+                logger.info(f"Алгоритм ID {algorithm_id} успешно перемещен вверх (sort_order уменьшен на 1).")
+                return True
+
+        except psycopg2.Error as e:
+            logger.error(f"Ошибка БД при перемещении алгоритма {algorithm_id} вверх: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        except Exception as e:
+            logger.error(f"Неизвестная ошибка при перемещении алгоритма {algorithm_id} вверх: {e}")
+            if conn:
+                conn.rollback()
+            return False
+
+    def move_algorithm_down(self, algorithm_id: int) -> bool:
+        """
+        Перемещает алгоритм вниз в списке (увеличивает sort_order на 1).
+        :param algorithm_id: ID алгоритма для перемещения.
+        :return: True, если успешно, иначе False.
+        """
+        if not isinstance(algorithm_id, int) or algorithm_id <= 0:
+            logger.error("Некорректный ID алгоритма для перемещения вниз.")
+            return False
+
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # 1. Получаем текущий sort_order алгоритма
+            cursor.execute(
+                f"SELECT sort_order FROM {self.SCHEMA_NAME}.algorithms WHERE id = %s;",
+                (algorithm_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                logger.warning(f"Алгоритм ID {algorithm_id} не найден для перемещения вниз.")
+                return False
+
+            current_sort_order = row[0]
+            logger.debug(f"Текущий sort_order алгоритма {algorithm_id}: {current_sort_order}")
+
+            # 2. Найдем алгоритм с sort_order на 1 больше
+            cursor.execute(
+                f"SELECT id, sort_order FROM {self.SCHEMA_NAME}.algorithms WHERE sort_order = %s;",
+                (current_sort_order + 1,)
+            )
+            swap_candidate = cursor.fetchone()
+
+            if swap_candidate:
+                # 3a. Если такой алгоритм есть, меняем их sort_order местами
+                swap_algorithm_id, swap_sort_order = swap_candidate
+                logger.debug(f"Найден алгоритм {swap_algorithm_id} с sort_order={swap_sort_order} для обмена.")
+
+                # Начинаем транзакцию
+                cursor.execute("BEGIN;")
+
+                # Обновляем sort_order у текущего алгоритма
+                cursor.execute(
+                    f"UPDATE {self.SCHEMA_NAME}.algorithms SET sort_order = %s WHERE id = %s;",
+                    (swap_sort_order, algorithm_id)
+                )
+                # Обновляем sort_order у алгоритма, с которым меняемся
+                cursor.execute(
+                    f"UPDATE {self.SCHEMA_NAME}.algorithms SET sort_order = %s WHERE id = %s;",
+                    (current_sort_order, swap_algorithm_id)
+                )
+
+                conn.commit()
+                cursor.close()
+                logger.info(f"Алгоритм ID {algorithm_id} успешно перемещен вниз (sort_order: {current_sort_order} -> {swap_sort_order}). Алгоритм ID {swap_algorithm_id} перемещен вверх (sort_order: {swap_sort_order} -> {current_sort_order}).")
+                return True
+            else:
+                # 3b. Если алгоритма с sort_order+1 нет, просто увеличиваем sort_order текущего
+                logger.debug(f"Алгоритм с sort_order={current_sort_order + 1} не найден. Увеличиваем sort_order текущего алгоритма.")
+                cursor.execute(
+                    f"UPDATE {self.SCHEMA_NAME}.algorithms SET sort_order = sort_order + 1 WHERE id = %s;",
+                    (algorithm_id,)
+                )
+                conn.commit()
+                cursor.close()
+                logger.info(f"Алгоритм ID {algorithm_id} успешно перемещен вниз (sort_order увеличен на 1).")
+                return True
+
+        except psycopg2.Error as e:
+            logger.error(f"Ошибка БД при перемещении алгоритма {algorithm_id} вниз: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        except Exception as e:
+            logger.error(f"Неизвестная ошибка при перемещении алгоритма {algorithm_id} вниз: {e}")
+            if conn:
+                conn.rollback()
+            return False
+
 
 # --- Пример использования (для тестирования модуля отдельно) ---
 if __name__ == "__main__":

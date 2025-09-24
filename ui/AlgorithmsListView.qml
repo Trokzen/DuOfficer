@@ -196,6 +196,87 @@ Item {
             }
             // --- ---
             
+            // --- НОВОЕ: Кнопки ранжирования ---
+            Button {
+                text: "▲ Вверх"
+                // --- ИЗМЕНЕНО: Заполняем ширину, как другие кнопки ---
+                Layout.fillWidth: true // <-- НОВОЕ
+                // --- ---
+                // Включена, если выбран не первый элемент
+                enabled: listView.currentIndex !== -1 && listView.currentIndex > 0 
+                onClicked: {
+                    var index = listView.currentIndex;
+                    if (index > 0) { // Дополнительная проверка
+                        var algId = algorithmsModel.get(index).id;
+                        console.log("QML AlgorithmsListView: Запрошено перемещение алгоритма ID", algId, "вверх.");
+                        var result = appData.moveAlgorithmUp(algId);
+                        if (result === true) {
+                            console.log("QML AlgorithmsListView: Алгоритм ID", algId, "перемещен вверх успешно.");
+                            // --- ИЗМЕНЕНО: Перезагружаем список и сохраняем/восстанавливаем выделение ---
+                            // Сохраняем ID перемещенного алгоритма
+                            var movedAlgorithmId = algId;
+                            // Перезагружаем список
+                            algorithmsListViewRoot.loadAlgorithms();
+                            // После перезагрузки пытаемся восстановить выделение
+                            // Ищем новый индекс алгоритма по его ID
+                            for (var i = 0; i < algorithmsModel.count; i++) {
+                                if (algorithmsModel.get(i).id === movedAlgorithmId) {
+                                    listView.currentIndex = i;
+                                    console.log("QML AlgorithmsListView: Выделение восстановлено на алгоритме ID", movedAlgorithmId, "на новой позиции", i);
+                                    break;
+                                }
+                            }
+                            // --- ---
+                        } else {
+                            console.warn("QML AlgorithmsListView: Ошибка перемещения алгоритма ID", algId, "вверх. Результат:", result);
+                            // TODO: Отобразить ошибку пользователю
+                        }
+                    } else {
+                        console.log("QML AlgorithmsListView: Перемещение вверх невозможно: выбран первый элемент или элемент не выбран.");
+                    }
+                }
+            }
+            Button {
+                text: "▼ Вниз"
+                // --- ИЗМЕНЕНО: Заполняем ширину, как другие кнопки ---
+                Layout.fillWidth: true // <-- НОВОЕ
+                // --- ---
+                // Включена, если выбран не последний элемент
+                enabled: listView.currentIndex !== -1 && listView.currentIndex < (algorithmsModel.count - 1) 
+                onClicked: {
+                    var index = listView.currentIndex;
+                    if (index !== -1 && index < (algorithmsModel.count - 1)) { // Дополнительная проверка
+                        var algId = algorithmsModel.get(index).id;
+                        console.log("QML AlgorithmsListView: Запрошено перемещение алгоритма ID", algId, "вниз.");
+                        var result = appData.moveAlgorithmDown(algId);
+                        if (result === true) {
+                            console.log("QML AlgorithmsListView: Алгоритм ID", algId, "перемещен вниз успешно.");
+                            // --- ИЗМЕНЕНО: Перезагружаем список и сохраняем/восстанавливаем выделение ---
+                            // Сохраняем ID перемещенного алгоритма
+                            var movedAlgorithmId = algId;
+                            // Перезагружаем список
+                            algorithmsListViewRoot.loadAlgorithms();
+                            // После перезагрузки пытаемся восстановить выделение
+                            // Ищем новый индекс алгоритма по его ID
+                            for (var i = 0; i < algorithmsModel.count; i++) {
+                                if (algorithmsModel.get(i).id === movedAlgorithmId) {
+                                    listView.currentIndex = i;
+                                    console.log("QML AlgorithmsListView: Выделение восстановлено на алгоритме ID", movedAlgorithmId, "на новой позиции", i);
+                                    break;
+                                }
+                            }
+                            // --- ---
+                        } else {
+                            console.warn("QML AlgorithmsListView: Ошибка перемещения алгоритма ID", algId, "вниз. Результат:", result);
+                            // TODO: Отобразить ошибку пользователю
+                        }
+                    } else {
+                        console.log("QML AlgorithmsListView: Перемещение вниз невозможно: выбран последний элемент, элемент не выбран или список пуст.");
+                    }
+                }
+            }
+            // --- ---
+
             Item {
                 Layout.fillHeight: true // Заполнитель для выравнивания кнопок сверху
             }
