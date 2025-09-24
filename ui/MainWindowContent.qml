@@ -112,11 +112,27 @@ Item {
                 // --- ---
 
                 // --- Центральная часть - Эмблема (строго по центру) ---
-                // (Остается без изменений)
                 Image {
                     id: emblem
                     anchors.centerIn: parent
-                    source: "../resources/images/placeholder_emblem.png"
+                    // --- ИЗМЕНЕНО: Привязка к appData.backgroundImagePath ---
+                    // source: "../resources/images/placeholder_emblem.png" // <-- СТАРОЕ
+                    source: {
+                        var imagePath = appData.backgroundImagePath; // Получаем путь из Python
+                        console.log("QML MainWindowContent: emblem.source запрашивает путь к эмблеме из appData:", imagePath);
+                        if (imagePath && imagePath !== "") {
+                            // Если путь задан, используем его
+                            // Добавляем префикс "file:///" для локальных файлов
+                            var fullPath = "file:///" + imagePath;
+                            console.log("QML MainWindowContent: emblem.source использует путь к эмблеме:", fullPath);
+                            return fullPath;
+                        } else {
+                            // Если путь не задан или пуст, используем заглушку
+                            console.log("QML MainWindowContent: emblem.source использует заглушку для эмблемы.");
+                            return "../resources/images/placeholder_emblem.png";
+                        }
+                    }
+                    // --- ---
                     fillMode: Image.PreserveAspectFit
                     // --- Увеличение эмблемы на ~20% ---
                     height: parent.height * 0.96 // 0.8 * 1.2 = 0.96

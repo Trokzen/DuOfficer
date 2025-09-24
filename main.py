@@ -32,6 +32,7 @@ class ApplicationData(QObject):
     localDateChanged = Signal()   # Сигнал для изменения местной даты
     moscowDateChanged = Signal()  # Сигнал для изменения московской даты    
     timeSettingsChanged = Signal() # Сигнал для обновления настроек времени
+    backgroundImagePathChanged = Signal()
 
 
     def load_initial_settings(self):
@@ -86,9 +87,35 @@ class ApplicationData(QObject):
                         self.timeSettingsChanged.emit()
                     # --- ---
                     
-                    print(f"Python: Начальные настройки (включая время) загружены.")
+                    # --- НОВОЕ: Загрузка настроек внешнего вида ---
+                    updated_appearance_props = False
+                    
+                    # Путь к фоновому изображению/эмблеме
+                    if 'background_image_path' in settings:
+                        bg_image_path = settings['background_image_path']
+                        # Устанавливаем путь, если он не None и не пустая строка
+                        if bg_image_path is not None and str(bg_image_path).strip() != "":
+                            self._background_image_path = str(bg_image_path).strip()
+                        else:
+                            # Если путь None или пустая строка, оставляем как есть (None или дефолтный путь)
+                            # self._background_image_path = None # <-- Опционально: явно установить None
+                            pass 
+                        self.backgroundImagePathChanged.emit() # <-- ВАЖНО: Уведомляем QML
+                        updated_appearance_props = True
+                        print(f"Python: Загружен background_image_path: '{self._background_image_path}'")
+
+                    # ... (здесь можно добавить загрузку других настроек внешнего вида: font_family, font_size и т.д.) ...
+                    
+                    if updated_appearance_props:
+                        print("Python: Некоторые настройки внешнего вида обновлены из БД.")
+                        # Уведомляем QML об общем изменении настроек (если нужно)
+                        # self.settingsChanged.emit() # <-- Опционально: если используется глобальный сигнал
+                    # --- ---
+                    
+                    print(f"Python: Начальные настройки (включая время и внешний вид) загружены.")
         except Exception as e:
-            print(f"Python: Ошибка при загрузке начальных настроек (включая время): {e}")
+            print(f"Python: Ошибка при загрузке начальных настроек (включая время и внешний вид): {e}")
+            import traceback
             traceback.print_exc()
 
     def __init__(self, app, engine, sqlite_config_manager):
@@ -126,6 +153,8 @@ class ApplicationData(QObject):
         self._local_date = self._current_date # <-- Новое внутреннее свойство
         self._moscow_date = self._current_date # <-- Новое внутреннее свойство
         # --- ---
+        # Инициализируем путь к эмблеме значением по умолчанию или None
+        self._background_image_path = None # <-- ИЛИ путь к дефолтной эмблеме, если нужно
 
     # Загружаем начальные настройки
         self.load_initial_settings()
@@ -272,6 +301,10 @@ class ApplicationData(QObject):
     @Property(bool, notify=timeSettingsChanged)
     def showMoscowTime(self):
         return self._show_moscow_time
+
+    @Property(str, notify=backgroundImagePathChanged)
+    def backgroundImagePath(self):
+        return self._background_image_path
 
     @Slot(str)
     def setDutyOfficer(self, name):
@@ -598,8 +631,16 @@ class ApplicationData(QObject):
                          except (ValueError, TypeError):
                              print(f"Python: Ошибка преобразования moscow_time_offset_seconds: {new_settings['moscow_time_offset_seconds']}")
 
+                    # --- Обновляем свойства, связанные с внешним видом ---
+                    if 'background_image_path' in new_settings and new_settings['background_image_path'] is not None:
+                        self._background_image_path = str(new_settings['background_image_path']) if new_settings['background_image_path'] else None
+                        self.backgroundImagePathChanged.emit() # <-- Сигнал для backgroundImagePath
+                        updated_properties = True
+                        print(f"Python: Обновлен background_image_path: {self._background_image_path}")
+
                     if updated_properties:
                         print("Python: Локальные свойства обновлены.")
+                        self.settingsChanged.emit()
                         # --- Если изменялись настройки времени, обновляем рассчитываемые времена ---
                         if updated_time_props:
                             print("Python: Обнаружены изменения настроек времени. Пересчет localTime/moscowTime...")
