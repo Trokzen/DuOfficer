@@ -281,9 +281,16 @@ Item {
                                     }
                                     ComboBox {
                                         id: fontFamilyComboBox
-                                        Layout.fillWidth: true
-                                        model: ["Arial", "Times New Roman", "Courier New"] // Заглушка, будет обновлена динамически
-                                        // currentIndex и model будут установлены в loadSettings
+                                        // --- НОВОЕ: Динамическое заполнение шрифтами системы ---
+                                        // Qt.fontFamilies() возвращает список доступных шрифтов в системе
+                                        model: Qt.fontFamilies() 
+                                        // --- ---
+                                        // currentIndex и text будут установлены в loadSettings
+                                        // --- Добавим подсказку ---
+                                        ToolTip.text: "Выберите шрифт для интерфейса приложения"
+                                        ToolTip.visible: hovered
+                                        Layout.preferredWidth: 150
+                                        // --- ---
                                     }
                                     // --- ---
                                     
@@ -293,10 +300,10 @@ Item {
                                     }
                                     SpinBox {
                                         id: fontSizeSpinBox
-                                        Layout.fillWidth: true
                                         from: 8
                                         to: 24
                                         value: 12 // Значение по умолчанию, будет обновлено в loadSettings
+                                        Layout.preferredWidth: 150
                                     }
                                     // --- ---
                                     
@@ -306,7 +313,7 @@ Item {
                                     }
                                     ComboBox {
                                         id: fontStyleComboBox
-                                        Layout.fillWidth: true
+                                        Layout.preferredWidth: 150
                                         // Модель с описаниями и значениями
                                         model: ListModel {
                                             ListElement { name: "Обычный"; value: "normal" }
@@ -354,9 +361,62 @@ Item {
                                         placeholderText: "Введите HEX-код цвета (например, #ecf0f1)..."
                                         // text будет установлен в loadSettings
                                         // Добавим валидацию HEX-кода
-                                        //validator: RegExpValidator { regExp: /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/ }
+                                        // validator: RegExpValidator { regExp: /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/ }
                                     }
                                     // --- ---
+                                    GroupBox {
+                                        title: "Предпросмотр шрифта интерфейса"
+                                        Layout.fillWidth: true
+                                        ColumnLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 5
+                                            spacing: 5
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                // --- ДИНАМИЧЕСКОЕ ПРИМЕНЕНИЕ СТИЛЯ ШРИФТА ---
+                                                // text: "Пример текста для предпросмотра шрифта интерфейса" // <-- СТАРОЕ
+                                                text: {
+                                                    // Формируем пример текста, отражающий текущие настройки
+                                                    var fontFamily = fontFamilyComboBox.currentText || "Arial";
+                                                    var fontSize = fontSizeSpinBox.value || 12;
+                                                    var fontStyleDesc = "Обычный";
+                                                    // Получаем описание стиля из модели fontStyleComboBox
+                                                    if (fontStyleComboBox.currentIndex !== -1 && fontStyleComboBox.model.get(fontStyleComboBox.currentIndex)) {
+                                                        fontStyleDesc = fontStyleComboBox.model.get(fontStyleComboBox.currentIndex).name || "Обычный";
+                                                    }
+                                                    return "Пример текста (" + fontFamily + ", " + fontSize + "pt, " + fontStyleDesc + ")";
+                                                }
+                                                // --- ---
+                                                // --- ДИНАМИЧЕСКОЕ ПРИМЕНЕНИЕ СВОЙСТВ ШРИФТА ---
+                                                font.family: fontFamilyComboBox.currentText || "Arial" // Применяем выбранный шрифт
+                                                font.pixelSize: (fontSizeSpinBox.value || 12) * scaleFactor // Применяем выбранный размер
+                                                // Применяем выбранный стиль
+                                                font.bold: {
+                                                    // Получаем значение 'value' из выбранного элемента модели
+                                                    var styleValue = "normal";
+                                                    if (fontStyleComboBox.currentIndex !== -1 && fontStyleComboBox.model.get(fontStyleComboBox.currentIndex)) {
+                                                        styleValue = fontStyleComboBox.model.get(fontStyleComboBox.currentIndex).value || "normal";
+                                                    }
+                                                    return (styleValue === "bold" || styleValue === "bold_italic");
+                                                }
+                                                font.italic: {
+                                                    // Получаем значение 'value' из выбранного элемента модели
+                                                    var styleValue = "normal";
+                                                    if (fontStyleComboBox.currentIndex !== -1 && fontStyleComboBox.model.get(fontStyleComboBox.currentIndex)) {
+                                                        styleValue = fontStyleComboBox.model.get(fontStyleComboBox.currentIndex).value || "normal";
+                                                    }
+                                                    return (styleValue === "italic" || styleValue === "bold_italic");
+                                                }
+                                                // --- ---
+                                                wrapMode: Text.WordWrap
+                                                elide: Text.ElideRight
+                                            }
+                                            // --- ---
+                                        }
+                                    }
+
+
                                 }
                             }
                             
@@ -371,9 +431,16 @@ Item {
                                     }
                                     ComboBox {
                                         id: printFontFamilyComboBox
-                                        Layout.fillWidth: true
-                                        model: ["Arial", "Times New Roman", "Courier New", "Verdana", "Tahoma"] // Можно расширить
-                                        // currentIndex будет установлен в loadSettings
+                                        // --- НОВОЕ: Динамическое заполнение шрифтами системы ---
+                                        // Qt.fontFamilies() возвращает список доступных шрифтов в системе
+                                        model: Qt.fontFamilies()
+                                        // --- ---
+                                        // currentIndex и text будут установлены в loadSettings
+                                        // --- Добавим подсказку ---
+                                        ToolTip.text: "Выберите шрифт для печатных форм и отчетов"
+                                        ToolTip.visible: hovered
+                                        Layout.preferredWidth: 150
+                                        // --- ---
                                     }
 
                                     Label {
@@ -381,10 +448,10 @@ Item {
                                     }
                                     SpinBox {
                                         id: printFontSizeSpinBox
-                                        Layout.fillWidth: true
                                         from: 8
                                         to: 72 // Можно увеличить диапазон
                                         value: 12 // Значение по умолчанию, будет обновлено в loadSettings
+                                        Layout.preferredWidth: 150
                                     }
                                     // --- НОВОЕ: Начертание шрифта печати ---
                                     Label {
@@ -392,7 +459,7 @@ Item {
                                     }
                                     ComboBox {
                                         id: printFontStyleComboBox
-                                        Layout.fillWidth: true
+                                        Layout.preferredWidth: 150
                                         // Модель с описаниями и значениями для начертания
                                         model: ListModel {
                                             ListElement { name: "Обычный"; value: "normal" }
@@ -403,6 +470,60 @@ Item {
                                         textRole: "name" // Отображаем поле 'name'
                                         // currentIndex будет установлен в loadSettings
                                     }
+
+                                    GroupBox {
+                                        title: "Предпросмотр шрифта печати"
+                                        Layout.fillWidth: true
+                                        ColumnLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 5
+                                            spacing: 5
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                // --- ДИНАМИЧЕСКОЕ ПРИМЕНЕНИЕ СТИЛЯ ШРИФТА ---
+                                                // text: "Пример текста для предпросмотра шрифта печати" // <-- СТАРОЕ
+                                                text: {
+                                                    // Формируем пример текста, отражающий текущие настройки
+                                                    var fontFamily = printFontFamilyComboBox.currentText || "Arial";
+                                                    var fontSize = printFontSizeSpinBox.value || 12;
+                                                    var fontStyleDesc = "Обычный";
+                                                    // Получаем описание стиля из модели printFontStyleComboBox
+                                                    if (printFontStyleComboBox.currentIndex !== -1 && printFontStyleComboBox.model.get(printFontStyleComboBox.currentIndex)) {
+                                                        fontStyleDesc = printFontStyleComboBox.model.get(printFontStyleComboBox.currentIndex).name || "Обычный";
+                                                    }
+                                                    return "Пример текста печати (" + fontFamily + ", " + fontSize + "pt, " + fontStyleDesc + ")";
+                                                }
+                                                // --- ---
+                                                // --- ДИНАМИЧЕСКОЕ ПРИМЕНЕНИЕ СВОЙСТВ ШРИФТА ---
+                                                font.family: printFontFamilyComboBox.currentText || "Arial" // Применяем выбранный шрифт печати
+                                                font.pixelSize: (printFontSizeSpinBox.value || 12) * scaleFactor // Применяем выбранный размер печати
+                                                // Применяем выбранный стиль печати
+                                                font.bold: {
+                                                    // Получаем значение 'value' из выбранного элемента модели
+                                                    var styleValue = "normal";
+                                                    if (printFontStyleComboBox.currentIndex !== -1 && printFontStyleComboBox.model.get(printFontStyleComboBox.currentIndex)) {
+                                                        styleValue = printFontStyleComboBox.model.get(printFontStyleComboBox.currentIndex).value || "normal";
+                                                    }
+                                                    return (styleValue === "bold" || styleValue === "bold_italic");
+                                                }
+                                                font.italic: {
+                                                    // Получаем значение 'value' из выбранного элемента модели
+                                                    var styleValue = "normal";
+                                                    if (printFontStyleComboBox.currentIndex !== -1 && printFontStyleComboBox.model.get(printFontStyleComboBox.currentIndex)) {
+                                                        styleValue = printFontStyleComboBox.model.get(printFontStyleComboBox.currentIndex).value || "normal";
+                                                    }
+                                                    return (styleValue === "italic" || styleValue === "bold_italic");
+                                                }
+                                                // --- ---
+                                                wrapMode: Text.WordWrap
+                                                elide: Text.ElideRight
+                                            }
+                                            // --- ---
+                                        }
+                                    }
+                                    // --- ---
+
                                 }
                             }
                             // --- ---
