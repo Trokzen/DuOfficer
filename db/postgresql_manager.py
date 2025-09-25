@@ -1520,6 +1520,67 @@ class PostgreSQLDatabaseManager:
                 conn.rollback()
             return False
 
+    def get_executions_by_date(self, date_string: str) -> List[Dict[str, Any]]:
+        """
+        Получает список ВСЕХ выполнений алгоритмов (algorithm_executions) за заданную дату.
+        Включает активные, завершенные и отмененные.
+        :param date_string: Дата в формате 'YYYY-MM-DD'.
+        :return: Список словарей с данными execution'ов.
+        """
+        if not date_string:
+            logger.warning("Некорректная дата для получения execution'ов.")
+            return []
+
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            
+            # --- ИЗМЕНЕНО: SQL-запрос БЕЗ фильтрации по status ---
+            # Используем CAST(started_at AS DATE) для извлечения даты из timestamp
+            # LEFT JOIN users для получения имени ответственного, даже если пользователь удален
+            sql_query = f"""
+            SELECT 
+                ae.id,
+                ae.algorithm_id,
+                a.name AS algorithm_name,
+                ae.started_at,
+                TO_CHAR(ae.started_at, 'DD.MM.YYYY HH24:MI:SS') AS started_at_display,
+                ae.completed_at,
+                CASE 
+                    WHEN ae.completed_at IS NOT NULL THEN TO_CHAR(ae.completed_at, 'DD.MM.YYYY HH24:MI:SS')
+                    ELSE NULL
+                END AS completed_at_display,
+                ae.status,
+                ae.created_by_user_id,
+                COALESCE(u.last_name || ' ' || u.first_name || ' ' || u.middle_name, 'Неизвестен') AS created_by_user_display_name
+            FROM {self.SCHEMA_NAME}.algorithm_executions ae
+            JOIN {self.SCHEMA_NAME}.algorithms a ON ae.algorithm_id = a.id
+            LEFT JOIN {self.SCHEMA_NAME}.users u ON ae.created_by_user_id = u.id
+            WHERE CAST(ae.started_at AS DATE) = %s
+            ORDER BY ae.started_at DESC;
+            """
+            # --- ---
+            
+            logger.debug(f"Выполнение SQL получения ВСЕХ execution'ов за дату '{date_string}': {cursor.mogrify(sql_query, (date_string,))}")
+            cursor.execute(sql_query, (date_string,))
+            rows = cursor.fetchall()
+            # Получаем названия колонок
+            colnames = [desc[0] for desc in cursor.description]
+            cursor.close()
+            
+            # Преобразуем список кортежей в список словарей
+            executions_list = [dict(zip(colnames, row)) for row in rows]
+            logger.info(f"Получен список {len(executions_list)} ВСЕХ execution'ов за дату '{date_string}' из БД.")
+            return executions_list
+            
+        except psycopg2.Error as e:
+            logger.error(f"Ошибка БД при получении ВСЕХ execution'ов за дату '{date_string}': {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Неизвестная ошибка при получении ВСЕХ execution'ов за дату '{date_string}': {e}")
+            import traceback
+            traceback.print_exc()
+            return []
 
 # --- Пример использования (для тестирования модуля отдельно) ---
 if __name__ == "__main__":

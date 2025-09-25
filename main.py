@@ -1563,6 +1563,39 @@ class ApplicationData(QObject):
             print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
             return False
 
+    @Slot(str, result='QVariant') # Принимает строку даты, возвращает список
+    def getExecutionsByDate(self, date_string: str) -> 'QVariant':
+        """
+        Возвращает список алгоритмов (algorithm_executions) за заданную дату.
+        :param date_string: Дата в формате 'YYYY-MM-DD'.
+        :return: Список словарей с данными execution'ов.
+        """
+        print(f"Python: QML запросил список execution'ов за дату '{date_string}'.")
+        
+        if not date_string:
+            print("Python: Ошибка - date_string пуста.")
+            return []
+            
+        if self.pg_database_manager:
+            try:
+                # Вызываем метод из менеджера БД
+                executions = self.pg_database_manager.get_executions_by_date(date_string)
+                if executions and isinstance(executions, list):
+                    print(f"Python: Получен список {len(executions)} execution'ов за дату '{date_string}' из БД.")
+                    # Возвращаем как есть, QML сам преобразует QVariantList в JS Array
+                    return executions 
+                else:
+                    print(f"Python: Не найдено execution'ов за дату '{date_string}' или ошибка получения.")
+                    return []
+            except Exception as e:
+                print(f"Python: Ошибка при получении execution'ов за дату '{date_string}': {e}")
+                import traceback
+                traceback.print_exc()
+                return []
+        else:
+            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            return []
+
     def minimize_window(self):
         if self.window:
             self.window.showMinimized()
