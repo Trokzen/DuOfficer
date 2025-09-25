@@ -3,6 +3,7 @@ import QtQuick 6.5
 import QtQuick.Controls 6.5
 import QtQuick.Layouts 6.5
 import "." // Импорт из той же директории (ui/)
+import "./algorithms"
 
 Item {
     id: rootItem
@@ -338,12 +339,21 @@ Item {
                                      text: "Содержимое вкладки: Повседневная деятельность"
                                      font.pixelSize: rootItem.scaleFactor * 12
                                  }
-                                 // Заполнитель
-                                 Item {
+                                 // --- НОВОЕ: Вставка RunningAlgorithmsView ---
+                                 RunningAlgorithmsView {
+                                     id: runningAlgorithmsView1
+                                     Layout.fillWidth: true
                                      Layout.fillHeight: true
+                                     categoryFilter: "повседневная деятельность" // <-- Передаем фильтр категории
                                  }
+                                 // --- ---
+                                 // Заполнитель (можно удалить, если RunningAlgorithmsView заполняет всё)
+                                 // Item {
+                                 //     Layout.fillHeight: true
+                                 // }
                              }
                          }
+                         // --- ---
 
                          // --- Вкладка 2: Боевая готовность ---
                          Item { // Заглушка
@@ -353,12 +363,21 @@ Item {
                                      text: "Содержимое вкладки: Боевая готовность"
                                      font.pixelSize: rootItem.scaleFactor * 12
                                  }
-                                 // Заполнитель
-                                 Item {
+                                 // --- НОВОЕ: Вставка RunningAlgorithmsView ---
+                                 RunningAlgorithmsView {
+                                     id: runningAlgorithmsView2
+                                     Layout.fillWidth: true
                                      Layout.fillHeight: true
+                                     categoryFilter: "боевая готовность" // <-- Передаем фильтр категории
                                  }
+                                 // --- ---
+                                 // Заполнитель (можно удалить, если RunningAlgorithmsView заполняет всё)
+                                 // Item {
+                                 //     Layout.fillHeight: true
+                                 // }
                              }
                          }
+                         // --- ---
 
                          // --- Вкладка 3: Противодействие терроризму ---
                          Item { // Заглушка
@@ -368,12 +387,21 @@ Item {
                                      text: "Содержимое вкладки: Противодействие терроризму"
                                      font.pixelSize: rootItem.scaleFactor * 12
                                  }
-                                 // Заполнитель
-                                 Item {
+                                 // --- НОВОЕ: Вставка RunningAlgorithmsView ---
+                                 RunningAlgorithmsView {
+                                     id: runningAlgorithmsView3
+                                     Layout.fillWidth: true
                                      Layout.fillHeight: true
+                                     categoryFilter: "противодействие терроризму" // <-- Передаем фильтр категории
                                  }
+                                 // --- ---
+                                 // Заполнитель (можно удалить, если RunningAlgorithmsView заполняет всё)
+                                 // Item {
+                                 //     Layout.fillHeight: true
+                                 // }
                              }
                          }
+                         // --- ---
 
                          // --- Вкладка 4: Кризисные ситуации ---
                          Item { // Заглушка
@@ -383,12 +411,21 @@ Item {
                                      text: "Содержимое вкладки: Кризисные ситуации"
                                      font.pixelSize: rootItem.scaleFactor * 12
                                  }
-                                 // Заполнитель
-                                 Item {
+                                 // --- НОВОЕ: Вставка RunningAlgorithmsView ---
+                                 RunningAlgorithmsView {
+                                     id: runningAlgorithmsView4
+                                     Layout.fillWidth: true
                                      Layout.fillHeight: true
+                                     categoryFilter: "кризисные ситуации" // <-- Передаем фильтр категории
                                  }
+                                 // --- ---
+                                 // Заполнитель (можно удалить, если RunningAlgorithmsView заполняет всё)
+                                 // Item {
+                                 //     Layout.fillHeight: true
+                                 // }
                              }
                          }
+                         // --- ---
 
                          // --- Вкладка 5: Настройки (возвращаем старую логику) ---
                          SettingsView {
@@ -400,6 +437,7 @@ Item {
                 }
             }
         }
+        // --- ---
 
         // --- 3) Нижняя панель (5% высоты теперь) ---
         Rectangle {
