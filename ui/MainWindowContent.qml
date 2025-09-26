@@ -434,6 +434,53 @@ Item {
                          }
                          // --- ---
                      }
+
+                    StartNewAlgorithmDialog {
+                        id: startNewAlgorithmDialog1
+                        // Подключаем сигнал к соответствующему RunningAlgorithmsView
+                        Connections {
+                            target: startNewAlgorithmDialog1
+                            function onAlgorithmStarted(executionData) {
+                                console.log("MainWindowContent: Диалог 1 сообщил о запуске. Обновляем View 1.");
+                                runningAlgorithmsView1.loadExecutions(); // Перезагружаем список для соответствующей вкладки
+                            }
+                        }
+                    }
+                    StartNewAlgorithmDialog {
+                        id: startNewAlgorithmDialog2
+                        // Подключаем сигнал к соответствующему RunningAlgorithmsView
+                        Connections {
+                            target: startNewAlgorithmDialog2
+                            function onAlgorithmStarted(executionData) {
+                                console.log("MainWindowContent: Диалог 2 сообщил о запуске. Обновляем View 2.");
+                                runningAlgorithmsView1.loadExecutions(); // Перезагружаем список для соответствующей вкладки
+                            }
+                        }
+                    }
+
+                    StartNewAlgorithmDialog {
+                        id: startNewAlgorithmDialog3
+                        // Подключаем сигнал к соответствующему RunningAlgorithmsView
+                        Connections {
+                            target: startNewAlgorithmDialog3
+                            function onAlgorithmStarted(executionData) {
+                                console.log("MainWindowContent: Диалог 3 сообщил о запуске. Обновляем View 3.");
+                                runningAlgorithmsView1.loadExecutions(); // Перезагружаем список для соответствующей вкладки
+                            }
+                        }
+                    }
+
+                    StartNewAlgorithmDialog {
+                        id: startNewAlgorithmDialog4
+                        // Подключаем сигнал к соответствующему RunningAlgorithmsView
+                        Connections {
+                            target: startNewAlgorithmDialog4
+                            function onAlgorithmStarted(executionData) {
+                                console.log("MainWindowContent: Диалог 4 сообщил о запуске. Обновляем View 4.");
+                                runningAlgorithmsView1.loadExecutions(); // Перезагружаем список для соответствующей вкладки
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -689,5 +736,49 @@ Item {
         // --- ---
     }
     // --- ---
+
+    // --- Connections для обработки ЗАПРОСА НА ОТКРЫТИЕ ДИАЛОГА от КАЖДОГО VIEW ---
+    // Эти Connections находятся на уровне rootItem, чтобы они могли ссылаться на
+    // и диалоги (startNewAlgorithmDialog1-4), и на view (runningAlgorithmsView1-4).
+    Connections {
+        target: runningAlgorithmsView1
+        function onStartNewAlgorithmRequested(category) {
+            console.log("MainWindowContent: Получен запрос на запуск от View1 для категории:", category);
+            // Открываем соответствующий диалог
+            startNewAlgorithmDialog1.categoryFilter = category; // Передаём категорию
+            startNewAlgorithmDialog1.resetForAdd(); // Сбрасываем диалог
+            startNewAlgorithmDialog1.open(); // Открываем
+        }
+    }
+
+    Connections {
+        target: runningAlgorithmsView2
+        function onStartNewAlgorithmRequested(category) {
+             console.log("MainWindowContent: Получен запрос на запуск от View2 для категории:", category);
+             startNewAlgorithmDialog2.categoryFilter = category;
+             startNewAlgorithmDialog2.resetForAdd();
+             startNewAlgorithmDialog2.open();
+        }
+    }
+
+    Connections {
+        target: runningAlgorithmsView3
+        function onStartNewAlgorithmRequested(category) {
+             console.log("MainWindowContent: Получен запрос на запуск от View3 для категории:", category);
+             startNewAlgorithmDialog3.categoryFilter = category;
+             startNewAlgorithmDialog3.resetForAdd();
+             startNewAlgorithmDialog3.open();
+        }
+    }
+
+    Connections {
+        target: runningAlgorithmsView4
+        function onStartNewAlgorithmRequested(category) {
+             console.log("MainWindowContent: Получен запрос на запуск от View4 для категории:", category);
+             startNewAlgorithmDialog4.categoryFilter = category;
+             startNewAlgorithmDialog4.resetForAdd();
+             startNewAlgorithmDialog4.open();
+        }
+    }
 
 }

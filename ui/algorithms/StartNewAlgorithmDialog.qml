@@ -2,6 +2,7 @@
 import QtQuick 6.5
 import QtQuick.Controls 6.5
 import QtQuick.Layouts 6.5
+// import QtQuick.Dialogs 6.5 // Если понадобится MessageDialog
 
 Popup {
     id: startNewAlgorithmDialog
@@ -14,7 +15,7 @@ Popup {
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
 
     // --- Свойства ---
-    property string categoryFilter: "" // Фильтр по категории (если нужен)
+    property string categoryFilter: "" // Фильтр по категории (передаётся из родителя)
     property int selectedAlgorithmId: -1
     property string selectedAlgorithmName: ""
     property var availableAlgorithms: [] // Список доступных алгоритмов
@@ -79,88 +80,103 @@ Popup {
                     text: "Время начала:*"
                     Layout.alignment: Qt.AlignRight
                 }
-                // Используем RowLayout для поля ввода времени и кнопок
+                // --- НОВОЕ: Улучшенный ввод времени (часы, минуты, секунды) ---
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 5
                     
-                    TextField {
-                        id: startTimeField
-                        Layout.fillWidth: true
-                        placeholderText: "Введите время начала (ЧЧ:ММ:СС)..."
-                        // text будет установлен в resetForAdd
-                        validator: RegExpValidator { regExp: /^([01]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/ } // Формат HH:MM:SS
-                    }
-                    
-                    // Кнопки инкремента/декремента для часов
+                    // Поле и кнопки для часов
                     ColumnLayout {
                         spacing: 2
-                        Button {
-                            text: "▲"
-                            font.pixelSize: 8
-                            Layout.preferredWidth: 20
-                            Layout.preferredHeight: 15
-                            onClicked: {
-                                incrementTimeComponent(startTimeField, "hours", 1);
-                            }
+                        TextField {
+                            id: startHoursField
+                            Layout.fillWidth: true
+                            placeholderText: "Часы (00-23)"
+                            text: "00"
+                            validator: IntValidator { bottom: 0; top: 23 }
                         }
-                        Button {
-                            text: "▼"
-                            font.pixelSize: 8
-                            Layout.preferredWidth: 20
-                            Layout.preferredHeight: 15
-                            onClicked: {
-                                incrementTimeComponent(startTimeField, "hours", -1);
+                        RowLayout {
+                            spacing: 1
+                            Button {
+                                text: "▲"
+                                font.pixelSize: 8
+                                Layout.preferredWidth: 15
+                                Layout.preferredHeight: 12
+                                onClicked: incrementTimeComponent(startHoursField, "hours", 1);
                             }
-                        }
-                    }
-                    
-                    // Кнопки инкремента/декремента для минут
-                    ColumnLayout {
-                        spacing: 2
-                        Button {
-                            text: "▲"
-                            font.pixelSize: 8
-                            Layout.preferredWidth: 20
-                            Layout.preferredHeight: 15
-                            onClicked: {
-                                incrementTimeComponent(startTimeField, "minutes", 1);
-                            }
-                        }
-                        Button {
-                            text: "▼"
-                            font.pixelSize: 8
-                            Layout.preferredWidth: 20
-                            Layout.preferredHeight: 15
-                            onClicked: {
-                                incrementTimeComponent(startTimeField, "minutes", -1);
+                            Button {
+                                text: "▼"
+                                font.pixelSize: 8
+                                Layout.preferredWidth: 15
+                                Layout.preferredHeight: 12
+                                onClicked: incrementTimeComponent(startHoursField, "hours", -1);
                             }
                         }
                     }
                     
-                    // Кнопки инкремента/декремента для секунд
+                    Text { text: ":" } // Разделитель
+
+                    // Поле и кнопки для минут
                     ColumnLayout {
                         spacing: 2
-                        Button {
-                            text: "▲"
-                            font.pixelSize: 8
-                            Layout.preferredWidth: 20
-                            Layout.preferredHeight: 15
-                            onClicked: {
-                                incrementTimeComponent(startTimeField, "seconds", 1);
+                        TextField {
+                            id: startMinutesField
+                            Layout.fillWidth: true
+                            placeholderText: "Минуты (00-59)"
+                            text: "00"
+                            validator: IntValidator { bottom: 0; top: 59 }
+                        }
+                        RowLayout {
+                            spacing: 1
+                            Button {
+                                text: "▲"
+                                font.pixelSize: 8
+                                Layout.preferredWidth: 15
+                                Layout.preferredHeight: 12
+                                onClicked: incrementTimeComponent(startMinutesField, "minutes", 1);
+                            }
+                            Button {
+                                text: "▼"
+                                font.pixelSize: 8
+                                Layout.preferredWidth: 15
+                                Layout.preferredHeight: 12
+                                onClicked: incrementTimeComponent(startMinutesField, "minutes", -1);
                             }
                         }
-                        Button {
-                            text: "▼"
-                            font.pixelSize: 8
-                            Layout.preferredWidth: 20
-                            Layout.preferredHeight: 15
-                            onClicked: {
-                                incrementTimeComponent(startTimeField, "seconds", -1);
+                    }
+                    
+                    Text { text: ":" } // Разделитель
+
+                    // Поле и кнопки для секунд
+                    ColumnLayout {
+                        spacing: 2
+                        TextField {
+                            id: startSecondsField
+                            Layout.fillWidth: true
+                            placeholderText: "Секунды (00-59)"
+                            text: "00"
+                            validator: IntValidator { bottom: 0; top: 59 }
+                        }
+                        RowLayout {
+                            spacing: 1
+                            Button {
+                                text: "▲"
+                                font.pixelSize: 8
+                                Layout.preferredWidth: 15
+                                Layout.preferredHeight: 12
+                                onClicked: incrementTimeComponent(startSecondsField, "seconds", 1);
+                            }
+                            Button {
+                                text: "▼"
+                                font.pixelSize: 8
+                                Layout.preferredWidth: 15
+                                Layout.preferredHeight: 12
+                                onClicked: incrementTimeComponent(startSecondsField, "seconds", -1);
                             }
                         }
                     }
                 }
+                // --- ---
 
                 Label {
                     text: "Дата начала:*"
@@ -176,7 +192,8 @@ Popup {
                         Layout.fillWidth: true
                         placeholderText: "Введите дату начала (ДД.ММ.ГГГГ)..."
                         // text будет установлен в resetForAdd
-                        validator: RegExpValidator { regExp: /^(0[1-9]|[12][0-9]|3[01])\.(0[1-9]|1[012])\.(19|20)\d\d$/ } // Формат DD.MM.YYYY
+                        // Закомментирован validator
+                        // validator: RegExpValidator { regExp: /^(0[1-9]|[12][0-9]|3[01])\.(0[1-9]|1[012])\.(19|20)\d\d$/ } // Формат DD.MM.YYYY
                     }
                     
                     // Кнопка для открытия календаря
@@ -187,7 +204,8 @@ Popup {
                         onClicked: {
                             // TODO: Открыть календарь для выбора даты
                             console.log("QML StartNewAlgorithmDialog: Нажата кнопка календаря для выбора даты начала");
-                            showInfoMessage("Выбор даты (TODO): " + startDateField.text);
+                            // showInfoMessage("Выбор даты (TODO): " + startDateField.text); // УДАЛЁН
+                            console.log("QML StartNewAlgorithmDialog: Выбор даты (TODO): " + startDateField.text);
                         }
                     }
                 }
@@ -205,7 +223,7 @@ Popup {
                     textRole: "display_name" // Отображаем поле 'display_name'
                 }
 
-                // --- НОВОЕ: Поле для примечаний ---
+                // --- НОВОЕ: Поле для примечаний с улучшенным оформлением ---
                 Label {
                     text: "Примечания:"
                     Layout.alignment: Qt.AlignRight | Qt.AlignTop
@@ -216,6 +234,14 @@ Popup {
                     Layout.minimumHeight: 80
                     placeholderText: "Введите дополнительные примечания к запуску алгоритма..."
                     wrapMode: TextArea.Wrap
+                    // --- УЛУЧШЕННОЕ ОФОРМЛЕНИЕ ---
+                    background: Rectangle {
+                        border.color: notesArea.activeFocus ? "#3498db" : "#ccc" // Цвет границы при фокусе (синий) и без (серый)
+                        border.width: 1 // Толщина границы в пикселях
+                        radius: 2 // Небольшое скругление углов (опционально)
+                        color: "white" // Цвет фона поля ввода
+                    }
+                    // --- ---
                 }
                 // --- ---
             }
@@ -255,21 +281,24 @@ Popup {
                         errorMessageLabel.text = "Пожалуйста, выберите алгоритм.";
                         return;
                     }
-                    if (!startTimeField.text.trim()) {
-                        errorMessageLabel.text = "Пожалуйста, заполните время начала.";
+                    // --- ВАЛИДАЦИЯ ВРЕМЕНИ ---
+                    var hours = parseInt(startHoursField.text, 10);
+                    var minutes = parseInt(startMinutesField.text, 10);
+                    var seconds = parseInt(startSecondsField.text, 10);
+                    
+                    if (isNaN(hours) || hours < 0 || hours > 23 ||
+                        isNaN(minutes) || minutes < 0 || minutes > 59 ||
+                        isNaN(seconds) || seconds < 0 || seconds > 59) {
+                        errorMessageLabel.text = "Некорректное время начала. Проверьте часы, минуты и секунды.";
                         return;
                     }
+                    // --- ---
                     if (!startDateField.text.trim()) {
                         errorMessageLabel.text = "Пожалуйста, заполните дату начала.";
                         return;
                     }
-                    // Проверка формата даты и времени
-                    var timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
+                    // Проверка формата даты (упрощённая, так как validator закомментирован)
                     var dateRegex = /^(0[1-9]|[12][0-9]|3[01])\.(0[1-9]|1[012])\.(19|20)\d\d$/;
-                    if (!timeRegex.test(startTimeField.text.trim())) {
-                        errorMessageLabel.text = "Некорректный формат времени начала. Используйте ЧЧ:ММ:СС.";
-                        return;
-                    }
                     if (!dateRegex.test(startDateField.text.trim())) {
                         errorMessageLabel.text = "Некорректный формат даты начала. Используйте ДД.ММ.ГГГГ.";
                         return;
@@ -279,11 +308,17 @@ Popup {
                         return;
                     }
 
+                    // --- СОБИРАЕМ ВРЕМЯ ---
+                    var timeString = String(hours).padStart(2, '0') + ":" +
+                                     String(minutes).padStart(2, '0') + ":" +
+                                     String(seconds).padStart(2, '0');
+                    // --- ---
+                    
                     // Подготавливаем данные
                     var officerData = officerComboBox.model.get(officerComboBox.currentIndex);
                     var algorithmExecutionData = {
                         "algorithm_id": startNewAlgorithmDialog.selectedAlgorithmId,
-                        "started_at": startDateField.text.trim() + " " + startTimeField.text.trim(), // Формат 'DD.MM.YYYY HH:MM:SS'
+                        "started_at": startDateField.text.trim() + " " + timeString, // Формат 'DD.MM.YYYY HH:MM:SS'
                         "created_by_user_id": officerData.id,
                         "notes": notesArea.text.trim() || null // Примечания (может быть null)
                     };
@@ -343,23 +378,34 @@ Popup {
         var seconds = String(now.getSeconds()).padStart(2, '0');
         
         startDateField.text = day + "." + month + "." + year;
-        startTimeField.text = hours + ":" + minutes + ":" + seconds;
+        // Сбрасываем поля времени
+        startHoursField.text = hours;
+        startMinutesField.text = minutes;
+        startSecondsField.text = seconds;
         
-        console.log("QML StartNewAlgorithmDialog: Установлены значения по умолчанию: дата =", startDateField.text, ", время =", startTimeField.text);
+        console.log("QML StartNewAlgorithmDialog: Установлены значения по умолчанию: дата =", startDateField.text, ", время = ", hours, ":", minutes, ":", seconds);
+        
+        // Загружаем список алгоритмов по фильтру
+        loadAlgorithmsByCategory();
+        // Загружаем список должностных лиц
+        loadOfficers();
+        // Пытаемся выбрать текущего дежурного
+        selectCurrentDutyOfficer();
     }
 
     /**
-     * Загружает список доступных алгоритмов из Python
+     * Загружает список алгоритмов из Python, отфильтрованных по categoryFilter
      */
-    function loadAlgorithms() {
-        console.log("QML StartNewAlgorithmDialog: Запрос списка всех алгоритмов у Python...");
-        var algorithmsList = appData.getAllAlgorithmsList(); // <-- Получаем ВСЕ алгоритмы
-        console.log("QML StartNewAlgorithmDialog: Получен список алгоритмов из Python (сырой):", JSON.stringify(algorithmsList).substring(0, 500));
+    function loadAlgorithmsByCategory() {
+        console.log("QML StartNewAlgorithmDialog: Запрос списка алгоритмов для категории:", categoryFilter, "у Python...");
+        // Используем метод, который возвращает ВСЕ алгоритмы
+        var allAlgorithmsList = appData.getAllAlgorithmsList(); 
+        console.log("QML StartNewAlgorithmDialog: Получен список ВСЕХ алгоритмов из Python (сырой):", JSON.stringify(allAlgorithmsList).substring(0, 500));
 
         // Преобразование QJSValue/QVariant в массив JS
-        if (algorithmsList && typeof algorithmsList === 'object' && algorithmsList.hasOwnProperty('toVariant')) {
-            algorithmsList = algorithmsList.toVariant();
-            console.log("QML StartNewAlgorithmDialog: QJSValue (algorithmsList) преобразован в:", JSON.stringify(algorithmsList).substring(0, 500));
+        if (allAlgorithmsList && typeof allAlgorithmsList === 'object' && allAlgorithmsList.hasOwnProperty('toVariant')) {
+            allAlgorithmsList = allAlgorithmsList.toVariant();
+            console.log("QML StartNewAlgorithmDialog: QJSValue (allAlgorithmsList) преобразован в:", JSON.stringify(allAlgorithmsList).substring(0, 500));
         }
 
         // Очищаем текущую модель
@@ -367,16 +413,18 @@ Popup {
         console.log("QML StartNewAlgorithmDialog: Модель ComboBox алгоритмов очищена.");
 
         // --- Более гибкая проверка на "массивоподобность" ---
-        if (algorithmsList && typeof algorithmsList === 'object' && algorithmsList.length !== undefined) {
+        if (allAlgorithmsList && typeof allAlgorithmsList === 'object' && allAlgorithmsList.length !== undefined) {
         // --- ---
-            var count = algorithmsList.length;
-            console.log("QML StartNewAlgorithmDialog: Полученный список алгоритмов является массивоподобным. Количество элементов:", count);
+            var count = allAlgorithmsList.length;
+            console.log("QML StartNewAlgorithmDialog: Полученный список ВСЕХ алгоритмов является массивоподобным. Количество элементов:", count);
             
             for (var i = 0; i < count; i++) {
-                var alg = algorithmsList[i];
+                var alg = allAlgorithmsList[i];
                 console.log("QML StartNewAlgorithmDialog: Обрабатываем алгоритм", i, ":", JSON.stringify(alg).substring(0, 200));
                 
-                if (typeof alg === 'object' && alg !== null) {
+                // --- ФИЛЬТРАЦИЯ ПО КАТЕГОРИИ ---
+                if (typeof alg === 'object' && alg !== null && alg.category === categoryFilter) {
+                // --- ---
                     try {
                         algorithmsModel.append({
                             "id": alg["id"],
@@ -385,18 +433,23 @@ Popup {
                             "time_type": alg["time_type"] || "",
                             "description": alg["description"] || ""
                         });
-                        console.log("QML StartNewAlgorithmDialog: Алгоритм", i, "добавлен в модель.");
+                        console.log("QML StartNewAlgorithmDialog: Алгоритм", i, "(ID:", alg.id, ") добавлен в модель (категория совпадает).");
                     } catch (e) {
                         console.error("QML StartNewAlgorithmDialog: Ошибка при добавлении алгоритма", i, "в модель:", e.toString(), "Данные:", JSON.stringify(alg));
                     }
                 } else {
-                    console.warn("QML StartNewAlgorithmDialog: Алгоритм", i, "не является корректным объектом:", typeof alg, alg);
+                     // Если алгоритм не подходит по категории или не объект, пропускаем
+                     if (typeof alg === 'object' && alg !== null) {
+                         console.log("QML StartNewAlgorithmDialog: Алгоритм", i, "(ID:", alg.id, ") пропущен (категория не совпадает).");
+                     } else {
+                         console.log("QML StartNewAlgorithmDialog: Алгоритм", i, "пропущен (не является объектом).");
+                     }
                 }
             }
         } else {
-            console.error("QML StartNewAlgorithmDialog: Python не вернул корректный массивоподобный объект для алгоритмов. Получен тип:", typeof algorithmsList, "Значение:", algorithmsList);
+            console.error("QML StartNewAlgorithmDialog: Python не вернул корректный массивоподобный объект для алгоритмов. Получен тип:", typeof allAlgorithmsList, "Значение:", allAlgorithmsList);
         }
-        console.log("QML StartNewAlgorithmDialog: Модель ComboBox алгоритмов обновлена. Элементов:", algorithmsModel.count);
+        console.log("QML StartNewAlgorithmDialog: Модель ComboBox алгоритмов (после фильтрации) обновлена. Элементов:", algorithmsModel.count);
     }
 
     /**
@@ -404,7 +457,6 @@ Popup {
      */
     function loadOfficers() {
         console.log("QML StartNewAlgorithmDialog: Запрос списка всех должностных лиц у Python...");
-        // var officersList = appData.getDutyOfficersList(); // <-- СТАРОЕ: Только активные
         var officersList = appData.getAllDutyOfficersList(); // <-- НОВОЕ: Все (активные и неактивные)
         console.log("QML StartNewAlgorithmDialog: Получен список должностных лиц из Python (сырой):", JSON.stringify(officersList).substring(0, 500));
 
@@ -463,92 +515,94 @@ Popup {
     }
 
     /**
+     * Пытается выбрать в ComboBox текущего дежурного, чьё имя отображается в appData.dutyOfficer
+     */
+    function selectCurrentDutyOfficer() {
+        console.log("QML StartNewAlgorithmDialog: Попытка выбрать текущего дежурного:", appData.dutyOfficer);
+        
+        var currentDutyOfficerDisplay = appData.dutyOfficer; // Это "Фамилия И.О." из ApplicationData
+        
+        if (!currentDutyOfficerDisplay) {
+            console.log("QML StartNewAlgorithmDialog: appData.dutyOfficer пуст, нечего выбирать.");
+            return;
+        }
+
+        // Проходим по модели officersModel и ищем совпадение по display_name
+        for (var i = 0; i < officersModel.count; i++) {
+            var officerItem = officersModel.get(i);
+            if (officerItem && officerItem.display_name === currentDutyOfficerDisplay) {
+                officerComboBox.currentIndex = i;
+                console.log("QML StartNewAlgorithmDialog: Текущий дежурный", currentDutyOfficerDisplay, "выбран в ComboBox (индекс", i, ").");
+                return; // Нашли, выходим
+            }
+        }
+        
+        console.log("QML StartNewAlgorithmDialog: Текущий дежурный", currentDutyOfficerDisplay, "не найден в списке должностных лиц для выбора. Оставляем без выбора.");
+    }
+
+
+    /**
      * Вспомогательная функция для инкремента/декремента компонентов времени
-     * @param {TextField} textField - Поле ввода времени
+     * @param {TextField} textField - Поле ввода времени (часы, минуты, секунды)
      * @param {string} component - Компонент: "hours", "minutes", "seconds"
      * @param {number} delta - Шаг изменения (+1 или -1)
      */
     function incrementTimeComponent(textField, component, delta) {
         console.log("QML StartNewAlgorithmDialog: incrementTimeComponent called with", textField, component, delta);
-        var text = textField.text || "00:00:00";
+        var text = textField.text || "00";
         console.log("QML StartNewAlgorithmDialog: Current text:", text);
         
-        // Попробуем разобрать формат HH:MM:SS
-        var parts = text.split(":");
-        if (parts.length === 3) {
-            var hours = parseInt(parts[0], 10) || 0;
-            var minutes = parseInt(parts[1], 10) || 0;
-            var seconds = parseInt(parts[2], 10) || 0;
-            
-            console.log("QML StartNewAlgorithmDialog: Parsed H:M:S:", hours, minutes, seconds);
-            
-            switch(component) {
-                case "hours":
-                    hours += delta;
-                    // Ограничиваем диапазон 0-23
-                    hours = (hours + 24) % 24; // Обеспечивает корректное переполнение
-                    break;
-                case "minutes":
-                    minutes += delta;
-                    // Обработка переполнения минут
-                    while (minutes >= 60) {
-                        minutes -= 60;
-                        hours += 1;
-                        if (hours >= 24) hours = 0; // Переполнение часов
-                    }
-                    while (minutes < 0) {
-                        minutes += 60;
-                        hours -= 1;
-                        if (hours < 0) hours = 23; // Переполнение часов
-                    }
-                    minutes = Math.max(0, minutes);
-                    break;
-                case "seconds":
-                    seconds += delta;
-                    // Обработка переполнения секунд
-                    while (seconds >= 60) {
-                        seconds -= 60;
-                        minutes += 1;
-                        if (minutes >= 60) {
-                            minutes -= 60;
-                            hours += 1;
-                            if (hours >= 24) hours = 0; // Переполнение часов
-                        }
-                    }
-                    while (seconds < 0) {
-                        seconds += 60;
-                        minutes -= 1;
-                        if (minutes < 0) {
-                            minutes += 60;
-                            hours -= 1;
-                            if (hours < 0) hours = 23; // Переполнение часов
-                        }
-                    }
-                    seconds = Math.max(0, seconds);
-                    break;
-            }
-            
-            // Форматируем обратно в строку HH:MM:SS
-            var newHours = hours.toString().padStart(2, '0');
-            var newMinutes = minutes.toString().padStart(2, '0');
-            var newSeconds = seconds.toString().padStart(2, '0');
-            var newText = newHours + ":" + newMinutes + ":" + newSeconds;
-            
-            console.log("QML StartNewAlgorithmDialog: New text:", newText);
-            textField.text = newText;
-        } else {
-            // Если формат не HH:MM:SS, можно попробовать другие форматы
-            // или просто добавить/убрать секунду/минуту/час в конец как строку
-            // Пока просто выводим предупреждение
-            console.warn("QML StartNewAlgorithmDialog: incrementTimeComponent: Unsupported time format:", text);
+        var value = parseInt(text, 10) || 0;
+        console.log("QML StartNewAlgorithmDialog: Parsed value:", value);
+        
+        switch(component) {
+            case "hours":
+                value += delta;
+                // Ограничиваем диапазон 0-23
+                value = (value + 24) % 24; // Обеспечивает корректное переполнение
+                break;
+            case "minutes":
+                value += delta;
+                // Обработка переполнения минут
+                while (value >= 60) {
+                    value -= 60;
+                    // Увеличиваем часы при переполнении минут
+                    incrementTimeComponent(startHoursField, "hours", 1);
+                }
+                while (value < 0) {
+                    value += 60;
+                    // Уменьшаем часы при переполнении минут
+                    incrementTimeComponent(startHoursField, "hours", -1);
+                }
+                value = Math.max(0, Math.min(59, value)); // Ограничиваем 0-59
+                break;
+            case "seconds":
+                value += delta;
+                // Обработка переполнения секунд
+                while (value >= 60) {
+                    value -= 60;
+                    // Увеличиваем минуты при переполнении секунд
+                    incrementTimeComponent(startMinutesField, "minutes", 1);
+                }
+                while (value < 0) {
+                    value += 60;
+                    // Уменьшаем минуты при переполнении секунд
+                    incrementTimeComponent(startMinutesField, "minutes", -1);
+                }
+                value = Math.max(0, Math.min(59, value)); // Ограничиваем 0-59
+                break;
         }
+        
+        // Форматируем обратно в строку HH, MM, SS
+        var newText = value.toString().padStart(2, '0');
+        
+        console.log("QML StartNewAlgorithmDialog: New text:", newText);
+        textField.text = newText;
     }
 
     onOpened: {
         console.log("QML StartNewAlgorithmDialog: Диалог открыт.");
-        resetForAdd(); // Сбрасываем поля ввода
-        loadAlgorithms(); // Загружаем список алгоритмов
-        loadOfficers(); // Загружаем список должностных лиц
+        resetForAdd(); // Сбрасываем поля ввода, загружаем данные, выбираем дежурного
         errorMessageLabel.text = ""; // Очищаем сообщения об ошибках
     }
 }

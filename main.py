@@ -1596,6 +1596,103 @@ class ApplicationData(QObject):
             print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
             return []
 
+    # --- СЛОТЫ ДЛЯ РАБОТЫ С ЗАПУЩЕННЫМИ АЛГОРИТМАМИ (EXECUTIONS) ---
+
+    @Slot(str, result='QVariant')
+    def getActiveExecutionsByCategory(self, category: str) -> 'QVariant':
+        """
+        Слот для получения списка активных executions по категории из QML.
+        """
+        print(f"Python: QML запросил активные executions для категории '{category}'.")
+        if self.pg_database_manager:
+            try:
+                executions = self.pg_database_manager.get_active_executions_by_category(category)
+                # print(f"DEBUG: Executions from DB: {executions}")
+                # QML ожидает список словарей (QVariantList of QVariantMap)
+                return executions
+            except Exception as e:
+                print(f"Python: Ошибка в слоте getActiveExecutionsByCategory: {e}")
+                import traceback
+                traceback.print_exc()
+                return [] # Возвращаем пустой список в случае ошибки
+        else:
+            print("Python: Ошибка - pg_database_manager не инициализирован.")
+            return []
+
+    @Slot(int, result=bool)
+    def stopAlgorithm(self, execution_id: int) -> bool:
+        """
+        Слот для остановки execution из QML.
+        """
+        print(f"Python: QML запросил остановку execution ID {execution_id}.")
+        if self.pg_database_manager:
+            try:
+                success = self.pg_database_manager.stop_algorithm(execution_id)
+                return success
+            except Exception as e:
+                print(f"Python: Ошибка в слоте stopAlgorithm: {e}")
+                import traceback
+                traceback.print_exc()
+                return False # Возвращаем False в случае ошибки
+        else:
+            print("Python: Ошибка - pg_database_manager не инициализирован.")
+            return False
+
+    @Slot('QVariant', result=bool) # Или result=int, если возвращаете ID
+    def startAlgorithmExecution(self, execution_data: 'QVariant') -> bool: # Или int
+        """
+        Слот для запуска нового execution из QML.
+        """
+        print(f"Python: QML отправил запрос на запуск нового execution: {execution_data}")
+        if hasattr(execution_data, 'toVariant'):
+            execution_data = execution_data.toVariant()
+            print(f"Python: QJSValue (execution_data) преобразован в: {execution_data}")
+
+        if not isinstance(execution_data, dict):
+            print(f"Python: Ошибка - execution_data не является словарем. Получен тип: {type(execution_data)}")
+            return False # Или -1, если result=int
+
+        if not execution_data:
+            print("Python: Ошибка - execution_data пуст.")
+            return False # Или -1
+
+        if self.pg_database_manager:
+            try:
+                # Подготовка данных
+                algorithm_id = execution_data.get('algorithm_id')
+                started_at_str = execution_data.get('started_at') # 'DD.MM.YYYY HH:MM:SS' - нужно преобразовать
+                created_by_user_id = execution_data.get('created_by_user_id')
+                notes = execution_data.get('notes')
+
+                # ВАЖНО: Преобразовать started_at из 'DD.MM.YYYY HH:MM:SS' в 'YYYY-MM-DD HH:MM:SS'
+                import datetime
+                try:
+                    input_format = "%d.%m.%Y %H:%M:%S"
+                    parsed_datetime = datetime.datetime.strptime(started_at_str, input_format)
+                    started_at_iso = parsed_datetime.isoformat(sep=' ') # 'YYYY-MM-DD HH:MM:SS'
+                except ValueError as ve:
+                    print(f"Python: Ошибка преобразования даты/времени '{started_at_str}': {ve}")
+                    return False # Или -1
+
+                print(f"Python: Подготовленные данные для запуска: algorithm_id={algorithm_id}, started_at={started_at_iso}, user_id={created_by_user_id}")
+
+                # Вызов метода менеджера БД
+                result = self.pg_database_manager.start_algorithm_execution(algorithm_id, started_at_iso, created_by_user_id, notes)
+                if isinstance(result, int) and result > 0:
+                    print(f"Python: Execution успешно запущен с ID: {result}")
+                    return True # или return result, если result=int
+                else:
+                    print(f"Python: Ошибка при запуске execution: {result}")
+                    return False # или return -1
+            except Exception as e:
+                print(f"Python: Ошибка в слоте startAlgorithmExecution: {e}")
+                import traceback
+                traceback.print_exc()
+                return False # или -1
+        else:
+            print("Python: Ошибка - pg_database_manager не инициализирован.")
+            return False # или -1
+
     def minimize_window(self):
         if self.window:
             self.window.showMinimized()

@@ -7,6 +7,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from typing import Optional, Dict, Any, List
 import logging
 import datetime
+from psycopg2.extras import RealDictCursor
 
 # Настройка логирования для отладки
 logger = logging.getLogger(__name__)
@@ -1581,6 +1582,215 @@ class PostgreSQLDatabaseManager:
             import traceback
             traceback.print_exc()
             return []
+        
+    # --- МЕТОДЫ ДЛЯ РАБОТЫ С ЗАПУЩЕННЫМИ АЛГОРИТМАМИ (EXECUTIONS) ---
+
+    def get_active_executions_by_category(self, category: str) -> list:
+        """
+        Получает список активных (status = 'active') запущенных алгоритмов (executions)
+        для заданной категории (snapshot_category).
+
+        :param category: Категория алгоритмов (например, "повседневная деятельность").
+        :return: Список словарей с данными executions.
+        """
+        if not self.connection:
+            print("PostgreSQLDatabaseManager: Нет подключения к БД.")
+            return []
+
+        try:
+            with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                # Запрос к таблице algorithm_executions, фильтруем по snapshot_category и status
+                query = """
+                    SELECT
+                        id,
+                        algorithm_id, -- Ссылка на оригинальный алгоритм
+                        snapshot_name AS algorithm_name, -- Имя из snapshot'а
+                        snapshot_category AS category, -- Категория из snapshot'а
+                        started_at,
+                        completed_at,
+                        status,
+                        created_by_user_id, -- ID пользователя на момент запуска
+                        created_by_user_display_name -- Отображаемое имя на момент запуска
+                    FROM app_schema.algorithm_executions
+                    WHERE snapshot_category = %s AND status = 'active'
+                    ORDER BY started_at DESC; -- Сортируем по времени запуска, например
+                """
+                cursor.execute(query, (category,))
+                rows = cursor.fetchall()
+
+                # Преобразуем результаты в список словарей
+                executions = [dict(row) for row in rows]
+                print(f"PostgreSQLDatabaseManager: Найдено {len(executions)} активных executions для категории '{category}'.")
+                return executions
+        except psycopg2.Error as e:
+            print(f"PostgreSQLDatabaseManager: Ошибка при получении активных executions для категории '{category}': {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+        except Exception as e:
+            print(f"PostgreSQLDatabaseManager: Неизвестная ошибка при получении активных executions: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    def stop_algorithm(self, execution_id: int) -> bool:
+        """
+        Останавливает (меняет статус на 'completed') запущенный алгоритм (execution) по его ID.
+        Также устанавливает completed_at в текущее время.
+
+        :param execution_id: ID execution'а для остановки.
+        :return: True, если успешно, иначе False.
+        """
+        if not self.connection:
+            print("PostgreSQLDatabaseManager: Нет подключения к БД.")
+            return False
+
+        if not isinstance(execution_id, int) or execution_id <= 0:
+            print(f"PostgreSQLDatabaseManager: Некорректный ID execution: {execution_id}")
+            return False
+
+        try:
+            with self.connection.cursor() as cursor:
+                # Обновляем статус и время завершения
+                query = """
+                    UPDATE app_schema.algorithm_executions
+                    SET status = 'completed', completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s AND status = 'active'; -- Обновляем только если статус был 'active'
+                """
+                cursor.execute(query, (execution_id,))
+                rows_affected = cursor.rowcount
+                self.connection.commit()
+
+                if rows_affected > 0:
+                    print(f"PostgreSQLDatabaseManager: Execution ID {execution_id} успешно остановлен.")
+                    return True
+                else:
+                    print(f"PostgreSQLDatabaseManager: Execution ID {execution_id} не найден или уже был остановлен.")
+                    return False
+        except psycopg2.Error as e:
+            print(f"PostgreSQLDatabaseManager: Ошибка при остановке execution ID {execution_id}: {e}")
+            self.connection.rollback() # Откатываем транзакцию в случае ошибки
+            import traceback
+            traceback.print_exc()
+            return False
+        except Exception as e:
+            print(f"PostgreSQLDatabaseManager: Неизвестная ошибка при остановке execution ID {execution_id}: {e}")
+            self.connection.rollback()
+            import traceback
+            traceback.print_exc()
+            return False
+
+    # --- МЕТОД ДЛЯ ЗАПУСКА АЛГОРИТМА (ПРИМЕР) ---
+    # Убедитесь, что этот метод или аналогичный существует
+    def start_algorithm_execution(self, algorithm_id: int, started_at_str: str, created_by_user_id: int, notes: str = None) -> int:
+        """
+        Создает новый экземпляр выполнения алгоритма (algorithm_execution).
+        Также создает экземпляры действий (action_executions) на основе оригинальных действий алгоритма.
+        """
+        if not self.connection:
+            print("PostgreSQLDatabaseManager: Нет подключения к БД.")
+            return -1
+
+        try:
+            with self.connection.cursor() as cursor:
+                # 1. Получить оригинальный алгоритм и его действия
+                cursor.execute("""
+                    SELECT id, name, category, time_type, description
+                    FROM app_schema.algorithms WHERE id = %s
+                """, (algorithm_id,))
+                algorithm_row = cursor.fetchone()
+                if not algorithm_row:
+                    print(f"PostgreSQLDatabaseManager: Алгоритм с ID {algorithm_id} не найден.")
+                    return -1
+
+                original_algorithm = dict(algorithm_row)
+                # print(f"DEBUG: Original algorithm: {original_algorithm}")
+
+                cursor.execute("""
+                    SELECT id, description, start_offset, end_offset, contact_phones, report_materials
+                    FROM app_schema.actions WHERE algorithm_id = %s ORDER BY start_offset
+                """, (algorithm_id,))
+                original_actions = [dict(row) for row in cursor.fetchall()]
+                # print(f"DEBUG: Original actions: {original_actions}")
+
+                # 2. Получить информацию о пользователе на момент запуска
+                cursor.execute("""
+                    SELECT rank, last_name, first_name, middle_name
+                    FROM app_schema.users WHERE id = %s
+                """, (created_by_user_id,))
+                user_row = cursor.fetchone()
+                if not user_row:
+                     print(f"PostgreSQLDatabaseManager: Пользователь с ID {created_by_user_id} не найден для execution.")
+                     return -1
+                user_data = dict(user_row)
+                display_name = f"{user_data['rank']} {user_data['last_name']} {user_data['first_name'][0]}.{user_data['middle_name'][0]+'.' if user_data['middle_name'] else ''}"
+
+                # 3. Вставить новый algorithm_execution (snapshot)
+                cursor.execute("""
+                    INSERT INTO app_schema.algorithm_executions (
+                        algorithm_id,
+                        snapshot_name, snapshot_category, snapshot_time_type, snapshot_description,
+                        started_at,
+                        created_by_user_id, created_by_user_display_name,
+                        notes
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, (
+                    original_algorithm['id'],
+                    original_algorithm['name'], original_algorithm['category'], original_algorithm['time_type'], original_algorithm['description'],
+                    started_at_str, # 'YYYY-MM-DD HH:MM:SS' или объект datetime
+                    created_by_user_id, display_name,
+                    notes
+                ))
+                new_execution_id = cursor.fetchone()[0]
+                print(f"PostgreSQLDatabaseManager: Создан новый execution ID {new_execution_id} для алгоритма {algorithm_id}.")
+
+                # 4. Вставить action_executions (snapshot'ы действий)
+                # Рассчитываем абсолютные времена на основе started_at и смещений
+                for action in original_actions:
+                    calculated_start_time = None
+                    calculated_end_time = None
+                    if action['start_offset']:
+                        # Преобразуем строку смещения в интервал и добавляем к started_at
+                        # started_at_str нужно преобразовать в datetime
+                        import datetime
+                        started_at_dt = datetime.datetime.fromisoformat(started_at_str.replace(' ', 'T'))
+                        start_offset_dt = datetime.timedelta(seconds=action['start_offset'].total_seconds()) # предполагается, что start_offset - interval
+                        calculated_start_time = started_at_dt + start_offset_dt
+                    if action['end_offset']:
+                        import datetime
+                        started_at_dt = datetime.datetime.fromisoformat(started_at_str.replace(' ', 'T'))
+                        end_offset_dt = datetime.timedelta(seconds=action['end_offset'].total_seconds()) # предполагается, что end_offset - interval
+                        calculated_end_time = started_at_dt + end_offset_dt
+
+                    cursor.execute("""
+                        INSERT INTO app_schema.action_executions (
+                            execution_id,
+                            snapshot_description, snapshot_contact_phones, snapshot_report_materials,
+                            calculated_start_time, calculated_end_time
+                        ) VALUES (%s, %s, %s, %s, %s, %s)
+                    """, (
+                        new_execution_id,
+                        action['description'], action['contact_phones'], action['report_materials'],
+                        calculated_start_time, calculated_end_time
+                    ))
+                print(f"PostgreSQLDatabaseManager: Созданы {len(original_actions)} action_executions для execution ID {new_execution_id}.")
+
+                self.connection.commit()
+                return new_execution_id
+
+        except psycopg2.Error as e:
+            print(f"PostgreSQLDatabaseManager: Ошибка при запуске execution для алгоритма {algorithm_id}: {e}")
+            self.connection.rollback()
+            import traceback
+            traceback.print_exc()
+            return -1
+        except Exception as e:
+            print(f"PostgreSQLDatabaseManager: Неизвестная ошибка при запуске execution для алгоритма {algorithm_id}: {e}")
+            self.connection.rollback()
+            import traceback
+            traceback.print_exc()
+            return -1
 
 # --- Пример использования (для тестирования модуля отдельно) ---
 if __name__ == "__main__":
