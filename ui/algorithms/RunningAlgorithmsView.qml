@@ -16,6 +16,11 @@ Item {
     signal expandAlgorithmRequested(int executionId) // Запрос на развертывание деталей алгоритма
     // --- ---
 
+    // --- Обновленный обработчик сигнала startNewAlgorithmRequested ---
+    // Используем Connections с target: null для подключения к сигналу,
+    // который будет эмитироваться "снаружи" (например, из MainWindowContent)
+
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 10
@@ -42,7 +47,31 @@ Item {
                     // TODO: Открыть CalendarView
                 }
             }
+        }
+        // --- ---
+
+        // --- Обработчик сигнала startNewAlgorithmRequested от РОДИТЕЛЯ ---
+        Connections {
+            // --- ИЗМЕНЕНО: target установлен на parent ---
+            target: parent // <-- Подключаемся к родительскому объекту
             // --- ---
+            function onStartNewAlgorithmRequested(category) { // <-- Сигнал должен быть определен у родителя
+                console.log("QML RunningAlgorithmsView: Получен сигнал onStartNewAlgorithmRequested от РОДИТЕЛЯ для категории:", category);
+                // Открываем диалог запуска нового алгоритма
+                // Предполагается, что startNewAlgorithmDialog передан как свойство или через контекст
+                if (typeof startNewAlgorithmDialog !== 'undefined' && startNewAlgorithmDialog && typeof startNewAlgorithmDialog.open === 'function') {
+                    // Передаем категорию в диалог (если нужно для фильтрации алгоритмов)
+                    startNewAlgorithmDialog.categoryFilter = category;
+                    // Сбрасываем диалог для добавления
+                    startNewAlgorithmDialog.resetForAdd();
+                    // Открываем диалог
+                    startNewAlgorithmDialog.open();
+                    console.log("QML RunningAlgorithmsView: Диалог startNewAlgorithmDialog открыт.");
+                } else {
+                    console.error("QML RunningAlgorithmsView: ОШИБКА - startNewAlgorithmDialog не найден или не является Popup!");
+                    // TODO: Отобразить ошибку пользователю
+                }
+            }
         }
         // --- ---
 

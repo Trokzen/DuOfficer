@@ -14,6 +14,7 @@ Popup {
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
 
     // --- Свойства ---
+    property string categoryFilter: "" // Фильтр по категории (если нужен)
     property int selectedAlgorithmId: -1
     property string selectedAlgorithmName: ""
     property var availableAlgorithms: [] // Список доступных алгоритмов
@@ -62,7 +63,7 @@ Popup {
                     model: ListModel {
                         id: algorithmsModel
                     }
-                    textRole: "name" // Отображаем поле 'name'
+                    textRole: "name"
                     onCurrentIndexChanged: {
                         if (currentIndex !== -1 && model.get(currentIndex)) {
                             startNewAlgorithmDialog.selectedAlgorithmId = model.get(currentIndex).id;
@@ -278,7 +279,7 @@ Popup {
                         return;
                     }
 
-                    // Подготавливаем данные для запуска
+                    // Подготавливаем данные
                     var officerData = officerComboBox.model.get(officerComboBox.currentIndex);
                     var algorithmExecutionData = {
                         "algorithm_id": startNewAlgorithmDialog.selectedAlgorithmId,
@@ -456,7 +457,7 @@ Popup {
                 }
             }
         } else {
-            console.error("QML StartNewAlgorithmDialog: Python не вернул корректный массивоподобный объект для должностных лиц. Получен тип:", typeof officersList, "Значение:", officersList);
+             console.error("QML StartNewAlgorithmDialog: Python не вернул корректный массивоподобный объект для должностных лиц. Получен тип:", typeof officersList, "Значение:", officersList);
         }
         console.log("QML StartNewAlgorithmDialog: Модель ComboBox должностных лиц обновлена. Элементов:", officersModel.count);
     }
