@@ -1681,11 +1681,11 @@ class PostgreSQLDatabaseManager:
             return False
 
     # --- МЕТОД ДЛЯ ЗАПУСКА АЛГОРИТМА (ПРИМЕР) ---
-    # Убедитесь, что этот метод или аналогичный существует
     def start_algorithm_execution(self, algorithm_id: int, started_at_str: str, created_by_user_id: int, notes: str = None) -> int:
         """
         Создает новый экземпляр выполнения алгоритма (algorithm_execution).
         Также создает экземпляры действий (action_executions) на основе оригинальных действий алгоритма.
+        Логика расчета времени зависит от time_type оригинального алгоритма.
         """
         if not self.connection:
             print("PostgreSQLDatabaseManager: Нет подключения к БД.")
@@ -1694,24 +1694,47 @@ class PostgreSQLDatabaseManager:
         try:
             with self.connection.cursor() as cursor:
                 # 1. Получить оригинальный алгоритм и его действия
+                # --- ИЗМЕНЕНО: Получаем time_type ---
                 cursor.execute("""
                     SELECT id, name, category, time_type, description
                     FROM app_schema.algorithms WHERE id = %s
                 """, (algorithm_id,))
                 algorithm_row = cursor.fetchone()
+                # --- ---
                 if not algorithm_row:
                     print(f"PostgreSQLDatabaseManager: Алгоритм с ID {algorithm_id} не найден.")
                     return -1
 
-                original_algorithm = dict(algorithm_row)
-                # print(f"DEBUG: Original algorithm: {original_algorithm}")
+                # --- ИЗМЕНЕНО: Явное создание словаря и извлечение time_type ---
+                original_algorithm = {
+                    'id': algorithm_row[0],
+                    'name': algorithm_row[1],
+                    'category': algorithm_row[2],
+                    'time_type': algorithm_row[3], # <-- ВАЖНО
+                    'description': algorithm_row[4]
+                }
+                algorithm_time_type = original_algorithm['time_type'] # <-- Сохраняем тип времени
+                print(f"PostgreSQLDatabaseManager: Запуск алгоритма ID {algorithm_id} с time_type '{algorithm_time_type}'.")
+                # --- ---
 
                 cursor.execute("""
                     SELECT id, description, start_offset, end_offset, contact_phones, report_materials
                     FROM app_schema.actions WHERE algorithm_id = %s ORDER BY start_offset
                 """, (algorithm_id,))
-                original_actions = [dict(row) for row in cursor.fetchall()]
-                # print(f"DEBUG: Original actions: {original_actions}")
+                original_actions_raw = cursor.fetchall()
+                # Преобразуем в список словарей
+                original_actions = []
+                for action_row in original_actions_raw:
+                    action_dict = {
+                        'id': action_row[0],
+                        'description': action_row[1],
+                        'start_offset': action_row[2], # Это будет timedelta или None
+                        'end_offset': action_row[3],   # Это будет timedelta или None
+                        'contact_phones': action_row[4],
+                        'report_materials': action_row[5]
+                    }
+                    original_actions.append(action_dict)
+                print(f"PostgreSQLDatabaseManager: Получено {len(original_actions)} действий для алгоритма {algorithm_id}.")
 
                 # 2. Получить информацию о пользователе на момент запуска
                 cursor.execute("""
@@ -1722,7 +1745,13 @@ class PostgreSQLDatabaseManager:
                 if not user_row:
                      print(f"PostgreSQLDatabaseManager: Пользователь с ID {created_by_user_id} не найден для execution.")
                      return -1
-                user_data = dict(user_row)
+                # Преобразуем в словарь
+                user_data = {
+                    'rank': user_row[0],
+                    'last_name': user_row[1],
+                    'first_name': user_row[2],
+                    'middle_name': user_row[3]
+                }
                 display_name = f"{user_data['rank']} {user_data['last_name']} {user_data['first_name'][0]}.{user_data['middle_name'][0]+'.' if user_data['middle_name'] else ''}"
 
                 # 3. Вставить новый algorithm_execution (snapshot)
@@ -1731,37 +1760,85 @@ class PostgreSQLDatabaseManager:
                         algorithm_id,
                         snapshot_name, snapshot_category, snapshot_time_type, snapshot_description,
                         started_at,
-                        created_by_user_id, created_by_user_display_name,
-                        notes
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        created_by_user_id, created_by_user_display_name
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                 """, (
                     original_algorithm['id'],
                     original_algorithm['name'], original_algorithm['category'], original_algorithm['time_type'], original_algorithm['description'],
                     started_at_str, # 'YYYY-MM-DD HH:MM:SS' или объект datetime
-                    created_by_user_id, display_name,
-                    notes
+                    created_by_user_id, display_name
                 ))
                 new_execution_id = cursor.fetchone()[0]
                 print(f"PostgreSQLDatabaseManager: Создан новый execution ID {new_execution_id} для алгоритма {algorithm_id}.")
 
                 # 4. Вставить action_executions (snapshot'ы действий)
                 # Рассчитываем абсолютные времена на основе started_at и смещений
+                import datetime
+                started_at_dt = datetime.datetime.fromisoformat(started_at_str.replace(' ', 'T'))
+                print(f"PostgreSQLDatabaseManager: Абсолютное время запуска алгоритма: {started_at_dt}.")
+
                 for action in original_actions:
                     calculated_start_time = None
                     calculated_end_time = None
-                    if action['start_offset']:
-                        # Преобразуем строку смещения в интервал и добавляем к started_at
-                        # started_at_str нужно преобразовать в datetime
-                        import datetime
-                        started_at_dt = datetime.datetime.fromisoformat(started_at_str.replace(' ', 'T'))
-                        start_offset_dt = datetime.timedelta(seconds=action['start_offset'].total_seconds()) # предполагается, что start_offset - interval
-                        calculated_start_time = started_at_dt + start_offset_dt
-                    if action['end_offset']:
-                        import datetime
-                        started_at_dt = datetime.datetime.fromisoformat(started_at_str.replace(' ', 'T'))
-                        end_offset_dt = datetime.timedelta(seconds=action['end_offset'].total_seconds()) # предполагается, что end_offset - interval
-                        calculated_end_time = started_at_dt + end_offset_dt
+                    
+                    # --- ИЗМЕНЕНО: Логика в зависимости от time_type ---
+                    if action['start_offset'] is not None:
+                        if algorithm_time_type == 'астрономическое':
+                            # --- ЛОГИКА ДЛЯ АСТРОНОМИЧЕСКОГО ---
+                            print(f"PostgreSQLDatabaseManager: Рассчитываем calculated_start_time для астрономического времени действия ID {action['id']}.")
+                            start_date_only = started_at_dt.date()
+                            offset_timedelta_start = action['start_offset']
+                            
+                            if isinstance(offset_timedelta_start, datetime.timedelta):
+                                # Извлекаем компоненты времени из timedelta
+                                total_seconds = int(offset_timedelta_start.total_seconds())
+                                hours = total_seconds // 3600
+                                minutes = (total_seconds % 3600) // 60
+                                seconds = total_seconds % 60
+                                # Создаем новое datetime: дата_запуска + время_из_смещения
+                                calculated_start_time = datetime.datetime.combine(
+                                    start_date_only,
+                                    datetime.time(hour=hours, minute=minutes, second=seconds)
+                                )
+                                print(f"PostgreSQLDatabaseManager:   Дата запуска: {start_date_only}, Время из смещения: {hours:02d}:{minutes:02d}:{seconds:02d}")
+                                print(f"PostgreSQLDatabaseManager:   Результат calculated_start_time: {calculated_start_time}")
+                            else:
+                                print(f"PostgreSQLDatabaseManager: Ошибка - start_offset для действия {action['id']} не является timedelta: {type(offset_timedelta_start)}. Устанавливаю None.")
+                        else:
+                            # --- ЛОГИКА ДЛЯ ОПЕРАТИВНОГО ---
+                            print(f"PostgreSQLDatabaseManager: Рассчитываем calculated_start_time для оперативного времени действия ID {action['id']}.")
+                            calculated_start_time = started_at_dt + action['start_offset']
+                            print(f"PostgreSQLDatabaseManager:   started_at_dt ({started_at_dt}) + start_offset ({action['start_offset']}) = {calculated_start_time}")
+
+                    if action['end_offset'] is not None:
+                        if algorithm_time_type == 'астрономическое':
+                            # --- ЛОГИКА ДЛЯ АСТРОНОМИЧЕСКОГО ---
+                            print(f"PostgreSQLDatabaseManager: Рассчитываем calculated_end_time для астрономического времени действия ID {action['id']}.")
+                            start_date_only = started_at_dt.date()
+                            offset_timedelta_end = action['end_offset']
+                            
+                            if isinstance(offset_timedelta_end, datetime.timedelta):
+                                # Извлекаем компоненты времени из timedelta
+                                total_seconds = int(offset_timedelta_end.total_seconds())
+                                hours = total_seconds // 3600
+                                minutes = (total_seconds % 3600) // 60
+                                seconds = total_seconds % 60
+                                # Создаем новое datetime: дата_запуска + время_из_смещения
+                                calculated_end_time = datetime.datetime.combine(
+                                    start_date_only,
+                                    datetime.time(hour=hours, minute=minutes, second=seconds)
+                                )
+                                print(f"PostgreSQLDatabaseManager:   Дата запуска: {start_date_only}, Время из смещения: {hours:02d}:{minutes:02d}:{seconds:02d}")
+                                print(f"PostgreSQLDatabaseManager:   Результат calculated_end_time: {calculated_end_time}")
+                            else:
+                                print(f"PostgreSQLDatabaseManager: Ошибка - end_offset для действия {action['id']} не является timedelta: {type(offset_timedelta_end)}. Устанавливаю None.")
+                        else:
+                            # --- ЛОГИКА ДЛЯ ОПЕРАТИВНОГО ---
+                            print(f"PostgreSQLDatabaseManager: Рассчитываем calculated_end_time для оперативного времени действия ID {action['id']}.")
+                            calculated_end_time = started_at_dt + action['end_offset']
+                            print(f"PostgreSQLDatabaseManager:   started_at_dt ({started_at_dt}) + end_offset ({action['end_offset']}) = {calculated_end_time}")
+                    # --- ---
 
                     cursor.execute("""
                         INSERT INTO app_schema.action_executions (
@@ -1774,9 +1851,11 @@ class PostgreSQLDatabaseManager:
                         action['description'], action['contact_phones'], action['report_materials'],
                         calculated_start_time, calculated_end_time
                     ))
+                    print(f"PostgreSQLDatabaseManager: Создан action_execution для действия ID {action['id']} (start: {calculated_start_time}, end: {calculated_end_time}).")
                 print(f"PostgreSQLDatabaseManager: Созданы {len(original_actions)} action_executions для execution ID {new_execution_id}.")
 
                 self.connection.commit()
+                print(f"PostgreSQLDatabaseManager: Транзакция завершена успешно. Новый execution ID: {new_execution_id}")
                 return new_execution_id
 
         except psycopg2.Error as e:

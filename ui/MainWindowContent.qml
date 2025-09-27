@@ -310,8 +310,9 @@ Item {
                          anchors.margins: Math.max(10, Math.floor(15 * scaleFactor))
                          // --- Связываем currentIndex с нашим свойством ---
                          currentIndex: rootItem.currentRightPanelIndex
+                         // --- НЕТ onCurrentIndexChanged здесь ---
 
-                         // --- Вкладка 0: Мероприятия (ПЕРЕМЕЩЕНА ВВЕРХ) ---
+                         // --- Вкладка 0: Мероприятия ---
                          Item {
                              ColumnLayout {
                                  anchors.fill: parent
@@ -332,158 +333,200 @@ Item {
                          // --- ---
 
                          // --- Вкладка 1: Повседневная деятельность ---
-                         Item { // Заглушка
+                         Item {
                              ColumnLayout {
                                  anchors.fill: parent
                                  Text {
                                      text: "Содержимое вкладки: Повседневная деятельность"
                                      font.pixelSize: rootItem.scaleFactor * 12
                                  }
-                                 // --- НОВОЕ: Вставка RunningAlgorithmsView ---
+                                 // --- Вставка RunningAlgorithmsView ---
                                  RunningAlgorithmsView {
                                      id: runningAlgorithmsView1
                                      Layout.fillWidth: true
                                      Layout.fillHeight: true
-                                     categoryFilter: "повседневная деятельность" // <-- Передаем фильтр категории
+                                     categoryFilter: "повседневная деятельность"
                                  }
                                  // --- ---
-                                 // Заполнитель (можно удалить, если RunningAlgorithmsView заполняет всё)
-                                 // Item {
-                                 //     Layout.fillHeight: true
-                                 // }
+                                 // --- Подписываемся на изменение индекса вкладки ---
+                                 Connections {
+                                     target: rightPanelStackLayout
+                                     function onCurrentIndexChanged() {
+                                         if (rightPanelStackLayout.currentIndex === 1) {
+                                             console.log("QML MainWindowContent: Загружаем executions для повседневной деятельности (из вкладки 1).");
+                                             runningAlgorithmsView1.loadExecutions();
+                                         }
+                                     }
+                                 }
+                                 // --- ---
                              }
                          }
                          // --- ---
 
                          // --- Вкладка 2: Боевая готовность ---
-                         Item { // Заглушка
+                         Item {
                              ColumnLayout {
                                  anchors.fill: parent
                                  Text {
                                      text: "Содержимое вкладки: Боевая готовность"
                                      font.pixelSize: rootItem.scaleFactor * 12
                                  }
-                                 // --- НОВОЕ: Вставка RunningAlgorithmsView ---
+                                 // --- Вставка RunningAlgorithmsView ---
                                  RunningAlgorithmsView {
                                      id: runningAlgorithmsView2
                                      Layout.fillWidth: true
                                      Layout.fillHeight: true
-                                     categoryFilter: "боевая готовность" // <-- Передаем фильтр категории
+                                     categoryFilter: "боевая готовность"
                                  }
                                  // --- ---
-                                 // Заполнитель (можно удалить, если RunningAlgorithmsView заполняет всё)
-                                 // Item {
-                                 //     Layout.fillHeight: true
-                                 // }
+                                 // --- Подписываемся на изменение индекса вкладки ---
+                                 Connections {
+                                     target: rightPanelStackLayout
+                                     function onCurrentIndexChanged() {
+                                         if (rightPanelStackLayout.currentIndex === 2) {
+                                             console.log("QML MainWindowContent: Загружаем executions для боевой готовности (из вкладки 2).");
+                                             runningAlgorithmsView2.loadExecutions();
+                                         }
+                                     }
+                                 }
+                                 // --- ---
                              }
                          }
                          // --- ---
 
                          // --- Вкладка 3: Противодействие терроризму ---
-                         Item { // Заглушка
+                         Item {
                              ColumnLayout {
                                  anchors.fill: parent
                                  Text {
                                      text: "Содержимое вкладки: Противодействие терроризму"
                                      font.pixelSize: rootItem.scaleFactor * 12
                                  }
-                                 // --- НОВОЕ: Вставка RunningAlgorithmsView ---
+                                 // --- Вставка RunningAlgorithmsView ---
                                  RunningAlgorithmsView {
                                      id: runningAlgorithmsView3
                                      Layout.fillWidth: true
                                      Layout.fillHeight: true
-                                     categoryFilter: "противодействие терроризму" // <-- Передаем фильтр категории
+                                     categoryFilter: "противодействие терроризму"
                                  }
                                  // --- ---
-                                 // Заполнитель (можно удалить, если RunningAlgorithmsView заполняет всё)
-                                 // Item {
-                                 //     Layout.fillHeight: true
-                                 // }
+                                 // --- Подписываемся на изменение индекса вкладки ---
+                                 Connections {
+                                     target: rightPanelStackLayout
+                                     function onCurrentIndexChanged() {
+                                         if (rightPanelStackLayout.currentIndex === 3) {
+                                             console.log("QML MainWindowContent: Загружаем executions для противодействия терроризму (из вкладки 3).");
+                                             runningAlgorithmsView3.loadExecutions();
+                                         }
+                                     }
+                                 }
+                                 // --- ---
                              }
                          }
                          // --- ---
 
                          // --- Вкладка 4: Кризисные ситуации ---
-                         Item { // Заглушка
+                         Item {
                              ColumnLayout {
                                  anchors.fill: parent
                                  Text {
                                      text: "Содержимое вкладки: Кризисные ситуации"
                                      font.pixelSize: rootItem.scaleFactor * 12
                                  }
-                                 // --- НОВОЕ: Вставка RunningAlgorithmsView ---
+                                 // --- Вставка RunningAlgorithmsView ---
                                  RunningAlgorithmsView {
                                      id: runningAlgorithmsView4
                                      Layout.fillWidth: true
                                      Layout.fillHeight: true
-                                     categoryFilter: "кризисные ситуации" // <-- Передаем фильтр категории
+                                     categoryFilter: "кризисные ситуации"
                                  }
                                  // --- ---
-                                 // Заполнитель (можно удалить, если RunningAlgorithmsView заполняет всё)
-                                 // Item {
-                                 //     Layout.fillHeight: true
-                                 // }
+                                 // --- Подписываемся на изменение индекса вкладки ---
+                                 Connections {
+                                     target: rightPanelStackLayout
+                                     function onCurrentIndexChanged() {
+                                         if (rightPanelStackLayout.currentIndex === 4) {
+                                             console.log("QML MainWindowContent: Загружаем executions для кризисных ситуаций (из вкладки 4).");
+                                             runningAlgorithmsView4.loadExecutions();
+                                         }
+                                     }
+                                 }
+                                 // --- ---
                              }
                          }
                          // --- ---
 
-                         // --- Вкладка 5: Настройки (возвращаем старую логику) ---
-                         SettingsView {
-                             id: settingsView
-                             anchors.fill: parent
+                         // --- Вкладка 5: Настройки ---
+                         Item { // Вкладка Настроек
+                             SettingsView {
+                                 id: settingsView
+                                 anchors.fill: parent
+                             }
+                             // --- Подписываемся на изменение индекса вкладки для SettingsView ---
+                             Connections {
+                                 target: rightPanelStackLayout
+                                 function onCurrentIndexChanged() {
+                                     if (rightPanelStackLayout.currentIndex === 5) {
+                                         console.log("QML MainWindowContent: Обновляем данные на вкладке Настроек (из вкладки 5).");
+                                         if (settingsView.onShown) {
+                                             settingsView.onShown();
+                                         }
+                                     }
+                                 }
+                             }
+                             // --- ---
                          }
                          // --- ---
+                     } // StackLayout
+
+                     // --- Диалоги запуска алгоритмов (на уровне Rectangle) ---
+                     StartNewAlgorithmDialog {
+                         id: startNewAlgorithmDialog1
+                         Connections {
+                             target: startNewAlgorithmDialog1
+                             function onAlgorithmStarted(executionData) {
+                                  console.log("MainWindowContent: Диалог 1 сообщил о запуске. Обновляем View 1.");
+                                  runningAlgorithmsView1.loadExecutions();
+                             }
+                         }
                      }
 
-                    StartNewAlgorithmDialog {
-                        id: startNewAlgorithmDialog1
-                        // Подключаем сигнал к соответствующему RunningAlgorithmsView
-                        Connections {
-                            target: startNewAlgorithmDialog1
-                            function onAlgorithmStarted(executionData) {
-                                console.log("MainWindowContent: Диалог 1 сообщил о запуске. Обновляем View 1.");
-                                runningAlgorithmsView1.loadExecutions(); // Перезагружаем список для соответствующей вкладки
-                            }
-                        }
-                    }
-                    StartNewAlgorithmDialog {
-                        id: startNewAlgorithmDialog2
-                        // Подключаем сигнал к соответствующему RunningAlgorithmsView
-                        Connections {
-                            target: startNewAlgorithmDialog2
-                            function onAlgorithmStarted(executionData) {
-                                console.log("MainWindowContent: Диалог 2 сообщил о запуске. Обновляем View 2.");
-                                runningAlgorithmsView1.loadExecutions(); // Перезагружаем список для соответствующей вкладки
-                            }
-                        }
-                    }
+                     StartNewAlgorithmDialog {
+                         id: startNewAlgorithmDialog2
+                         Connections {
+                             target: startNewAlgorithmDialog2
+                             function onAlgorithmStarted(executionData) {
+                                  console.log("MainWindowContent: Диалог 2 сообщил о запуске. Обновляем View 2.");
+                                  runningAlgorithmsView2.loadExecutions();
+                             }
+                         }
+                     }
 
-                    StartNewAlgorithmDialog {
-                        id: startNewAlgorithmDialog3
-                        // Подключаем сигнал к соответствующему RunningAlgorithmsView
-                        Connections {
-                            target: startNewAlgorithmDialog3
-                            function onAlgorithmStarted(executionData) {
-                                console.log("MainWindowContent: Диалог 3 сообщил о запуске. Обновляем View 3.");
-                                runningAlgorithmsView1.loadExecutions(); // Перезагружаем список для соответствующей вкладки
-                            }
-                        }
-                    }
+                     StartNewAlgorithmDialog {
+                         id: startNewAlgorithmDialog3
+                         Connections {
+                             target: startNewAlgorithmDialog3
+                             function onAlgorithmStarted(executionData) {
+                                  console.log("MainWindowContent: Диалог 3 сообщил о запуске. Обновляем View 3.");
+                                  runningAlgorithmsView3.loadExecutions();
+                             }
+                         }
+                     }
 
-                    StartNewAlgorithmDialog {
-                        id: startNewAlgorithmDialog4
-                        // Подключаем сигнал к соответствующему RunningAlgorithmsView
-                        Connections {
-                            target: startNewAlgorithmDialog4
-                            function onAlgorithmStarted(executionData) {
-                                console.log("MainWindowContent: Диалог 4 сообщил о запуске. Обновляем View 4.");
-                                runningAlgorithmsView1.loadExecutions(); // Перезагружаем список для соответствующей вкладки
-                            }
-                        }
-                    }
-                }
-            }
-        }
+                     StartNewAlgorithmDialog {
+                         id: startNewAlgorithmDialog4
+                         Connections {
+                             target: startNewAlgorithmDialog4
+                             function onAlgorithmStarted(executionData) {
+                                  console.log("MainWindowContent: Диалог 4 сообщил о запуске. Обновляем View 4.");
+                                  runningAlgorithmsView4.loadExecutions();
+                             }
+                         }
+                     }
+                     // --- ---
+                } // Rectangle правой панели
+            } // RowLayout
+        } // Rectangle средней панели
         // --- ---
 
         // --- 3) Нижняя панель (5% высоты теперь) ---
@@ -503,7 +546,7 @@ Item {
                      model: ListModel {
                          ListElement { text: "О программе" }
                          ListElement { text: "Учет личного состава" }
-                         ListElement { text: "Настройки" } // <-- Эта кнопка переключает StackLayout на вкладку 5
+                         ListElement { text: "Настройки" }
                          ListElement { text: "(По согласованию)" }
                      }
                      Button {
@@ -513,9 +556,7 @@ Item {
                          text: model.text
                          font.pixelSize: rootItem.scaleFactor * 10
                          // --- Выделяем активную кнопку НАСТРОЕК ---
-                         // Активна, если currentRightPanelIndex равен 5 (индекс Настроек)
                          background: Rectangle {
-                             // Проверяем, является ли эта кнопка "Настройки" (index==2) и активна ли она
                              color: (index === 2 && rootItem.currentRightPanelIndex === 5) ? "#2980b9" : "#7f8c8d"
                              radius: Math.max(2, Math.floor(4 * scaleFactor))
                          }
@@ -527,18 +568,13 @@ Item {
                              verticalAlignment: Text.AlignVCenter
                          }
                          onClicked: {
-                             // Если нажата кнопка "Настройки" (index 2 в модели нижней панели)
                              if (index === 2) {
-                                 // Устанавливаем индекс на "Настройки" (5)
                                  rootItem.currentRightPanelIndex = 5;
-                                 // Вызываем метод onOpened у SettingsView для загрузки настроек
                                  if (settingsView.onOpened) {
                                      settingsView.onOpened();
                                  }
                              } else {
-                                 // Для других кнопок нижней панели (О программе, Учет, По согласованию)
                                  console.log("Нажата кнопка нижней панели: " + model.text);
-                                 // Можно реализовать другую логику или оставить пустой
                              }
                          }
                      }
@@ -548,206 +584,14 @@ Item {
     }
     // --- Конец ColumnLayout ---
 
-    // --- НОВОЕ: Popup для выбора дежурного ---
-    Popup {
-        id: dutyOfficerSelectionPopup
-        x: (parent.width - width) / 2
-        y: (parent.height - height) / 2
-        width: Math.min(parent.width * 0.5, 400) // 50% ширины или максимум 400
-        height: Math.min(parent.height * 0.6, 400) // 60% высоты или максимум 400
-        modal: true
-        focus: true
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
-
-        background: Rectangle {
-            color: "white"
-            border.color: "lightgray"
-            radius: 5
-        }
-
-        // --- Свойства для хранения списка ---
-        // --- ИЗМЕНЕНО: Используем ListModel вместо обычного массива JS ---
-        // property var officersListModel: [] // <-- СТАРОЕ
-        property alias officersListModel: officersListInternalModel // <-- НОВОЕ: Проксируем внутреннюю модель
-        // --- ---
-
-        // --- Основной столбец для элементов диалога ---
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: 15
-            spacing: 15
-
-            Label {
-                text: "Выберите дежурного"
-                font.pointSize: 14
-                font.bold: true
-            }
-
-            // Список должностных лиц
-            ScrollView {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-
-                ListView {
-                    id: officersListView
-                    // --- ИЗМЕНЕНО: Используем внутреннюю ListModel ---
-                    // model: dutyOfficerSelectionPopup.officersListModel // <-- СТАРОЕ
-                    model: ListModel { id: officersListInternalModel } // <-- НОВОЕ
-                    // --- ---
-                    delegate: Rectangle {
-                        width: ListView.view.width
-                        height: 40
-                        color: index % 2 ? "#f9f9f9" : "#ffffff" // Чередующийся цвет
-                        border.color: officersListView.currentIndex === index ? "#3498db" : "#ddd" // Выделение выбранного
-                        Text {
-                            anchors.left: parent.left
-                            anchors.leftMargin: 10
-                            anchors.verticalCenter: parent.verticalCenter
-                            // Формируем строку отображения: Звание Фамилия И.О.
-                            text: model.rank + " " + model.last_name + " " +
-                                model.first_name.charAt(0) + "." +
-                                (model.middle_name ? model.middle_name.charAt(0) + "." : "")
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: {
-                                // При клике на элемент списка
-                                // --- ИЗМЕНЕНО: Не сериализуем весь model ---
-                                // console.log("QML DutyOfficerSelectionPopup: Выбран дежурный:", JSON.stringify(model)); // <-- СТАРОЕ (вызывает ошибку)
-                                console.log("QML DutyOfficerSelectionPopup: Выбран дежурный с ID:", model.id); // <-- НОВОЕ
-                                // --- ---
-                                // --- Отправляем ID выбранного дежурного в Python ---
-                                // Вызываем слот Python для установки текущего дежурного
-                                appData.setCurrentDutyOfficer(model.id); // <-- Используем ID из модели
-                                // --- ---
-                                // Закрываем Popup
-                                dutyOfficerSelectionPopup.close();
-                            }
-                        }
-                    }
-                    // --- ---
-                }
-            }
-
-            // Кнопка отмены
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 10
-                Item { Layout.fillWidth: true } // Заполнитель слева
-                Button {
-                    text: "Отмена"
-                    onClicked: {
-                        console.log("QML DutyOfficerSelectionPopup: Нажата кнопка Отмена");
-                        dutyOfficerSelectionPopup.close(); // Просто закрываем
-                    }
-                }
-            }
-        }
-
-        // --- Функция для загрузки списка из Python ---
-        function loadOfficersList(list) {
-            console.log("QML DutyOfficerSelectionPopup: Загрузка списка должностных лиц из Python...");
-            console.log("QML DutyOfficerSelectionPopup: Получен список (сырой):", JSON.stringify(list));
-            
-            // --- НОВОЕ: Преобразование QJSValue/QVariant в массив JS ---
-            // Если list - это QJSValue (из Python), преобразуем его
-            if (list && typeof list === 'object' && list.hasOwnProperty('toVariant')) {
-                list = list.toVariant();
-                console.log("QML DutyOfficerSelectionPopup: QJSValue (list) преобразован в:", JSON.stringify(list));
-            }
-            // --- ---
-
-            // --- ИЗМЕНЕНО: Очищаем внутреннюю ListModel ---
-            // dutyOfficerSelectionPopup.officersListModel = []; // <-- СТАРОЕ
-            officersListInternalModel.clear(); // <-- НОВОЕ: Очищаем внутреннюю модель
-            // --- ---
-            console.log("QML DutyOfficerSelectionPopup: Модель ListView очищена.");
-
-            // --- ИЗМЕНЕНО: Более гибкая проверка на "массивоподобность" ---
-            // Вместо Array.isArray, проверяем, есть ли у объекта свойство length (не undefined)
-            if (list && typeof list === 'object' && list.length !== undefined) {
-            // --- ---
-                var count = list.length;
-                console.log("QML DutyOfficerSelectionPopup: Полученный список является массивоподобным. Количество элементов:", count);
-                // Заполняем модель данными по одному
-                for (var i = 0; i < count; i++) {
-                    var officer = list[i];
-                    console.log("QML DutyOfficerSelectionPopup: Обрабатываем элемент", i, ":", JSON.stringify(officer)); // Лог каждого элемента
-                    // Убедимся, что элемент - это объект
-                    if (typeof officer === 'object' && officer !== null) {
-                        // --- ИЗМЕНЕНО: Добавляем в ListModel, а не в массив JS ---
-                        // try {
-                        //     dutyOfficerSelectionPopup.officersListModel.push(officer); // <-- СТАРОЕ
-                        //     console.log("QML DutyOfficerSelectionPopup: Элемент", i, "добавлен в модель.");
-                        // } catch (e) {
-                        //     console.error("QML DutyOfficerSelectionPopup: Ошибка при добавлении элемента", i, "в модель:", e.toString(), "Данные:", JSON.stringify(officer));
-                        // }
-                        
-                        // --- НОВОЕ: Явное копирование свойств и добавление в ListModel ---
-                        try {
-                            // Создаем копию объекта, чтобы избежать проблем с QJSValue
-                            var officerCopy = ({
-                                "id": officer["id"],
-                                "rank": officer["rank"],
-                                "last_name": officer["last_name"],
-                                "first_name": officer["first_name"],
-                                "middle_name": officer["middle_name"],
-                                "phone": officer["phone"],
-                                "is_active": officer["is_active"],
-                                "is_admin": officer["is_admin"],
-                                "login": officer["login"]
-                                // Добавьте другие поля, если они нужны для отображения в списке
-                            });
-                            officersListInternalModel.append(officerCopy); // <-- НОВОЕ: Добавляем КОПИЮ в ListModel
-                            console.log("QML DutyOfficerSelectionPopup: Элемент", i, "добавлен в модель ListModel.");
-                        } catch (e_append) {
-                            console.error("QML DutyOfficerSelectionPopup: Ошибка при добавлении элемента", i, "в ListModel:", e_append.toString(), "Данные:", JSON.stringify(officer));
-                        }
-                        // --- ---
-                    } else {
-                        console.warn("QML DutyOfficerSelectionPopup: Элемент", i, "не является корректным объектом:", typeof officer, officer);
-                    }
-                }
-            } else {
-                // --- ИЗМЕНЕНО: Сообщение об ошибке ---
-                console.error("QML DutyOfficerSelectionPopup: Python не вернул корректный массивоподобный объект. Получен тип:", typeof list, "Значение:", list);
-                // --- ---
-            }
-            // --- ИЗМЕНЕНО: Выводим количество элементов в ListModel ---
-            // console.log("QML DutyOfficerSelectionPopup: Модель ListView обновлена. Элементов:", dutyOfficerSelectionPopup.officersListModel.length);
-            console.log("QML DutyOfficerSelectionPopup: Модель ListView (ListModel) обновлена. Элементов:", officersListInternalModel.count); // <-- НОВОЕ
-            // --- ---
-            // --- ДОБАВЛЕНО: Отладка содержимого модели ---
-            if (officersListInternalModel.count > 0) {
-                 try {
-                     console.log("QML DutyOfficerSelectionPopup: Первый элемент в модели (ListModel):", JSON.stringify(officersListInternalModel.get(0)));
-                 } catch (e_get) {
-                     console.warn("QML DutyOfficerSelectionPopup: Не удалось сериализовать первый элемент модели (ListModel) для лога:", e_get.toString());
-                     // Попробуем получить отдельные свойства
-                     var firstItem = officersListInternalModel.get(0);
-                     if (firstItem) {
-                         console.log("QML DutyOfficerSelectionPopup: Первый элемент в модели (ListModel) (свойства): id=", firstItem.id, "rank=", firstItem.rank, "last_name=", firstItem.last_name);
-                     }
-                 }
-            }
-            // --- ---
-        }
-        // --- ---
-    }
-    // --- ---
-
-    // --- Connections для обработки ЗАПРОСА НА ОТКРЫТИЕ ДИАЛОГА от КАЖДОГО VIEW ---
-    // Эти Connections находятся на уровне rootItem, чтобы они могли ссылаться на
-    // и диалоги (startNewAlgorithmDialog1-4), и на view (runningAlgorithmsView1-4).
+    // --- Подключаем сигналы запуска алгоритмов от представлений ---
     Connections {
         target: runningAlgorithmsView1
         function onStartNewAlgorithmRequested(category) {
             console.log("MainWindowContent: Получен запрос на запуск от View1 для категории:", category);
-            // Открываем соответствующий диалог
-            startNewAlgorithmDialog1.categoryFilter = category; // Передаём категорию
-            startNewAlgorithmDialog1.resetForAdd(); // Сбрасываем диалог
-            startNewAlgorithmDialog1.open(); // Открываем
+            startNewAlgorithmDialog1.categoryFilter = category;
+            startNewAlgorithmDialog1.resetForAdd();
+            startNewAlgorithmDialog1.open();
         }
     }
 
@@ -781,4 +625,128 @@ Item {
         }
     }
 
+    // --- НОВОЕ: Popup для выбора дежурного ---
+    Popup {
+        id: dutyOfficerSelectionPopup
+        x: (parent.width - width) / 2
+        y: (parent.height - height) / 2
+        width: Math.min(parent.width * 0.5, 400)
+        height: Math.min(parent.height * 0.6, 400)
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+
+        background: Rectangle {
+            color: "white"
+            border.color: "lightgray"
+            radius: 5
+        }
+
+        property alias officersListModel: officersListInternalModel
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 15
+            spacing: 15
+
+            Label {
+                text: "Выберите дежурного"
+                font.pointSize: 14
+                font.bold: true
+            }
+
+            ScrollView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+
+                ListView {
+                    id: officersListView
+                    model: ListModel { id: officersListInternalModel }
+                    delegate: Rectangle {
+                        width: ListView.view.width
+                        height: 40
+                        color: index % 2 ? "#f9f9f9" : "#ffffff"
+                        border.color: officersListView.currentIndex === index ? "#3498db" : "#ddd"
+                        Text {
+                            anchors.left: parent.left
+                            anchors.leftMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: model.rank + " " + model.last_name + " " +
+                                model.first_name.charAt(0) + "." +
+                                (model.middle_name ? model.middle_name.charAt(0) + "." : "")
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                console.log("QML DutyOfficerSelectionPopup: Выбран дежурный с ID:", model.id);
+                                appData.setCurrentDutyOfficer(model.id);
+                                dutyOfficerSelectionPopup.close();
+                            }
+                        }
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+                Item { Layout.fillWidth: true }
+                Button {
+                    text: "Отмена"
+                    onClicked: {
+                        console.log("QML DutyOfficerSelectionPopup: Нажата кнопка Отмена");
+                        dutyOfficerSelectionPopup.close();
+                    }
+                }
+            }
+        }
+
+        function loadOfficersList(list) {
+            console.log("QML DutyOfficerSelectionPopup: Загрузка списка должностных лиц из Python...");
+            console.log("QML DutyOfficerSelectionPopup: Получен список (сырой):", JSON.stringify(list));
+
+            if (list && typeof list === 'object' && list.hasOwnProperty('toVariant')) {
+                list = list.toVariant();
+                console.log("QML DutyOfficerSelectionPopup: QJSValue (list) преобразован в:", JSON.stringify(list));
+            }
+
+            officersListInternalModel.clear();
+            console.log("QML DutyOfficerSelectionPopup: Модель ListView очищена.");
+
+            if (list && typeof list === 'object' && list.length !== undefined) {
+                var count = list.length;
+                console.log("QML DutyOfficerSelectionPopup: Полученный список является массивоподобным. Количество элементов:", count);
+                for (var i = 0; i < count; i++) {
+                    var officer = list[i];
+                    console.log("QML DutyOfficerSelectionPopup: Обрабатываем элемент", i, ":", JSON.stringify(officer));
+                    if (typeof officer === 'object' && officer !== null) {
+                        try {
+                            var officerCopy = ({
+                                "id": officer["id"],
+                                "rank": officer["rank"],
+                                "last_name": officer["last_name"],
+                                "first_name": officer["first_name"],
+                                "middle_name": officer["middle_name"],
+                                "phone": officer["phone"],
+                                "is_active": officer["is_active"],
+                                "is_admin": officer["is_admin"],
+                                "login": officer["login"]
+                            });
+                            officersListInternalModel.append(officerCopy);
+                            console.log("QML DutyOfficerSelectionPopup: Элемент", i, "добавлен в модель ListModel.");
+                        } catch (e_append) {
+                            console.error("QML DutyOfficerSelectionPopup: Ошибка при добавлении элемента", i, "в ListModel:", e_append.toString(), "Данные:", JSON.stringify(officer));
+                        }
+                    } else {
+                        console.warn("QML DutyOfficerSelectionPopup: Элемент", i, "не является корректным объектом:", typeof officer, officer);
+                    }
+                }
+            } else {
+                console.error("QML DutyOfficerSelectionPopup: Python не вернул корректный массивоподобный объект. Получен тип:", typeof list, "Значение:", list);
+            }
+            console.log("QML DutyOfficerSelectionPopup: Модель ListView (ListModel) обновлена. Элементов:", officersListInternalModel.count);
+        }
+    }
+    // --- ---
 }

@@ -18,6 +18,7 @@ Popup {
     property string categoryFilter: "" // Фильтр по категории (передаётся из родителя)
     property int selectedAlgorithmId: -1
     property string selectedAlgorithmName: ""
+    property string selectedAlgorithmTimeType: "" // <-- НОВОЕ: Храним time_type
     property var availableAlgorithms: [] // Список доступных алгоритмов
     property var availableOfficers: []   // Список доступных должностных лиц
     // --- ---
@@ -65,15 +66,43 @@ Popup {
                         id: algorithmsModel
                     }
                     textRole: "name"
+                    // --- ИЗМЕНЕНО: onCurrentIndexChanged теперь вызывает Python ---
                     onCurrentIndexChanged: {
                         if (currentIndex !== -1 && model.get(currentIndex)) {
                             startNewAlgorithmDialog.selectedAlgorithmId = model.get(currentIndex).id;
                             startNewAlgorithmDialog.selectedAlgorithmName = model.get(currentIndex).name;
+                            console.log("QML StartNewAlgorithmDialog: Выбран алгоритм ID", startNewAlgorithmDialog.selectedAlgorithmId, "Name:", startNewAlgorithmDialog.selectedAlgorithmName);
+
+                            // --- НОВОЕ: Запрашиваем time_type через Python ---
+                            var algorithmDetails = appData.getAlgorithmById(startNewAlgorithmDialog.selectedAlgorithmId);
+                            console.log("QML StartNewAlgorithmDialog: Получены данные алгоритма (сырой):", JSON.stringify(algorithmDetails).substring(0, 500));
+
+                            // Преобразование QJSValue/QVariant в JS-объект, если нужно
+                            if (algorithmDetails && typeof algorithmDetails === 'object' && algorithmDetails.hasOwnProperty('toVariant')) {
+                                algorithmDetails = algorithmDetails.toVariant();
+                                console.log("QML StartNewAlgorithmDialog: QJSValue (algorithmDetails) преобразован в:", JSON.stringify(algorithmDetails).substring(0, 500));
+                            }
+
+                            if (algorithmDetails && typeof algorithmDetails === 'object' && algorithmDetails.time_type) {
+                                startNewAlgorithmDialog.selectedAlgorithmTimeType = algorithmDetails.time_type;
+                                console.log("QML StartNewAlgorithmDialog: Установлен time_type:", startNewAlgorithmDialog.selectedAlgorithmTimeType);
+                                // Вызываем обновление полей даты/времени
+                                startNewAlgorithmDialog.updateDateTimeFields();
+                            } else {
+                                console.warn("QML StartNewAlgorithmDialog: Не удалось получить time_type для алгоритма ID", startNewAlgorithmDialog.selectedAlgorithmId);
+                                // Оставляем time_type пустым или устанавливаем значение по умолчанию
+                                startNewAlgorithmDialog.selectedAlgorithmTimeType = "";
+                                // Опционально: сбросить поля времени в 00:00:00 или использовать текущее местное
+                                // startNewAlgorithmDialog.resetTimeFieldsToDefault();
+                            }
+                            // --- ---
                         } else {
                             startNewAlgorithmDialog.selectedAlgorithmId = -1;
                             startNewAlgorithmDialog.selectedAlgorithmName = "";
+                            startNewAlgorithmDialog.selectedAlgorithmTimeType = "";
                         }
                     }
+                    // --- ---
                 }
 
                 Label {
@@ -92,7 +121,7 @@ Popup {
                             id: startHoursField
                             Layout.fillWidth: true
                             placeholderText: "Часы (00-23)"
-                            text: "00"
+                            text: "00" // Значение по умолчанию будет установлено в resetForAdd и updateDateTimeFields
                             validator: IntValidator { bottom: 0; top: 23 }
                         }
                         RowLayout {
@@ -123,7 +152,7 @@ Popup {
                             id: startMinutesField
                             Layout.fillWidth: true
                             placeholderText: "Минуты (00-59)"
-                            text: "00"
+                            text: "00" // Значение по умолчанию будет установлено в resetForAdd и updateDateTimeFields
                             validator: IntValidator { bottom: 0; top: 59 }
                         }
                         RowLayout {
@@ -154,7 +183,7 @@ Popup {
                             id: startSecondsField
                             Layout.fillWidth: true
                             placeholderText: "Секунды (00-59)"
-                            text: "00"
+                            text: "00" // Значение по умолчанию будет установлено в resetForAdd и updateDateTimeFields
                             validator: IntValidator { bottom: 0; top: 59 }
                         }
                         RowLayout {
@@ -191,7 +220,7 @@ Popup {
                         id: startDateField
                         Layout.fillWidth: true
                         placeholderText: "Введите дату начала (ДД.ММ.ГГГГ)..."
-                        // text будет установлен в resetForAdd
+                        // text будет установлен в resetForAdd и updateDateTimeFields
                         // Закомментирован validator
                         // validator: RegExpValidator { regExp: /^(0[1-9]|[12][0-9]|3[01])\.(0[1-9]|1[012])\.(19|20)\d\d$/ } // Формат DD.MM.YYYY
                     }
@@ -221,27 +250,6 @@ Popup {
                         id: officersModel
                     }
                     textRole: "display_name" // Отображаем поле 'display_name'
-                }
-
-                // --- НОВОЕ: Поле для примечаний с улучшенным оформлением ---
-                Label {
-                    text: "Примечания:"
-                    Layout.alignment: Qt.AlignRight | Qt.AlignTop
-                }
-                TextArea {
-                    id: notesArea
-                    Layout.fillWidth: true
-                    Layout.minimumHeight: 80
-                    placeholderText: "Введите дополнительные примечания к запуску алгоритма..."
-                    wrapMode: TextArea.Wrap
-                    // --- УЛУЧШЕННОЕ ОФОРМЛЕНИЕ ---
-                    background: Rectangle {
-                        border.color: notesArea.activeFocus ? "#3498db" : "#ccc" // Цвет границы при фокусе (синий) и без (серый)
-                        border.width: 1 // Толщина границы в пикселях
-                        radius: 2 // Небольшое скругление углов (опционально)
-                        color: "white" // Цвет фона поля ввода
-                    }
-                    // --- ---
                 }
                 // --- ---
             }
@@ -319,8 +327,7 @@ Popup {
                     var algorithmExecutionData = {
                         "algorithm_id": startNewAlgorithmDialog.selectedAlgorithmId,
                         "started_at": startDateField.text.trim() + " " + timeString, // Формат 'DD.MM.YYYY HH:MM:SS'
-                        "created_by_user_id": officerData.id,
-                        "notes": notesArea.text.trim() || null // Примечания (может быть null)
+                        "created_by_user_id": officerData.id
                     };
                     
                     console.log("QML StartNewAlgorithmDialog: Отправляем данные для запуска алгоритма в Python:", JSON.stringify(algorithmExecutionData));
@@ -335,8 +342,7 @@ Popup {
                             "execution_id": typeof result === 'number' ? result : -1, // ID нового execution'а, если вернулся ID
                             "algorithm_id": startNewAlgorithmDialog.selectedAlgorithmId,
                             "started_at": algorithmExecutionData.started_at,
-                            "created_by_user_id": officerData.id,
-                            "notes": algorithmExecutionData.notes
+                            "created_by_user_id": officerData.id
                         });
                         startNewAlgorithmDialog.close();
                     } else {
@@ -358,33 +364,44 @@ Popup {
 
     /**
      * Сбрасывает диалог для добавления нового запуска алгоритма
+     * Загружает данные алгоритма для определения time_type
      */
     function resetForAdd() {
         console.log("QML StartNewAlgorithmDialog: Сброс для запуска нового алгоритма");
         selectedAlgorithmId = -1;
         selectedAlgorithmName = "";
+        selectedAlgorithmTimeType = ""; // <-- НОВОЕ: Сбрасываем time_type
         algorithmComboBox.currentIndex = -1;
         officerComboBox.currentIndex = -1;
-        notesArea.text = "";
         errorMessageLabel.text = "";
-        
-        // Устанавливаем текущую дату и время по умолчанию
-        var now = new Date();
-        var year = now.getFullYear();
-        var month = String(now.getMonth() + 1).padStart(2, '0'); // Месяцы с 0
-        var day = String(now.getDate()).padStart(2, '0');
-        var hours = String(now.getHours()).padStart(2, '0');
-        var minutes = String(now.getMinutes()).padStart(2, '0');
-        var seconds = String(now.getSeconds()).padStart(2, '0');
-        
-        startDateField.text = day + "." + month + "." + year;
-        // Сбрасываем поля времени
-        startHoursField.text = hours;
-        startMinutesField.text = minutes;
-        startSecondsField.text = seconds;
-        
-        console.log("QML StartNewAlgorithmDialog: Установлены значения по умолчанию: дата =", startDateField.text, ", время = ", hours, ":", minutes, ":", seconds);
-        
+
+        // --- ИСПРАВЛЕНО: Устанавливаем МЕСТНУЮ дату и время по умолчанию ---
+        // Получаем местную дату и время из ApplicationData
+        var localDateStr = appData.localDate; // Формат "DD.MM.YYYY"
+        var localTimeStr = appData.localTime; // Формат "HH:MM:SS"
+
+        console.log("QML StartNewAlgorithmDialog: Получено местное время из appData: дата =", localDateStr, ", время =", localTimeStr);
+
+        // Устанавливаем местную дату
+        startDateField.text = localDateStr;
+
+        // Разбираем местное время и устанавливаем в поля
+        var timeParts = localTimeStr.split(':');
+        if (timeParts.length === 3) {
+            startHoursField.text = timeParts[0];     // HH
+            startMinutesField.text = timeParts[1];   // MM
+            startSecondsField.text = timeParts[2];   // SS
+        } else {
+            // На всякий случай, если формат неожиданный, ставим 00:00:00
+            console.warn("QML StartNewAlgorithmDialog: Неожиданный формат localTime:", localTimeStr, ". Устанавливаю 00:00:00.");
+            startHoursField.text = "00";
+            startMinutesField.text = "00";
+            startSecondsField.text = "00";
+        }
+        // --- ---
+
+        console.log("QML StartNewAlgorithmDialog: Установлены значения по умолчанию (местное время): дата =", startDateField.text, ", время = ", startHoursField.text, ":", startMinutesField.text, ":", startSecondsField.text);
+
         // Загружаем список алгоритмов по фильтру
         loadAlgorithmsByCategory();
         // Загружаем список должностных лиц
@@ -395,6 +412,7 @@ Popup {
 
     /**
      * Загружает список алгоритмов из Python, отфильтрованных по categoryFilter
+     * (time_type будет запрошено отдельно при выборе)
      */
     function loadAlgorithmsByCategory() {
         console.log("QML StartNewAlgorithmDialog: Запрос списка алгоритмов для категории:", categoryFilter, "у Python...");
@@ -430,7 +448,7 @@ Popup {
                             "id": alg["id"],
                             "name": alg["name"] || "",
                             "category": alg["category"] || "",
-                            "time_type": alg["time_type"] || "",
+                            "time_type": alg["time_type"] || "", // <-- ВАЖНО: Получаем time_type
                             "description": alg["description"] || ""
                         });
                         console.log("QML StartNewAlgorithmDialog: Алгоритм", i, "(ID:", alg.id, ") добавлен в модель (категория совпадает).");
@@ -540,6 +558,80 @@ Popup {
         console.log("QML StartNewAlgorithmDialog: Текущий дежурный", currentDutyOfficerDisplay, "не найден в списке должностных лиц для выбора. Оставляем без выбора.");
     }
 
+    /**
+     * Обновляет поля даты и времени в соответствии с selectedAlgorithmTimeType
+     * Использует appData.localTime и appData.localDate для получения местного времени
+     */
+    function updateDateTimeFields() {
+        console.log("QML StartNewAlgorithmDialog: Обновление полей даты/времени для time_type:", selectedAlgorithmTimeType);
+        
+        if (!selectedAlgorithmTimeType) {
+            console.log("QML StartNewAlgorithmDialog: time_type не установлен, пропускаем обновление.");
+            // Опционально: сбросить поля в текущее местное время/дату
+            // resetTimeFieldsToDefault();
+            return;
+        }
+
+        var localDate = appData.localDate; // Например, "26.09.2025"
+        var localTime = appData.localTime; // Например, "15:30:45"
+        console.log("QML StartNewAlgorithmDialog: Получено местное время из appData: дата =", localDate, ", время =", localTime);
+
+        // Разбор местного времени
+        var localTimeParts = localTime.split(':');
+        if (localTimeParts.length !== 3) {
+             console.warn("QML StartNewAlgorithmDialog: Невозможно разобрать местное время:", localTime);
+             return;
+        }
+        var localHours = localTimeParts[0];
+        var localMinutes = localTimeParts[1];
+        var localSeconds = localTimeParts[2];
+
+        switch(selectedAlgorithmTimeType) {
+            case 'астрономическое':
+                console.log("QML StartNewAlgorithmDialog: Установка значений для астрономического времени.");
+                // Устанавливаем дату (берем из поля, если оно заполнено, иначе текущую местную)
+                // Если поле даты уже содержит валидную дату, оставляем её. Если нет - ставим местную.
+                var currentFieldDate = startDateField.text.trim();
+                var dateRegex = /^(0[1-9]|[12][0-9]|3[01])\.(0[1-9]|1[012])\.(19|20)\d\d$/;
+                if (!dateRegex.test(currentFieldDate)) {
+                    startDateField.text = localDate; // Если поле пустое или невалидное, ставим местную дату
+                    console.log("QML StartNewAlgorithmDialog: Установлена текущая местная дата для астрономического.");
+                } else {
+                    console.log("QML StartNewAlgorithmDialog: Оставлена пользовательская дата для астрономического:", currentFieldDate);
+                }
+                // Устанавливаем время в 00:00:00
+                startHoursField.text = "00";
+                startMinutesField.text = "00";
+                startSecondsField.text = "00";
+                console.log("QML StartNewAlgorithmDialog: Установлено время 00:00:00 для астрономического.");
+                break;
+            case 'оперативное':
+                console.log("QML StartNewAlgorithmDialog: Установка значений для оперативного времени.");
+                // Устанавливаем текущую местную дату и время
+                startDateField.text = localDate;
+                startHoursField.text = localHours;
+                startMinutesField.text = localMinutes;
+                startSecondsField.text = localSeconds;
+                console.log("QML StartNewAlgorithmDialog: Установлена текущая местная дата и время для оперативного.");
+                break;
+            default:
+                console.warn("QML StartNewAlgorithmDialog: Неизвестный time_type:", selectedAlgorithmTimeType);
+                // Опционально: сбросить поля в текущее местное время/дату или 00:00:00
+                // resetTimeFieldsToDefault();
+        }
+    }
+
+    /**
+     * (Опционально) Сбрасывает поля времени в 00:00:00 и дату в текущую местную.
+     * Используется, если time_type неизвестен или не установлен.
+     */
+    // function resetTimeFieldsToDefault() {
+    //     console.log("QML StartNewAlgorithmDialog: Сброс полей времени в значение по умолчанию (00:00:00, текущая дата).");
+    //     startDateField.text = appData.localDate;
+    //     startHoursField.text = "00";
+    //     startMinutesField.text = "00";
+    //     startSecondsField.text = "00";
+    // }
 
     /**
      * Вспомогательная функция для инкремента/декремента компонентов времени

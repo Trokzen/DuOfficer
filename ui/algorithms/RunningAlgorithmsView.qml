@@ -11,11 +11,8 @@ Item {
     // --- ---
 
     // --- Сигналы ---
-    // Сигнал, который будет эмитироваться при нажатии кнопки "Запустить новый алгоритм"
     signal startNewAlgorithmRequested(string category)
-    // Сигнал, который будет эмитироваться при нажатии кнопки "Завершить"
     signal finishAlgorithmRequested(int executionId)
-    // Сигнал, который будет эмитироваться при нажатии кнопки "Развернуть"
     signal expandAlgorithmRequested(int executionId)
     // --- ---
 
@@ -31,27 +28,21 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             spacing: 10
-
+            
             Button {
                 text: "Запустить новый алгоритм"
-                onClicked: {
-                    console.log("QML RunningAlgorithmsView: Запрошено открытие диалога запуска для категории:", categoryFilter);
-                    // Эмитируем сигнал, который будет пойман в MainWindowContent.qml
-                    runningAlgorithmsViewRoot.startNewAlgorithmRequested(categoryFilter);
-                }
+                onClicked: runningAlgorithmsViewRoot.startNewAlgorithmRequested(categoryFilter)
             }
-
+            
             Item {
                 Layout.fillWidth: true // Заполнитель
             }
-
-            // --- Календарь (пока заглушка) ---
+            
             Button {
                 text: "Календарь"
                 onClicked: {
                     console.log("QML RunningAlgorithmsView: Нажата кнопка Календарь для категории:", categoryFilter);
                     // TODO: Открыть CalendarView
-                    // Можно передать categoryFilter в CalendarView
                 }
             }
         }
@@ -62,31 +53,44 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-
+            
             ListView {
                 id: executionsListView
                 model: executionsModel
-                spacing: 5 // Небольшой отступ между элементами
+                spacing: 8 // Небольшой отступ между элементами
 
                 delegate: Rectangle {
                     width: ListView.view.width
-                    height: implicitHeight // Позволяем высоте определяться содержимым
-                    color: index % 2 ? "#f9f9f9" : "#ffffff"
+                    height: contentColumn.implicitHeight + 2 * padding // Высота зависит от содержимого
+                    property int padding: 10
+
+                    // --- Визуальные стили в зависимости от статуса ---
+                    color: {
+                        switch(model.status) {
+                            case "active": return "#e8f4fd"; // Светло-голубой для активных
+                            case "completed": return "#e8f5e9"; // Светло-зелёный для завершённых
+                            case "cancelled": return "#ffebee"; // Светло-красный для отменённых
+                            default: return index % 2 ? "#f9f9f9" : "#ffffff"; // Стандартный чередующийся
+                        }
+                    }
                     border.color: executionsListView.currentIndex === index ? "#3498db" : "#ddd"
                     border.width: 1
-                    radius: 3
+                    radius: 5
+                    // --- ---
 
                     // Используем ColumnLayout для вертикального размещения элементов
                     ColumnLayout {
+                        id: contentColumn
                         anchors.fill: parent
-                        anchors.margins: 8 // Отступы внутри элемента
-                        spacing: 4
+                        anchors.margins: padding // Отступы внутри элемента
+                        spacing: 6
 
-                        // Название алгоритма
+                        // Название алгоритма (жирный шрифт)
                         Text {
                             Layout.fillWidth: true
                             text: model.algorithm_name || "Без названия"
                             font.bold: true
+                            font.pixelSize: rootItem.scaleFactor * 12 // Используем scaleFactor
                             elide: Text.ElideRight
                             color: "black"
                         }
@@ -96,40 +100,56 @@ Item {
                             Layout.fillWidth: true
                             text: "Ответственный: " + (model.created_by_user_display_name || "Не назначен")
                             color: "gray"
-                            font.pixelSize: 11
+                            font.pixelSize: rootItem.scaleFactor * 10
                             elide: Text.ElideRight
                         }
 
-                        // Статус и время
+                        // Статус и время (в одной строке)
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 10
 
-                            Text {
-                                text: "Статус: " + (model.status || "неизвестен")
-                                color: model.status === "completed" ? "green" : (model.status === "cancelled" ? "red" : "gray")
-                                font.pixelSize: 10
+                            // Статус
+                            Rectangle {
+                                Layout.preferredWidth: 100 // Фиксированная ширина для статуса
+                                Layout.preferredHeight: 20
+                                radius: 3
+                                color: {
+                                    switch(model.status) {
+                                        case "active": return "#3498db";
+                                        case "completed": return "#2ecc71";
+                                        case "cancelled": return "#e74c3c";
+                                        default: return "#95a5a6";
+                                    }
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: model.status || "неизвестен"
+                                    color: "white"
+                                    font.pixelSize: rootItem.scaleFactor * 9
+                                    font.bold: true
+                                }
                             }
 
-                            Item {
-                                Layout.fillWidth: true
-                            }
+                            Item { Layout.fillWidth: true } // Заполнитель
 
+                            // Время начала
                             Text {
-                                text: "Начало: " + (model.started_at || "—")
+                                text: "Начат: " + (model.started_at || "—")
                                 color: "gray"
-                                font.pixelSize: 10
+                                font.pixelSize: rootItem.scaleFactor * 10
+                                elide: Text.ElideRight
                             }
                         }
 
-                        // Кнопки управления (размещаем в RowLayout)
+                        // Кнопки управления (размещаем в отдельной строке, прижатой к правому краю)
                         RowLayout {
                             Layout.alignment: Qt.AlignRight // Выравнивание кнопок по правому краю
-                            spacing: 5
+                            spacing: 8 // Немного больше отступа между кнопками
 
                             Button {
                                 text: "Завершить"
-                                font.pixelSize: 10
+                                font.pixelSize: rootItem.scaleFactor * 10
                                 // Включаем только если статус 'active'
                                 enabled: model.status === "active"
                                 onClicked: {
@@ -147,41 +167,46 @@ Item {
 
                             Button {
                                 text: "Развернуть"
-                                font.pixelSize: 10
+                                font.pixelSize: rootItem.scaleFactor * 10
                                 onClicked: {
                                     console.log("QML RunningAlgorithmsView: Запрошено развертывание execution ID:", model.id);
-                                    // Вызываем сигнал, который может обрабатываться родителем
                                     runningAlgorithmsViewRoot.expandAlgorithmRequested(model.id);
-                                    // Или открываем диалог деталей напрямую (если будет реализован)
-                                    // algorithmExecutionDetailsDialog.executionId = model.id;
-                                    // algorithmExecutionDetailsDialog.open();
                                 }
                             }
                         }
                     }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: executionsListView.currentIndex = index
-                    }
                 }
 
-                // Индикатор загрузки или пустого списка (опционально)
+                // Индикатор загрузки или пустого списка
                 header: Item {
                     width: ListView.view.width
-                    height: 30 // Высота индикатора
-                    visible: executionsModel.count === 0 // Показываем, только если список пуст после загрузки
+                    height: 40 // Высота заголовка/индикатора
+                    visible: executionsModel.count === 0
 
                     Text {
                         anchors.centerIn: parent
                         text: categoryFilter ? "Нет запущенных алгоритмов" : "Выберите категорию"
                         color: "gray"
                         font.italic: true
+                        font.pixelSize: rootItem.scaleFactor * 12
                     }
                 }
             }
         }
         // --- ---
+    }
+
+    // --- Загрузка при изменении categoryFilter ---
+    onCategoryFilterChanged: {
+        console.log("QML RunningAlgorithmsView: categoryFilter изменился на:", categoryFilter);
+        runningAlgorithmsViewRoot.loadExecutions();
+    }
+
+    Component.onCompleted: {
+        console.log("QML RunningAlgorithmsView: Загружен. Категория:", categoryFilter);
+        if (categoryFilter && categoryFilter !== "") {
+            runningAlgorithmsViewRoot.loadExecutions();
+        }
     }
 
     /**
@@ -196,35 +221,24 @@ Item {
 
         console.log("QML RunningAlgorithmsView: Запрос списка активных executions для категории:", categoryFilter);
         var executionsList = appData.getActiveExecutionsByCategory(categoryFilter);
-        console.log("QML RunningAlgorithmsView: Получен список executions из Python (сырой):", JSON.stringify(executionsList).substring(0, 500));
 
-        // --- Преобразование QJSValue/QVariant в массив JS ---
+        // Преобразование QJSValue/QVariant в массив JS
         if (executionsList && typeof executionsList === 'object' && typeof executionsList.hasOwnProperty === 'function' && executionsList.hasOwnProperty('toVariant')) {
             console.log("QML RunningAlgorithmsView: Обнаружен QJSValue, преобразование в JS-объект...");
             executionsList = executionsList.toVariant();
-            console.log("QML RunningAlgorithmsView: QJSValue преобразован. Первые 500 символов:", JSON.stringify(executionsList).substring(0, 500));
+            console.log("QML RunningAlgorithmsView: QJSValue преобразован.");
         } else {
             console.log("QML RunningAlgorithmsView: Преобразование QJSValue не требуется.");
         }
-        // --- ---
 
-        // --- Очистка модели ---
+        // Очистка модели
         console.log("QML RunningAlgorithmsView: Очистка модели ListView executions...");
-        var oldCount = executionsModel.count;
         executionsModel.clear();
-        console.log("QML RunningAlgorithmsView: Модель очищена. Было элементов:", oldCount, "Стало:", executionsModel.count);
-        // --- ---
 
-        // --- Заполнение модели ---
-        // --- ИЗМЕНЕНО: Более гибкая проверка на "массивоподобность" ---
+        // Заполнение модели
         if (executionsList && typeof executionsList === 'object' && executionsList.length !== undefined) {
-        // --- ---
             var count = executionsList.length;
             console.log("QML RunningAlgorithmsView: Полученный список является массивоподобным. Количество элементов:", count);
-
-            if (count === 0) {
-                console.log("QML RunningAlgorithmsView: Список executions пуст для категории:", categoryFilter);
-            }
 
             for (var i = 0; i < count; i++) {
                 var execution = executionsList[i];
@@ -232,7 +246,6 @@ Item {
 
                 if (typeof execution === 'object' && execution !== null) {
                     try {
-                        // --- Явное копирование свойств ---
                         var executionCopy = {
                             "id": execution["id"],
                             "algorithm_id": execution["algorithm_id"],
@@ -244,8 +257,6 @@ Item {
                             "created_by_user_id": execution["created_by_user_id"] || null,
                             "created_by_user_display_name": execution["created_by_user_display_name"] || "Неизвестен"
                         };
-                        // --- ---
-
                         executionsModel.append(executionCopy);
                         console.log("QML RunningAlgorithmsView: Execution", i, "добавлен в модель.");
                     } catch (e_append) {
@@ -259,20 +270,5 @@ Item {
             console.error("QML RunningAlgorithmsView: Python не вернул корректный массивоподобный объект для executions. Получен тип:", typeof executionsList, "Значение:", executionsList);
         }
         console.log("QML RunningAlgorithmsView: Модель ListView executions обновлена. Элементов:", executionsModel.count);
-        // --- ---
-    }
-
-    // --- Загрузка при изменении categoryFilter ---
-    onCategoryFilterChanged: {
-        console.log("QML RunningAlgorithmsView: categoryFilter изменился на:", categoryFilter);
-        runningAlgorithmsViewRoot.loadExecutions();
-    }
-
-    Component.onCompleted: {
-        console.log("QML RunningAlgorithmsView: Загружен. Категория:", categoryFilter);
-        // Загружаем сразу, если categoryFilter уже задан
-        if (categoryFilter && categoryFilter !== "") {
-            runningAlgorithmsViewRoot.loadExecutions();
-        }
     }
 }
