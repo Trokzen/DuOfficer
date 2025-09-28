@@ -1622,18 +1622,49 @@ class ApplicationData(QObject):
     @Slot(int, result=bool)
     def stopAlgorithm(self, execution_id: int) -> bool:
         """
-        Слот для остановки execution из QML.
+        Слот для остановки (завершения) execution из QML.
+        Использует ТЕКУЩЕЕ МЕСТНОЕ ВРЕМЯ для установки completed_at.
         """
         print(f"Python: QML запросил остановку execution ID {execution_id}.")
         if self.pg_database_manager:
             try:
-                success = self.pg_database_manager.stop_algorithm(execution_id)
+                # --- ИЗМЕНЕНО: Используем ТОТ ЖЕ метод, что и update_time ---
+                # Получаем текущее местное время как QDateTime
+                from PySide6.QtCore import QDateTime
+                now_system_qt = QDateTime.currentDateTime()
+                local_dt_qt = now_system_qt.addSecs(self._custom_time_offset_seconds)
+                print(f"Python: Текущее местное время (QDateTime): {local_dt_qt.toString('dd.MM.yyyy hh:mm:ss')}")
+
+                # Преобразуем QDateTime в Python datetime.datetime
+                # QDateTime.toPython() (доступен в PySide6.4+) или через timestamp
+                try:
+                    # Метод toPython() более прямой, если доступен
+                    local_now_dt = local_dt_qt.toPython()
+                    print(f"Python: Преобразовано в datetime.datetime (toPython): {local_now_dt}")
+                except AttributeError:
+                    # Если toPython() недоступен, используем timestamp
+                    import datetime
+                    timestamp = local_dt_qt.toSecsSinceEpoch() # Получаем timestamp (int)
+                    # datetime.fromtimestamp использует локальную временную зону системы.
+                    # Но мы хотим интерпретировать timestamp как UTC, чтобы затем применить наше смещение.
+                    # QDateTime.toSecsSinceEpoch() возвращает время в секундах с начала эпохи UTC.
+                    # datetime.utcfromtimestamp() интерпретирует это как UTC.
+                    # local_now_dt = datetime.datetime.utcfromtimestamp(timestamp) + datetime.timedelta(seconds=self._custom_time_offset_seconds)
+                    # НО! Мы уже применили смещение через addSecs, поэтому просто преобразуем.
+                    local_now_dt = datetime.datetime.fromtimestamp(timestamp)
+                    print(f"Python: Преобразовано в datetime.datetime (fromtimestamp): {local_now_dt}")
+                # --- ---
+                
+                print(f"Python: Местное время для завершения execution ID {execution_id}: {local_now_dt}")
+                
+                # Вызываем метод менеджера БД, передавая местное время
+                success = self.pg_database_manager.stop_algorithm(execution_id, local_now_dt)
                 return success
             except Exception as e:
                 print(f"Python: Ошибка в слоте stopAlgorithm: {e}")
                 import traceback
                 traceback.print_exc()
-                return False # Возвращаем False в случае ошибки
+                return False
         else:
             print("Python: Ошибка - pg_database_manager не инициализирован.")
             return False
@@ -1692,6 +1723,31 @@ class ApplicationData(QObject):
         else:
             print("Python: Ошибка - pg_database_manager не инициализирован.")
             return False # или -1
+
+    @Slot(str, str, result='QVariant') # Принимает строку категории и строку даты
+    def getCompletedExecutionsByCategoryAndDate(self, category: str, date_string: str) -> 'QVariant':
+        """
+        Слот для получения списка завершённых executions по категории и дате из QML.
+        :param category: Категория алгоритмов.
+        :param date_string: Дата в формате 'DD.MM.YYYY'.
+        :return: Список словарей с данными execution'ов или пустой список.
+        """
+        print(f"Python: QML запросил завершённые executions для категории '{category}' и даты '{date_string}'.")
+        if self.pg_database_manager:
+            try:
+                # Вызов метода из PostgreSQLDatabaseManager
+                executions_list = self.pg_database_manager.get_completed_executions_by_category_and_date(category, date_string)
+                print(f"Python: Найдено {len(executions_list) if isinstance(executions_list, list) else 'N/A'} завершённых executions.")
+                # QML ожидает список словарей (QVariantList of QVariantMap)
+                return executions_list if isinstance(executions_list, list) else []
+            except Exception as e:
+                print(f"Python: Ошибка в слоте getCompletedExecutionsByCategoryAndDate: {e}")
+                import traceback
+                traceback.print_exc()
+                return []
+        else:
+            print("Python: Ошибка - pg_database_manager не инициализирован.")
+            return []
 
     def minimize_window(self):
         if self.window:

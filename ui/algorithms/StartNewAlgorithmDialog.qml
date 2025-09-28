@@ -2,7 +2,6 @@
 import QtQuick 6.5
 import QtQuick.Controls 6.5
 import QtQuick.Layouts 6.5
-// import QtQuick.Dialogs 6.5 // Если понадобится MessageDialog
 
 Popup {
     id: startNewAlgorithmDialog
@@ -231,10 +230,34 @@ Popup {
                         font.pixelSize: 16
                         Layout.preferredWidth: 40
                         onClicked: {
-                            // TODO: Открыть календарь для выбора даты
                             console.log("QML StartNewAlgorithmDialog: Нажата кнопка календаря для выбора даты начала");
-                            // showInfoMessage("Выбор даты (TODO): " + startDateField.text); // УДАЛЁН
-                            console.log("QML StartNewAlgorithmDialog: Выбор даты (TODO): " + startDateField.text);
+                            // --- НОВОЕ: Открываем собственный календарь ---
+                            // Пытаемся установить начальную дату в календаре
+                            var currentDateText = startDateField.text.trim();
+                            var dateRegex = /^(0[1-9]|[12][0-9]|3[01])\.(0[1-9]|1[012])\.(19|20)\d\d$/;
+                            if (dateRegex.test(currentDateText)) {
+                                // Пытаемся распарсить дату из поля ввода
+                                var parts = currentDateText.split('.');
+                                var day = parseInt(parts[0], 10);
+                                var month = parseInt(parts[1], 10) - 1; // Месяцы в JS Date от 0 до 11
+                                var year = parseInt(parts[2], 10);
+                                // Проверяем, является ли распарсенная дата валидной
+                                var testDate = new Date(year, month, day);
+                                if (testDate.getDate() === day && testDate.getMonth() === month && testDate.getFullYear() === year) {
+                                    customCalendarPicker.selectedDate = testDate;
+                                    console.log("QML StartNewAlgorithmDialog: CustomCalendarPicker инициализирован датой из поля:", testDate);
+                                } else {
+                                    // Если дата некорректна, используем текущую
+                                    customCalendarPicker.selectedDate = new Date();
+                                    console.log("QML StartNewAlgorithmDialog: CustomCalendarPicker инициализирован текущей датой (некорректная дата в поле).");
+                                }
+                            } else {
+                                // Если формат не совпадает, используем текущую дату
+                                customCalendarPicker.selectedDate = new Date();
+                                console.log("QML StartNewAlgorithmDialog: CustomCalendarPicker инициализирован текущей датой (некорректный формат в поле).");
+                            }
+                            customCalendarPicker.open();
+                            // --- ---
                         }
                     }
                 }
@@ -359,6 +382,24 @@ Popup {
                     }
                 }
             }
+        }
+    }
+
+    // --- НОВОЕ: Экземпляр собственного календаря ---
+    CustomCalendarPicker {
+        id: customCalendarPicker
+        onDateSelected: {
+            // --- ИСПРАВЛЕНО: Получаем дату из свойства customCalendarPicker, а не из параметра ---
+            console.log("QML StartNewAlgorithmDialog: CustomCalendarPicker: Дата выбрана:", Qt.formatDate(customCalendarPicker.selectedDate, "yyyy-MM-dd"));
+            // Форматируем выбранную дату в строку DD.MM.YYYY
+            var year = customCalendarPicker.selectedDate.getFullYear();
+            var month = String(customCalendarPicker.selectedDate.getMonth() + 1).padStart(2, '0'); // Месяцы с 0
+            var day = String(customCalendarPicker.selectedDate.getDate()).padStart(2, '0');
+            var formattedDate = day + "." + month + "." + year;
+            console.log("QML StartNewAlgorithmDialog: CustomCalendarPicker: Отформатированная дата:", formattedDate);
+            // Устанавливаем выбранную дату в поле ввода
+            startDateField.text = formattedDate;
+            // --- ---
         }
     }
 
@@ -599,11 +640,11 @@ Popup {
                 } else {
                     console.log("QML StartNewAlgorithmDialog: Оставлена пользовательская дата для астрономического:", currentFieldDate);
                 }
-                // Устанавливаем время в 00:00:00
-                startHoursField.text = "00";
-                startMinutesField.text = "00";
-                startSecondsField.text = "00";
-                console.log("QML StartNewAlgorithmDialog: Установлено время 00:00:00 для астрономического.");
+                startDateField.text = localDate;
+                startHoursField.text = localHours;
+                startMinutesField.text = localMinutes;
+                startSecondsField.text = localSeconds;
+                console.log("QML StartNewAlgorithmDialog: Установлена текущая местная дата и время для астрономического.");
                 break;
             case 'оперативное':
                 console.log("QML StartNewAlgorithmDialog: Установка значений для оперативного времени.");

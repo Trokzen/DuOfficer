@@ -1607,6 +1607,7 @@ class PostgreSQLDatabaseManager:
                         snapshot_name AS algorithm_name, -- Имя из snapshot'а
                         snapshot_category AS category, -- Категория из snapshot'а
                         started_at,
+                        TO_CHAR(started_at, 'DD.MM.YYYY HH24:MI:SS') AS started_at_display, -- <-- НОВОЕ: Отформатированное значение
                         completed_at,
                         status,
                         created_by_user_id, -- ID пользователя на момент запуска
@@ -1633,12 +1634,13 @@ class PostgreSQLDatabaseManager:
             traceback.print_exc()
             return []
 
-    def stop_algorithm(self, execution_id: int) -> bool:
+    def stop_algorithm(self, execution_id: int, local_completed_at_dt: datetime.datetime) -> bool:
         """
         Останавливает (меняет статус на 'completed') запущенный алгоритм (execution) по его ID.
-        Также устанавливает completed_at в текущее время.
+        Устанавливает completed_at в переданное местное время.
 
         :param execution_id: ID execution'а для остановки.
+        :param local_completed_at_dt: Объект datetime.datetime, представляющий местное время завершения.
         :return: True, если успешно, иначе False.
         """
         if not self.connection:
@@ -1649,27 +1651,36 @@ class PostgreSQLDatabaseManager:
             print(f"PostgreSQLDatabaseManager: Некорректный ID execution: {execution_id}")
             return False
 
+        # --- ДОБАВЛЕНО: Проверка типа local_completed_at_dt ---
+        if not isinstance(local_completed_at_dt, datetime.datetime):
+             print(f"PostgreSQLDatabaseManager: Ошибка - local_completed_at_dt должен быть datetime.datetime, а не {type(local_completed_at_dt)}.")
+             return False
+        # --- ---
+
         try:
             with self.connection.cursor() as cursor:
+                # --- ИЗМЕНЕНО: Используем переданное local_completed_at_dt ---
                 # Обновляем статус и время завершения
                 query = """
                     UPDATE app_schema.algorithm_executions
-                    SET status = 'completed', completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                    SET status = 'completed', completed_at = %s, updated_at = CURRENT_TIMESTAMP
                     WHERE id = %s AND status = 'active'; -- Обновляем только если статус был 'active'
                 """
-                cursor.execute(query, (execution_id,))
+                # Передаём local_completed_at_dt как параметр в запрос
+                cursor.execute(query, (local_completed_at_dt, execution_id))
+                # --- ---
                 rows_affected = cursor.rowcount
                 self.connection.commit()
 
                 if rows_affected > 0:
-                    print(f"PostgreSQLDatabaseManager: Execution ID {execution_id} успешно остановлен.")
+                    print(f"PostgreSQLDatabaseManager: Execution ID {execution_id} успешно остановлен. Время завершения: {local_completed_at_dt}")
                     return True
                 else:
                     print(f"PostgreSQLDatabaseManager: Execution ID {execution_id} не найден или уже был остановлен.")
                     return False
         except psycopg2.Error as e:
             print(f"PostgreSQLDatabaseManager: Ошибка при остановке execution ID {execution_id}: {e}")
-            self.connection.rollback() # Откатываем транзакцию в случае ошибки
+            self.connection.rollback()
             import traceback
             traceback.print_exc()
             return False
@@ -1870,6 +1881,78 @@ class PostgreSQLDatabaseManager:
             import traceback
             traceback.print_exc()
             return -1
+
+    def get_completed_executions_by_category_and_date(self, category: str, date_string: str) -> List[Dict[str, Any]]:
+        """
+        Получает список завершённых (status = 'completed' или 'cancelled')
+        выполнений алгоритмов (algorithm_executions) за заданную дату и категорию.
+        Включает время начала и окончания в отформатированном виде.
+
+        :param category: Категория алгоритмов (snapshot_category).
+        :param date_string: Дата в формате 'DD.MM.YYYY'.
+        :return: Список словарей с данными execution'ов.
+        """
+        if not self.connection:
+            print("PostgreSQLDatabaseManager: Нет подключения к БД.")
+            return []
+
+        if not category or not date_string:
+            print("PostgreSQLDatabaseManager: Категория или дата не заданы.")
+            return []
+
+        try:
+            # Преобразуем дату из DD.MM.YYYY в объект date для SQL
+            from datetime import datetime
+            target_date = datetime.strptime(date_string, '%d.%m.%Y').date()
+            target_date_iso = target_date.isoformat() # 'YYYY-MM-DD'
+
+            print(f"PostgreSQLDatabaseManager: Поиск завершённых executions категории '{category}' за дату {target_date_iso}.")
+
+            with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                # SQL-запрос
+                sql_query = f"""
+                    SELECT
+                        ae.id,
+                        ae.algorithm_id,
+                        ae.snapshot_name AS algorithm_name,
+                        ae.snapshot_category AS category,
+                        ae.started_at,
+                        TO_CHAR(ae.started_at, 'DD.MM.YYYY HH24:MI:SS') AS started_at_display,
+                        ae.completed_at,
+                        CASE
+                            WHEN ae.completed_at IS NOT NULL THEN TO_CHAR(ae.completed_at, 'DD.MM.YYYY HH24:MI:SS')
+                            ELSE NULL
+                        END AS completed_at_display,
+                        ae.status,
+                        ae.created_by_user_id,
+                        ae.created_by_user_display_name
+                    FROM {self.SCHEMA_NAME}.algorithm_executions ae
+                    WHERE ae.snapshot_category = %s
+                    AND ae.status IN ('completed', 'cancelled')
+                    AND CAST(ae.completed_at AS DATE) = %s
+                    ORDER BY ae.completed_at DESC;
+                """
+                cursor.execute(sql_query, (category, target_date_iso))
+                rows = cursor.fetchall()
+
+                # Преобразуем результаты в список словарей
+                executions = [dict(row) for row in rows]
+                print(f"PostgreSQLDatabaseManager: Найдено {len(executions)} завершённых executions.")
+                return executions
+
+        except psycopg2.Error as e:
+            print(f"PostgreSQLDatabaseManager: Ошибка БД при получении завершённых executions: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+        except ValueError as ve:
+            print(f"PostgreSQLDatabaseManager: Ошибка преобразования даты '{date_string}': {ve}")
+            return []
+        except Exception as e:
+            print(f"PostgreSQLDatabaseManager: Неизвестная ошибка: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
 
 # --- Пример использования (для тестирования модуля отдельно) ---
 if __name__ == "__main__":
