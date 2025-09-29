@@ -33,6 +33,10 @@ class ApplicationData(QObject):
     moscowDateChanged = Signal()  # Сигнал для изменения московской даты    
     timeSettingsChanged = Signal() # Сигнал для обновления настроек времени
     backgroundImagePathChanged = Signal()
+    algorithmsListChanged = Signal()
+    printFontFamilyChanged = Signal()
+    printFontSizeChanged = Signal()
+    printFontStyleChanged = Signal()
 
 
     def load_initial_settings(self):
@@ -106,6 +110,27 @@ class ApplicationData(QObject):
 
                     # ... (здесь можно добавить загрузку других настроек внешнего вида: font_family, font_size и т.д.) ...
                     
+                    # --- НОВОЕ: Загрузка настроек шрифта печати ---
+                    updated_print_props = False
+                    if 'print_font_family' in settings and settings['print_font_family']:
+                        self._print_font_family = settings['print_font_family']
+                        self.printFontFamilyChanged.emit()
+                        updated_print_props = True
+                        print(f"Python: Загружен print_font_family: {self._print_font_family}")
+
+                    if 'print_font_size' in settings and isinstance(settings['print_font_size'], int):
+                        self._print_font_size = settings['print_font_size']
+                        self.printFontSizeChanged.emit()
+                        updated_print_props = True
+                        print(f"Python: Загружен print_font_size: {self._print_font_size}")
+                    
+                    # --- ДОБАВЛЕНО: Загрузка начертания шрифта печати ---
+                    if 'print_font_style' in settings and settings['print_font_style']:
+                        self._print_font_style = settings['print_font_style']
+                        self.printFontStyleChanged.emit() # <-- Добавлено
+                        updated_print_props = True
+                        print(f"Python: Загружен print_font_style: {self._print_font_style}")
+
                     if updated_appearance_props:
                         print("Python: Некоторые настройки внешнего вида обновлены из БД.")
                         # Уведомляем QML об общем изменении настроек (если нужно)
@@ -152,6 +177,10 @@ class ApplicationData(QObject):
         # --- ИНИЦИАЛИЗАЦИЯ НОВЫХ СВОЙСТВ ДЛЯ ДАТ ---
         self._local_date = self._current_date # <-- Новое внутреннее свойство
         self._moscow_date = self._current_date # <-- Новое внутреннее свойство
+        self._print_font_family = "Arial" # Значение по умолчанию
+        self._print_font_size = 12        # Значение по умолчанию
+        # --- НОВОЕ СВОЙСТВО ДЛЯ НАЧЕРТАНИЯ ШРИФТА ПЕЧАТИ ---
+        self._print_font_style = "normal" # Значение по умолчанию # <-- Добавлено
         # --- ---
         # Инициализируем путь к эмблеме значением по умолчанию или None
         self._background_image_path = None # <-- ИЛИ путь к дефолтной эмблеме, если нужно
@@ -305,6 +334,19 @@ class ApplicationData(QObject):
     @Property(str, notify=backgroundImagePathChanged)
     def backgroundImagePath(self):
         return self._background_image_path
+
+    @Property(str, notify=printFontFamilyChanged)
+    def printFontFamily(self):
+        return self._print_font_family
+
+    @Property(int, notify=printFontSizeChanged)
+    def printFontSize(self):
+        return self._print_font_size
+
+    # --- НОВОЕ СВОЙСТВО ДЛЯ НАЧЕРТАНИЯ ШРИФТА ПЕЧАТИ ---
+    @Property(str, notify=printFontStyleChanged) # <-- Добавлено
+    def printFontStyle(self):                   # <-- Добавлено
+        return self._print_font_style           # <-- Добавлено
 
     @Slot(str)
     def setDutyOfficer(self, name):
@@ -648,6 +690,27 @@ class ApplicationData(QObject):
                         # --- ---
                         # Уведомляем QML об общем изменении настроек (если нужно)
                         # self.settingsChanged.emit() # (если такой сигнал используется глобально)
+
+                    # --- НОВОЕ: Обновление локальных свойств ApplicationData для шрифта печати ---
+                    updated_print_props = False
+                    if 'print_font_family' in new_settings:
+                        self._print_font_family = new_settings['print_font_family']
+                        self.printFontFamilyChanged.emit()
+                        updated_print_props = True
+                        print(f"Python: Обновлен print_font_family: {self._print_font_family}")
+
+                    if 'print_font_size' in new_settings:
+                        self._print_font_size = new_settings['print_font_size']
+                        self.printFontSizeChanged.emit()
+                        updated_print_props = True
+                        print(f"Python: Обновлен print_font_size: {self._print_font_size}")
+                    
+                    # --- ДОБАВЛЕНО: Обновление начертания шрифта печати ---
+                    if 'print_font_style' in new_settings:
+                        self._print_font_style = new_settings['print_font_style']
+                        self.printFontStyleChanged.emit() # <-- Добавлено
+                        updated_print_props = True
+                        print(f"Python: Обновлен print_font_style: {self._print_font_style}")
                     
                     return True
                 else:
@@ -1435,7 +1498,259 @@ class ApplicationData(QObject):
             print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
             return -1
 
-    
+
+    @Slot(int, result=bool)
+    def moveAlgorithmUp(self, algorithm_id: int) -> bool:
+        """
+        Перемещает алгоритм вверх в списке.
+        :param algorithm_id: ID алгоритма для перемещения.
+        :return: True, если успешно, иначе False.
+        """
+        print(f"Python: QML отправил запрос на перемещение алгоритма ID {algorithm_id} вверх.")
+        if not isinstance(algorithm_id, int) or algorithm_id <= 0:
+            print(f"Python: Ошибка - Некорректный ID алгоритма: {algorithm_id}")
+            return False
+
+        if self.pg_database_manager:
+            try:
+                success = self.pg_database_manager.move_algorithm_up(algorithm_id)
+                if success:
+                    print(f"Python: Алгоритм ID {algorithm_id} успешно перемещен вверх.")
+                    # Перезагружаем список алгоритмов в QML
+                    self.algorithmsListChanged.emit()
+                    return True
+                else:
+                    print(f"Python: Не удалось переместить алгоритм ID {algorithm_id} вверх.")
+                    return False
+            except Exception as e:
+                print(f"Python: Исключение при перемещении алгоритма {algorithm_id} вверх: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+        else:
+            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            return False
+
+    @Slot(int, result=bool)
+    def moveAlgorithmDown(self, algorithm_id: int) -> bool:
+        """
+        Перемещает алгоритм вниз в списке.
+        :param algorithm_id: ID алгоритма для перемещения.
+        :return: True, если успешно, иначе False.
+        """
+        print(f"Python: QML отправил запрос на перемещение алгоритма ID {algorithm_id} вниз.")
+        if not isinstance(algorithm_id, int) or algorithm_id <= 0:
+            print(f"Python: Ошибка - Некорректный ID алгоритма: {algorithm_id}")
+            return False
+
+        if self.pg_database_manager:
+            try:
+                success = self.pg_database_manager.move_algorithm_down(algorithm_id)
+                if success:
+                    print(f"Python: Алгоритм ID {algorithm_id} успешно перемещен вниз.")
+                    # Перезагружаем список алгоритмов в QML
+                    self.algorithmsListChanged.emit()
+                    return True
+                else:
+                    print(f"Python: Не удалось переместить алгоритм ID {algorithm_id} вниз.")
+                    return False
+            except Exception as e:
+                print(f"Python: Исключение при перемещении алгоритма {algorithm_id} вниз: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+        else:
+            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            return False
+
+    @Slot(str, result='QVariant') # Принимает строку даты, возвращает список
+    def getExecutionsByDate(self, date_string: str) -> 'QVariant':
+        """
+        Возвращает список алгоритмов (algorithm_executions) за заданную дату.
+        :param date_string: Дата в формате 'YYYY-MM-DD'.
+        :return: Список словарей с данными execution'ов.
+        """
+        print(f"Python: QML запросил список execution'ов за дату '{date_string}'.")
+        
+        if not date_string:
+            print("Python: Ошибка - date_string пуста.")
+            return []
+            
+        if self.pg_database_manager:
+            try:
+                # Вызываем метод из менеджера БД
+                executions = self.pg_database_manager.get_executions_by_date(date_string)
+                if executions and isinstance(executions, list):
+                    print(f"Python: Получен список {len(executions)} execution'ов за дату '{date_string}' из БД.")
+                    # Возвращаем как есть, QML сам преобразует QVariantList в JS Array
+                    return executions 
+                else:
+                    print(f"Python: Не найдено execution'ов за дату '{date_string}' или ошибка получения.")
+                    return []
+            except Exception as e:
+                print(f"Python: Ошибка при получении execution'ов за дату '{date_string}': {e}")
+                import traceback
+                traceback.print_exc()
+                return []
+        else:
+            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            return []
+
+    # --- СЛОТЫ ДЛЯ РАБОТЫ С ЗАПУЩЕННЫМИ АЛГОРИТМАМИ (EXECUTIONS) ---
+
+    @Slot(str, result='QVariant')
+    def getActiveExecutionsByCategory(self, category: str) -> 'QVariant':
+        """
+        Слот для получения списка активных executions по категории из QML.
+        """
+        print(f"Python: QML запросил активные executions для категории '{category}'.")
+        if self.pg_database_manager:
+            try:
+                executions = self.pg_database_manager.get_active_executions_by_category(category)
+                # print(f"DEBUG: Executions from DB: {executions}")
+                # QML ожидает список словарей (QVariantList of QVariantMap)
+                return executions
+            except Exception as e:
+                print(f"Python: Ошибка в слоте getActiveExecutionsByCategory: {e}")
+                import traceback
+                traceback.print_exc()
+                return [] # Возвращаем пустой список в случае ошибки
+        else:
+            print("Python: Ошибка - pg_database_manager не инициализирован.")
+            return []
+
+    @Slot(int, result=bool)
+    def stopAlgorithm(self, execution_id: int) -> bool:
+        """
+        Слот для остановки (завершения) execution из QML.
+        Использует УЖЕ ВЫЧИСЛЕННОЕ местное время из ApplicationData.
+        """
+        print(f"Python: QML запросил остановку execution ID {execution_id}.")
+        if self.pg_database_manager:
+            try:
+                # --- ИЗМЕНЕНО: Используем УЖЕ ВЫЧИСЛЕННОЕ местное время ---
+                # Получаем местную дату и время напрямую из свойств ApplicationData
+                # Эти свойства обновляются таймером в update_time()
+                local_date_str = self.localDate  # Формат "DD.MM.YYYY"
+                local_time_str = self.localTime  # Формат "HH:MM:SS"
+                print(f"Python: Используем УЖЕ ВЫЧИСЛЕННОЕ местное время из ApplicationData: дата={local_date_str}, время={local_time_str}")
+                
+                # Объединяем дату и время в строку формата 'YYYY-MM-DD HH:MM:SS'
+                # Разбираем дату
+                from datetime import datetime
+                try:
+                    date_parts = local_date_str.split('.')
+                    day = int(date_parts[0])
+                    month = int(date_parts[1])
+                    year = int(date_parts[2])
+                    # Разбираем время
+                    time_parts = local_time_str.split(':')
+                    hours = int(time_parts[0])
+                    minutes = int(time_parts[1])
+                    seconds = int(time_parts[2])
+                    
+                    # Создаём объект datetime
+                    local_now_dt = datetime(year, month, day, hours, minutes, seconds)
+                    print(f"Python: Преобразовано в datetime.datetime: {local_now_dt}")
+                except (ValueError, IndexError) as ve:
+                    print(f"Python: Ошибка преобразования localDate/localTime в datetime: {ve}")
+                    return False
+                # --- ---
+                
+                print(f"Python: Местное время для завершения execution ID {execution_id}: {local_now_dt}")
+                
+                # Вызываем метод менеджера БД, передавая местное время
+                success = self.pg_database_manager.stop_algorithm(execution_id, local_now_dt)
+                return success
+            except Exception as e:
+                print(f"Python: Ошибка в слоте stopAlgorithm: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+        else:
+            print("Python: Ошибка - pg_database_manager не инициализирован.")
+            return False
+
+    @Slot('QVariant', result=bool) # Или result=int, если возвращаете ID
+    def startAlgorithmExecution(self, execution_data: 'QVariant') -> bool: # Или int
+        """
+        Слот для запуска нового execution из QML.
+        """
+        print(f"Python: QML отправил запрос на запуск нового execution: {execution_data}")
+        if hasattr(execution_data, 'toVariant'):
+            execution_data = execution_data.toVariant()
+            print(f"Python: QJSValue (execution_data) преобразован в: {execution_data}")
+
+        if not isinstance(execution_data, dict):
+            print(f"Python: Ошибка - execution_data не является словарем. Получен тип: {type(execution_data)}")
+            return False # Или -1, если result=int
+
+        if not execution_data:
+            print("Python: Ошибка - execution_data пуст.")
+            return False # Или -1
+
+        if self.pg_database_manager:
+            try:
+                # Подготовка данных
+                algorithm_id = execution_data.get('algorithm_id')
+                started_at_str = execution_data.get('started_at') # 'DD.MM.YYYY HH:MM:SS' - нужно преобразовать
+                created_by_user_id = execution_data.get('created_by_user_id')
+                notes = execution_data.get('notes')
+
+                # ВАЖНО: Преобразовать started_at из 'DD.MM.YYYY HH:MM:SS' в 'YYYY-MM-DD HH:MM:SS'
+                import datetime
+                try:
+                    input_format = "%d.%m.%Y %H:%M:%S"
+                    parsed_datetime = datetime.datetime.strptime(started_at_str, input_format)
+                    started_at_iso = parsed_datetime.isoformat(sep=' ') # 'YYYY-MM-DD HH:MM:SS'
+                except ValueError as ve:
+                    print(f"Python: Ошибка преобразования даты/времени '{started_at_str}': {ve}")
+                    return False # Или -1
+
+                print(f"Python: Подготовленные данные для запуска: algorithm_id={algorithm_id}, started_at={started_at_iso}, user_id={created_by_user_id}")
+
+                # Вызов метода менеджера БД
+                result = self.pg_database_manager.start_algorithm_execution(algorithm_id, started_at_iso, created_by_user_id, notes)
+                if isinstance(result, int) and result > 0:
+                    print(f"Python: Execution успешно запущен с ID: {result}")
+                    return True # или return result, если result=int
+                else:
+                    print(f"Python: Ошибка при запуске execution: {result}")
+                    return False # или return -1
+            except Exception as e:
+                print(f"Python: Ошибка в слоте startAlgorithmExecution: {e}")
+                import traceback
+                traceback.print_exc()
+                return False # или -1
+        else:
+            print("Python: Ошибка - pg_database_manager не инициализирован.")
+            return False # или -1
+
+    @Slot(str, str, result='QVariant') # Принимает строку категории и строку даты
+    def getCompletedExecutionsByCategoryAndDate(self, category: str, date_string: str) -> 'QVariant':
+        """
+        Слот для получения списка завершённых executions по категории и дате из QML.
+        :param category: Категория алгоритмов.
+        :param date_string: Дата в формате 'DD.MM.YYYY'.
+        :return: Список словарей с данными execution'ов или пустой список.
+        """
+        print(f"Python: QML запросил завершённые executions для категории '{category}' и даты '{date_string}'.")
+        if self.pg_database_manager:
+            try:
+                # Вызов метода из PostgreSQLDatabaseManager
+                executions_list = self.pg_database_manager.get_completed_executions_by_category_and_date(category, date_string)
+                print(f"Python: Найдено {len(executions_list) if isinstance(executions_list, list) else 'N/A'} завершённых executions.")
+                # QML ожидает список словарей (QVariantList of QVariantMap)
+                return executions_list if isinstance(executions_list, list) else []
+            except Exception as e:
+                print(f"Python: Ошибка в слоте getCompletedExecutionsByCategoryAndDate: {e}")
+                import traceback
+                traceback.print_exc()
+                return []
+        else:
+            print("Python: Ошибка - pg_database_manager не инициализирован.")
+            return []
+
     def minimize_window(self):
         if self.window:
             self.window.showMinimized()
