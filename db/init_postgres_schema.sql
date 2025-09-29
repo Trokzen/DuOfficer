@@ -85,7 +85,6 @@ CREATE TABLE IF NOT EXISTS app_schema.algorithm_executions (
     id SERIAL PRIMARY KEY,                             -- Уникальный идентификатор экземпляра выполнения алгоритма
     -- --- ССЫЛКА на исходный алгоритм сохраняется для трассировки ---
     -- --- ИЗМЕНЕНО: algorithm_id теперь может быть NULL ---
-    -- algorithm_id INTEGER NOT NULL REFERENCES app_schema.algorithms(id), -- <-- СТАРОЕ: Запрещает удаление алгоритма
     algorithm_id INTEGER REFERENCES app_schema.algorithms(id) ON DELETE SET NULL, -- <-- НОВОЕ: Разрешает удаление алгоритма, устанавливает NULL
     -- --- ---
     -- --- ПОЛЯ ДЛЯ SNAPSHOT'А ДАННЫХ АЛГОРИТМА НА МОМЕНТ ЗАПУСКА ---
@@ -261,6 +260,78 @@ VALUES (
 )
 ON CONFLICT (login) DO NOTHING;
 
+
+-- === НОВЫЕ ТАБЛИЦЫ ДЛЯ МЕРОПРИЯТИЙ ===
+
+-- Таблица для хранения шаблонов мероприятий
+CREATE TABLE IF NOT EXISTS app_schema.events (
+    id SERIAL PRIMARY KEY,                             -- Уникальный идентификатор мероприятия
+    name VARCHAR(255) NOT NULL,                        -- Наименование мероприятия
+    description TEXT,                                  -- Описание мероприятия
+    recurrence_rule JSONB,                             -- Правило повторения в формате JSONB (гибкий формат)
+    start_time TIME WITHOUT TIME ZONE,                 -- Время начала мероприятия (относительно начала дня)
+    end_time TIME WITHOUT TIME ZONE,                   -- Время окончания мероприятия (относительно начала дня)
+    notification_offset INTERVAL,                      -- Интервал времени для напоминания до начала (например, '1 hour')
+    responsible_user_id INTEGER REFERENCES app_schema.users(id), -- Ответственный за мероприятие
+    report_materials TEXT,                             -- Отчетный материал
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,    -- Дата и время создания записи мероприятия
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP     -- Дата и время последнего обновления записи мероприятия
+);
+
+-- Таблица для хранения экземпляров мероприятий (Occurrences)
+CREATE TABLE IF NOT EXISTS app_schema.event_occurrences (
+    id SERIAL PRIMARY KEY,                             -- Уникальный идентификатор экземпляра мероприятия
+    event_id INTEGER NOT NULL REFERENCES app_schema.events(id) ON DELETE CASCADE, -- Ссылка на шаблон мероприятия
+    calculated_start_datetime TIMESTAMP WITHOUT TIME ZONE NOT NULL, -- Рассчитанная (планируемая) АБСОЛЮТНАЯ дата и время начала
+    calculated_end_datetime TIMESTAMP WITHOUT TIME ZONE,           -- Рассчитанная (планируемая) АБСОЛЮТНАЯ дата и время окончания
+    actual_start_datetime TIMESTAMP WITHOUT TIME ZONE,             -- Фактическая дата и время начала выполнения
+    actual_end_datetime TIMESTAMP WITHOUT TIME ZONE,               -- Фактическая дата и время окончания выполнения
+    status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'missed', 'cancelled')), -- Статус выполнения
+    notes TEXT,                                                    -- Примечания к выполнению
+    performed_by_user_id INTEGER REFERENCES app_schema.users(id),   -- Пользователь, выполнивший мероприятие
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,                -- Дата и время создания записи экземпляра
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP                 -- Дата и время последнего обновления записи экземпляра
+);
+
+-- === ИНДЕКСЫ ДЛЯ МЕРОПРИЯТИЙ ===
+
+-- Индексы для ускорения поиска мероприятий по ответственному
+CREATE INDEX IF NOT EXISTS idx_events_responsible_user_id ON app_schema.events(responsible_user_id);
+
+-- Индексы для оптимизации запросов экземпляров мероприятий
+CREATE INDEX IF NOT EXISTS idx_event_occurrences_event_id ON app_schema.event_occurrences(event_id);
+CREATE INDEX IF NOT EXISTS idx_event_occurrences_calculated_start_datetime ON app_schema.event_occurrences(calculated_start_datetime);
+CREATE INDEX IF NOT EXISTS idx_event_occurrences_status ON app_schema.event_occurrences(status);
+
+-- === ОГРАНИЧЕНИЯ ВНЕШНИХ КЛЮЧЕЙ С ON DELETE CASCADE ===
+
+-- При удалении мероприятия автоматически удаляются все его экземпляры
+-- (уже реализовано через REFERENCES ... ON DELETE CASCADE в event_occurrences.event_id)
+
+-- === ФУНКЦИИ И ТРИГГЕРЫ ДЛЯ МЕРОПРИЯТИЙ ===
+
+-- Триггеры для обновления updated_at для таблиц мероприятий
+
+-- Для events
+DROP TRIGGER IF EXISTS update_events_updated_at ON app_schema.events;
+CREATE TRIGGER update_events_updated_at
+BEFORE UPDATE ON app_schema.events
+FOR EACH ROW
+EXECUTE FUNCTION app_schema.update_updated_at_column();
+
+-- Для event_occurrences
+DROP TRIGGER IF EXISTS update_event_occurrences_updated_at ON app_schema.event_occurrences;
+CREATE TRIGGER update_event_occurrences_updated_at
+BEFORE UPDATE ON app_schema.event_occurrences
+FOR EACH ROW
+EXECUTE FUNCTION app_schema.update_updated_at_column();
+
+-- === НАЧАЛЬНЫЕ ДАННЫЕ ДЛЯ МЕРОПРИЯТИЙ ===
+
+-- Вставка начальных мероприятий (если нужно)
+-- INSERT INTO app_schema.events (...) VALUES (...);
+-- ON CONFLICT (id) DO NOTHING;
+
 -- Сообщение
 DO $$ BEGIN
     RAISE NOTICE 'Схема ''app_schema'' создана (если не существовала).';
@@ -271,4 +342,5 @@ DO $$ BEGIN
     RAISE NOTICE 'В таблицу actions добавлено ограничение check_action_time_order.';
     RAISE NOTICE 'Таблица algorithm_executions обновлена: algorithm_id теперь может быть NULL, добавлено ON DELETE SET NULL.';
     RAISE NOTICE 'Поле notes удалено из таблицы algorithm_executions (если не нужно).';
+    RAISE NOTICE 'Добавлены таблицы мероприятий (events, event_occurrences), индексы и триггеры.';
 END $$;

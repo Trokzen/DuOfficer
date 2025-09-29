@@ -1623,48 +1623,38 @@ class ApplicationData(QObject):
     def stopAlgorithm(self, execution_id: int) -> bool:
         """
         Слот для остановки (завершения) execution из QML.
+        Использует УЖЕ ВЫЧИСЛЕННОЕ местное время из ApplicationData.
         """
         print(f"Python: QML запросил остановку execution ID {execution_id}.")
         if self.pg_database_manager:
             try:
-                # --- ИСПРАВЛЕНО: Получаем смещение напрямую из SQLiteConfigManager ---
-                local_offset_seconds = 0 # Значение по умолчанию
-                if hasattr(self, 'sqlite_config_manager') and self.sqlite_config_manager:
-                    try:
-                        config_settings = self.sqlite_config_manager.get_settings()
-                        if config_settings and isinstance(config_settings, dict):
-                            raw_offset = config_settings.get('custom_time_offset_seconds')
-                            if raw_offset is not None:
-                                local_offset_seconds = int(raw_offset)
-                                print(f"Python: Загружено custom_time_offset_seconds из SQLiteConfigManager: {local_offset_seconds}")
-                            else:
-                                print("Python: Предупреждение - custom_time_offset_seconds не найден в настройках SQLite. Используется 0.")
-                        else:
-                            print("Python: Предупреждение - SQLiteConfigManager.get_settings() вернул некорректные данные. Используется 0.")
-                    except Exception as e_sqllite:
-                        print(f"Python: Ошибка при получении настроек из SQLiteConfigManager: {e_sqllite}. Используется 0.")
-                else:
-                    print("Python: Предупреждение - sqlite_config_manager не инициализирован или недоступен. Используется 0.")
-                # --- ---
+                # --- ИЗМЕНЕНО: Используем УЖЕ ВЫЧИСЛЕННОЕ местное время ---
+                # Получаем местную дату и время напрямую из свойств ApplicationData
+                # Эти свойства обновляются таймером в update_time()
+                local_date_str = self.localDate  # Формат "DD.MM.YYYY"
+                local_time_str = self.localTime  # Формат "HH:MM:SS"
+                print(f"Python: Используем УЖЕ ВЫЧИСЛЕННОЕ местное время из ApplicationData: дата={local_date_str}, время={local_time_str}")
                 
-                print(f"Python: Вычислено местное смещение: {local_offset_seconds} секунд.")
-                
-                # --- ИСПРАВЛЕНО: Используем ТОТ ЖЕ метод, что и update_time ---
-                import datetime
-                from PySide6.QtCore import QDateTime
-                now_system_qt = QDateTime.currentDateTime()
-                local_dt_qt = now_system_qt.addSecs(local_offset_seconds)
-                print(f"Python: Текущее местное время (QDateTime): {local_dt_qt.toString('dd.MM.yyyy hh:mm:ss')}")
-
-                # Преобразуем QDateTime в Python datetime.datetime
+                # Объединяем дату и время в строку формата 'YYYY-MM-DD HH:MM:SS'
+                # Разбираем дату
+                from datetime import datetime
                 try:
-                    local_now_dt = local_dt_qt.toPython()
-                    print(f"Python: Преобразовано в datetime.datetime (toPython): {local_now_dt}")
-                except AttributeError:
-                    import datetime
-                    timestamp = local_dt_qt.toSecsSinceEpoch()
-                    local_now_dt = datetime.datetime.fromtimestamp(timestamp)
-                    print(f"Python: Преобразовано в datetime.datetime (fromtimestamp): {local_now_dt}")
+                    date_parts = local_date_str.split('.')
+                    day = int(date_parts[0])
+                    month = int(date_parts[1])
+                    year = int(date_parts[2])
+                    # Разбираем время
+                    time_parts = local_time_str.split(':')
+                    hours = int(time_parts[0])
+                    minutes = int(time_parts[1])
+                    seconds = int(time_parts[2])
+                    
+                    # Создаём объект datetime
+                    local_now_dt = datetime(year, month, day, hours, minutes, seconds)
+                    print(f"Python: Преобразовано в datetime.datetime: {local_now_dt}")
+                except (ValueError, IndexError) as ve:
+                    print(f"Python: Ошибка преобразования localDate/localTime в datetime: {ve}")
+                    return False
                 # --- ---
                 
                 print(f"Python: Местное время для завершения execution ID {execution_id}: {local_now_dt}")
@@ -1672,9 +1662,6 @@ class ApplicationData(QObject):
                 # Вызываем метод менеджера БД, передавая местное время
                 success = self.pg_database_manager.stop_algorithm(execution_id, local_now_dt)
                 return success
-            except ValueError as ve:
-                print(f"Python: Ошибка преобразования custom_time_offset_seconds в int: {ve}")
-                return False
             except Exception as e:
                 print(f"Python: Ошибка в слоте stopAlgorithm: {e}")
                 import traceback
