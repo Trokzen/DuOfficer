@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS app_schema.post_settings (
     -- current_officer_id INTEGER REFERENCES app_schema.users(id), -- ССЫЛКА УДАЛЕНА
     print_font_family TEXT DEFAULT 'Arial',           -- Название шрифта для печати
     print_font_size INTEGER DEFAULT 12                -- Размер шрифта для печати
+    -- --- НОВОЕ: Для будущего мягкого удаления (опционально) ---
+    -- is_deleted BOOLEAN DEFAULT FALSE NOT NULL         -- Флаг мягкого удаления
+    -- --- ---
 );
 
 -- === НОВЫЕ ТАБЛИЦЫ ДЛЯ АЛГОРИТМОВ ===
@@ -51,6 +54,9 @@ CREATE TABLE IF NOT EXISTS app_schema.algorithms (
     -- --- ---
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,    -- Дата и время создания записи алгоритма
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP     -- Дата и время последнего обновления записи алгоритма
+    -- --- НОВОЕ: Для будущего мягкого удаления (опционально) ---
+    -- is_deleted BOOLEAN DEFAULT FALSE NOT NULL         -- Флаг мягкого удаления
+    -- --- ---
 );
 
 -- Таблица для хранения действий внутри алгоритмов
@@ -78,7 +84,10 @@ CREATE TABLE IF NOT EXISTS app_schema.actions (
 CREATE TABLE IF NOT EXISTS app_schema.algorithm_executions (
     id SERIAL PRIMARY KEY,                             -- Уникальный идентификатор экземпляра выполнения алгоритма
     -- --- ССЫЛКА на исходный алгоритм сохраняется для трассировки ---
-    algorithm_id INTEGER NOT NULL REFERENCES app_schema.algorithms(id), -- Ссылка на выполняемый алгоритм (для трассировки)
+    -- --- ИЗМЕНЕНО: algorithm_id теперь может быть NULL ---
+    -- algorithm_id INTEGER NOT NULL REFERENCES app_schema.algorithms(id), -- <-- СТАРОЕ: Запрещает удаление алгоритма
+    algorithm_id INTEGER REFERENCES app_schema.algorithms(id) ON DELETE SET NULL, -- <-- НОВОЕ: Разрешает удаление алгоритма, устанавливает NULL
+    -- --- ---
     -- --- ПОЛЯ ДЛЯ SNAPSHOT'А ДАННЫХ АЛГОРИТМА НА МОМЕНТ ЗАПУСКА ---
     -- Эти поля хранят копию данных алгоритма на момент создания execution'а
     snapshot_name VARCHAR(255) NOT NULL,              -- Копия name алгоритма на момент запуска
@@ -95,6 +104,9 @@ CREATE TABLE IF NOT EXISTS app_schema.algorithm_executions (
     -- --- ---
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,    -- Дата и время создания записи выполнения
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP     -- Дата и время последнего обновления записи выполнения
+    -- --- УДАЛЕНО: Поле notes, если оно не нужно ---
+    -- notes TEXT, -- <-- УДАЛЕНО
+    -- --- ---
 );
 
 -- Таблица для хранения выполнения действий в рамках запущенного алгоритма
@@ -257,4 +269,6 @@ DO $$ BEGIN
     RAISE NOTICE 'Таблица algorithms обновлена: добавлено поле sort_order и индекс idx_algorithms_sort_order.';
     RAISE NOTICE 'Таблицы algorithm_executions и action_executions обновлены в соответствии с Snapshot-подходом и уточнениями.';
     RAISE NOTICE 'В таблицу actions добавлено ограничение check_action_time_order.';
+    RAISE NOTICE 'Таблица algorithm_executions обновлена: algorithm_id теперь может быть NULL, добавлено ON DELETE SET NULL.';
+    RAISE NOTICE 'Поле notes удалено из таблицы algorithm_executions (если не нужно).';
 END $$;

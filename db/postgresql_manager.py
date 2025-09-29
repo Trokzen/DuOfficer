@@ -649,106 +649,95 @@ class PostgreSQLDatabaseManager:
             logger.error(f"Неизвестная ошибка при получении списка алгоритмов: {e}")
             return []
 
-    def get_algorithm_by_id(self, algorithm_id: int) -> Optional[Dict[str, Any]]:
-        """
-        Получает данные алгоритма по его ID.
-        :param algorithm_id: ID алгоритма.
-        :return: Словарь с данными алгоритма или None.
-        """
-        if not isinstance(algorithm_id, int) or algorithm_id <= 0:
-            logger.warning("Некорректный ID алгоритма для получения.")
-            return None
-
-        try:
-            conn = self._get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                f"SELECT id, name, category, time_type, description FROM {self.SCHEMA_NAME}.algorithms WHERE id = %s;",
-                (algorithm_id,)
-            )
-            row = cursor.fetchone()
-            colnames = [desc[0] for desc in cursor.description]
-            cursor.close()
-            
-            if row:
-                algorithm_dict = dict(zip(colnames, row))
-                logger.debug(f"Получены данные алгоритма по ID {algorithm_id}: {algorithm_dict}")
-                return algorithm_dict
-            else:
-                logger.warning(f"Алгоритм с ID {algorithm_id} не найден.")
-                return None
-        except psycopg2.Error as e:
-            logger.error(f"Ошибка БД при получении данных алгоритма по ID {algorithm_id}: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Неизвестная ошибка при получении данных алгоритма по ID {algorithm_id}: {e}")
-            return None
-
     def create_algorithm(self, algorithm_data: Dict[str, Any]) -> int:
         """
         Создает новый алгоритм в БД.
+
         :param algorithm_data: Словарь с данными нового алгоритма.
                                Должен содержать ключи: name, category, time_type.
                                Может содержать: description.
         :return: ID нового алгоритма, если успешно, иначе -1.
         """
+        if not self.connection:
+            print("PostgreSQLDatabaseManager: Нет подключения к БД.")
+            return -1
+
         if not algorithm_data:
-            logger.warning("Попытка создания алгоритма с пустыми данными.")
+            print("PostgreSQLDatabaseManager: Попытка создания алгоритма с пустыми данными.")
             return -1
 
         required_fields = ['name', 'category', 'time_type']
         missing_fields = [field for field in required_fields if not algorithm_data.get(field)]
         if missing_fields:
-            logger.error(f"Отсутствуют обязательные поля для создания алгоритма: {missing_fields}")
-            return -1
-
-        # Проверка допустимых значений для category и time_type
-        allowed_categories = ['повседневная деятельность', 'боевая готовность', 'противодействие терроризму', 'кризисные ситуации']
-        allowed_time_types = ['оперативное', 'астрономическое']
-        
-        if algorithm_data['category'] not in allowed_categories:
-            logger.error(f"Недопустимая категория: {algorithm_data['category']}")
-            return -1
-        if algorithm_data['time_type'] not in allowed_time_types:
-            logger.error(f"Недопустимый тип времени: {algorithm_data['time_type']}")
+            print(f"PostgreSQLDatabaseManager: Отсутствуют обязательные поля для создания алгоритма: {missing_fields}")
             return -1
 
         try:
-            conn = self._get_connection()
-            cursor = conn.cursor()
+            with self.connection.cursor() as cursor:
+                # --- Подготовка данных для вставки ---
+                # Разрешенные поля для вставки
+                allowed_fields = ['name', 'category', 'time_type', 'description']
+                # Подготавливаем словарь только с разрешенными полями
+                prepared_data = {}
+                for key, value in algorithm_data.items():
+                    if key in allowed_fields:
+                        if key in ['name', 'category', 'time_type']:
+                            prepared_data[key] = str(value).strip() if value is not None else ""
+                        else:  # description
+                            prepared_data[key] = str(value).strip() if value is not None else ""
+                
+                if not prepared_data:
+                    print("PostgreSQLDatabaseManager: Нет данных для вставки.")
+                    return -1
 
-            allowed_fields = ['name', 'category', 'time_type', 'description']
-            fields = [field for field in allowed_fields if field in algorithm_data]
-            placeholders = ['%s'] * len(fields)
-            values = [algorithm_data.get(field) for field in fields]
+                # --- Формирование SQL-запроса ---
+                columns = list(prepared_data.keys())
+                placeholders = ['%s'] * len(columns)
+                columns_str = ', '.join(columns)
+                placeholders_str = ', '.join(placeholders)
+                values = list(prepared_data.values())
 
-            columns_str = ', '.join(fields)
-            placeholders_str = ', '.join(placeholders)
-            sql_query = f"INSERT INTO {self.SCHEMA_NAME}.algorithms ({columns_str}) VALUES ({placeholders_str}) RETURNING id;"
-            
-            logger.debug(f"Выполнение SQL создания алгоритма: {cursor.mogrify(sql_query, values)}")
-            cursor.execute(sql_query, values)
-            new_id_row = cursor.fetchone()
-            new_id = new_id_row[0] if new_id_row else None
-            conn.commit()
-            cursor.close()
-            
-            if new_id:
-                logger.info(f"Новый алгоритм успешно создан с ID: {new_id}")
-                return new_id
-            else:
-                logger.error("Не удалось получить ID нового алгоритма после вставки.")
-                return -1
+                sql_query = f"""
+                    INSERT INTO {self.SCHEMA_NAME}.algorithms ({columns_str})
+                    VALUES ({placeholders_str})
+                    RETURNING id;
+                """
+                print(f"PostgreSQLDatabaseManager: Выполнение SQL создания алгоритма: {cursor.mogrify(sql_query, values)}")
+                cursor.execute(sql_query, values)
+                new_id_row = cursor.fetchone()
+                new_id = new_id_row[0] if new_id_row else None
+                # --- ---
 
+                if new_id:
+                    # --- НОВОЕ: Установка уникального sort_order ---
+                    print(f"PostgreSQLDatabaseManager: Новый алгоритм создан с ID: {new_id}. Установка уникального sort_order...")
+                    # Получаем максимальный существующий sort_order
+                    cursor.execute(f"SELECT COALESCE(MAX(sort_order), 0) FROM {self.SCHEMA_NAME}.algorithms;")
+                    max_sort_order_row = cursor.fetchone()
+                    max_sort_order = max_sort_order_row[0] if max_sort_order_row else 0
+                    new_sort_order = max_sort_order + 1
+                    print(f"PostgreSQLDatabaseManager: Максимальный sort_order: {max_sort_order}. Новый sort_order для ID {new_id}: {new_sort_order}")
+                    # Обновляем sort_order для нового алгоритма
+                    cursor.execute(f"UPDATE {self.SCHEMA_NAME}.algorithms SET sort_order = %s WHERE id = %s;", (new_sort_order, new_id))
+                    # --- ---
+                    self.connection.commit()
+                    print(f"PostgreSQLDatabaseManager: Алгоритм ID {new_id} успешно создан и sort_order установлен на {new_sort_order}.")
+                    return new_id
+                else:
+                    print("PostgreSQLDatabaseManager: Не удалось получить ID нового алгоритма после вставки.")
+                    self.connection.rollback()
+                    return -1
         except psycopg2.Error as e:
-            logger.error(f"Ошибка БД при создании алгоритма: {e}")
-            if conn:
-                conn.rollback()
+            print(f"PostgreSQLDatabaseManager: Ошибка БД при создании алгоритма: {e}")
+            self.connection.rollback()
+            import traceback
+            traceback.print_exc()
             return -1
         except Exception as e:
-            logger.error(f"Неизвестная ошибка при создании алгоритма: {e}")
-            if conn:
-                conn.rollback()
+            print(f"PostgreSQLDatabaseManager: Неизвестная ошибка при создании алгоритма: {e}")
+            self.connection.rollback()
+            import traceback
+            traceback.print_exc()
             return -1
 
     def update_algorithm(self, algorithm_id: int, algorithm_data: Dict[str, Any]) -> bool:
@@ -820,62 +809,48 @@ class PostgreSQLDatabaseManager:
 
     def delete_algorithm(self, algorithm_id: int) -> bool:
         """
-        Удаляет алгоритм из БД. Из-за ON DELETE CASCADE связанные actions также будут удалены.
-        Однако algorithm_executions останутся (из-за отсутствия CASCADE в схеме).
+        Удаляет алгоритм и ВСЕ связанные с ним записи
+        (actions, algorithm_executions, action_executions) благодаря ON DELETE CASCADE.
+
         :param algorithm_id: ID алгоритма для удаления.
         :return: True, если успешно, иначе False.
         """
+        if not self.connection:
+            print("PostgreSQLDatabaseManager: Нет подключения к БД.")
+            return False
+
         if not isinstance(algorithm_id, int) or algorithm_id <= 0:
-            logger.error("Некорректный ID алгоритма для удаления.")
+            print(f"PostgreSQLDatabaseManager: Некорректный ID алгоритма: {algorithm_id}")
             return False
 
         try:
-            conn = self._get_connection()
-            cursor = conn.cursor()
+            with self.connection.cursor() as cursor:
+                print(f"PostgreSQLDatabaseManager: Удаление алгоритма ID {algorithm_id} и всех связанных записей (CASCADE)...")
+                # --- ИЗМЕНЕНО: Простое удаление с CASCADE ---
+                query = f"DELETE FROM {self.SCHEMA_NAME}.algorithms WHERE id = %s;"
+                # Предполагается, что ограничения внешних ключей для actions, algorithm_executions, action_executions
+                # были созданы с ON DELETE CASCADE.
+                cursor.execute(query, (algorithm_id,))
+                rows_affected = cursor.rowcount
+                self.connection.commit()
 
-            # Проверяем, существуют ли выполнения этого алгоритма
-            cursor.execute(
-                f"SELECT COUNT(*) FROM {self.SCHEMA_NAME}.algorithm_executions WHERE algorithm_id = %s;",
-                (algorithm_id,)
-            )
-            execution_count = cursor.fetchone()[0]
-            
-            if execution_count > 0:
-                logger.warning(f"Невозможно удалить алгоритм ID {algorithm_id}, так как существуют ({execution_count}) записей о его выполнении. Рассмотрите архивирование.")
-                cursor.close()
-                return False # Или выбросить исключение, в зависимости от логики UI
-
-            sql_query = f"DELETE FROM {self.SCHEMA_NAME}.algorithms WHERE id = %s;"
-            
-            logger.debug(f"Выполнение SQL удаления алгоритма {algorithm_id}: {cursor.mogrify(sql_query, (algorithm_id,))}")
-            cursor.execute(sql_query, (algorithm_id,))
-            conn.commit()
-            
-            rows_affected = cursor.rowcount
-            cursor.close()
-            
-            if rows_affected > 0:
-                logger.info(f"Алгоритм с ID {algorithm_id} успешно удален из БД. Затронуто строк: {rows_affected}.")
-                return True
-            else:
-                logger.warning(f"Не удалось удалить алгоритм с ID {algorithm_id} (запись не найдена).")
-                return False
-
-        except psycopg2.IntegrityError as e:
-            # Это может произойти, если есть algorithm_executions
-            logger.error(f"Ошибка целостности БД при удалении алгоритма {algorithm_id} (возможно, есть выполнения): {e}")
-            if conn:
-                conn.rollback()
-            return False
+                if rows_affected > 0:
+                    print(f"PostgreSQLDatabaseManager: Алгоритм ID {algorithm_id} и все связанные записи успешно удалены. Затронуто строк: {rows_affected}.")
+                    return True
+                else:
+                    print(f"PostgreSQLDatabaseManager: Алгоритм ID {algorithm_id} не найден для удаления.")
+                    return False
         except psycopg2.Error as e:
-            logger.error(f"Ошибка БД при удалении алгоритма {algorithm_id}: {e}")
-            if conn:
-                conn.rollback()
+            print(f"PostgreSQLDatabaseManager: Ошибка БД при удалении алгоритма {algorithm_id}: {e}")
+            self.connection.rollback()
+            import traceback
+            traceback.print_exc()
             return False
         except Exception as e:
-            logger.error(f"Неизвестная ошибка при удалении алгоритма {algorithm_id}: {e}")
-            if conn:
-                conn.rollback()
+            print(f"PostgreSQLDatabaseManager: Неизвестная ошибка при удалении алгоритма {algorithm_id}: {e}")
+            self.connection.rollback()
+            import traceback
+            traceback.print_exc()
             return False
 
 # db/postgresql_manager.py
@@ -885,75 +860,129 @@ class PostgreSQLDatabaseManager:
     def duplicate_algorithm(self, original_algorithm_id: int) -> int:
         """
         Создает копию существующего алгоритма и всех его действий.
+
         :param original_algorithm_id: ID оригинального алгоритма.
         :return: ID нового алгоритма, если успешно, иначе -1.
         """
-        # 1. Получаем данные оригинального алгоритма
-        original_algorithm = self.get_algorithm_by_id(original_algorithm_id)
-        if not original_algorithm:
-            logger.error(f"Не удалось найти оригинальный алгоритм с ID {original_algorithm_id} для дублирования.")
+        if not self.connection:
+            print("PostgreSQLDatabaseManager: Нет подключения к БД.")
             return -1
 
-        # 2. Формируем данные для нового алгоритма (с пометкой "копия")
-        original_name = original_algorithm.get('name', 'Алгоритм')
-        new_name = f"{original_name} (копия)"
+        if not isinstance(original_algorithm_id, int) or original_algorithm_id <= 0:
+            print(f"PostgreSQLDatabaseManager: Некорректный ID оригинального алгоритма: {original_algorithm_id}")
+            return -1
 
-        new_algorithm_data = {
-            'name': new_name,
-            'category': original_algorithm['category'],
-            'time_type': original_algorithm['time_type'],
-            'description': original_algorithm.get('description', '')
-        }
+        try:
+            with self.connection.cursor() as cursor:
+                # --- ИСПРАВЛЕНО: Получаем оригинальный алгоритм с явными индексами ---
+                # 1. Получаем данные оригинального алгоритма
+                cursor.execute("""
+                    SELECT id, name, category, time_type, description
+                    FROM {self.SCHEMA_NAME}.algorithms WHERE id = %s
+                """.format(self=self), (original_algorithm_id,)) # <-- ИСПРАВЛЕНО: format для подстановки SCHEMA_NAME
+                original_algorithm_row = cursor.fetchone()
+                if not original_algorithm_row:
+                    print(f"PostgreSQLDatabaseManager: Оригинальный алгоритм с ID {original_algorithm_id} не найден.")
+                    return -1
 
-        # 3. Создаем новый алгоритм в БД
-        new_algorithm_id = self.create_algorithm(new_algorithm_data)
-        
-        # 4. Проверяем, успешно ли создан новый алгоритм
-        if isinstance(new_algorithm_id, int) and new_algorithm_id > 0:
-            logger.info(f"Алгоритм ID {original_algorithm_id} успешно дублирован. Новый ID: {new_algorithm_id}")
+                # --- ИСПРАВЛЕНО: Явное создание словаря из кортежа ---
+                # original_algorithm = dict(original_algorithm_row) # <-- СТАРОЕ (вызывает ошибку)
+                original_algorithm = {
+                    'id': original_algorithm_row[0],
+                    'name': original_algorithm_row[1],
+                    'category': original_algorithm_row[2],
+                    'time_type': original_algorithm_row[3],
+                    'description': original_algorithm_row[4]
+                }
+                # --- ---
+                print(f"PostgreSQLDatabaseManager: Найден оригинальный алгоритм ID {original_algorithm_id}: {original_algorithm['name']}")
 
-            # --- НОВАЯ ЛОГИКА: Дублирование всех действий оригинального алгоритма ---
-            try:
-                # a. Получаем список всех действий оригинального алгоритма
-                original_actions = self.get_actions_by_algorithm_id(original_algorithm_id)
-                logger.debug(f"Найдено {len(original_actions)} действий для дублирования из алгоритма {original_algorithm_id}.")
-                
-                # b. Проходимся по каждому действию и создаем его копию
-                actions_duplicated_count = 0
-                for original_action in original_actions:
-                    # Подготавливаем данные для нового действия
-                    # ВАЖНО: algorithm_id заменяется на ID нового алгоритма
-                    new_action_data = {
-                        'algorithm_id': new_algorithm_id,  # Привязываем к НОВОМУ алгоритму
-                        'description': original_action.get('description', ''),
-                        'start_offset': original_action.get('start_offset'),
-                        'end_offset': original_action.get('end_offset'),
-                        'contact_phones': original_action.get('contact_phones'),
-                        'report_materials': original_action.get('report_materials')
-                    }
-                    # Создаем копию действия в БД
-                    new_action_id = self.create_action(new_action_data)
-                    if isinstance(new_action_id, int) and new_action_id > 0:
-                        logger.debug(f"Действие ID {original_action['id']} дублировано как ID {new_action_id} для нового алгоритма {new_algorithm_id}.")
-                        actions_duplicated_count += 1
-                    else:
-                        logger.warning(f"Не удалось дублировать действие ID {original_action['id']} для алгоритма {new_algorithm_id}.")
-                
-                logger.info(f"Для нового алгоритма {new_algorithm_id} дублировано {actions_duplicated_count} из {len(original_actions)} действий.")
+                # 2. Формируем данные для нового алгоритма (с пометкой "копия")
+                # --- ИЗМЕНЕНО: Не копируем sort_order ---
+                original_name = original_algorithm.get('name', 'Алгоритм')
+                new_name = f"{original_name} (копия)"
+                new_algorithm_data = {
+                    'name': new_name,
+                    'category': original_algorithm['category'],
+                    'time_type': original_algorithm['time_type'],
+                    'description': original_algorithm.get('description', '')
+                    # 'sort_order': original_algorithm['sort_order'] # <-- УДАЛЕНО: Не копируем sort_order
+                }
+                # --- ---
+
+                # 3. Создаем новый алгоритм в БД
+                # --- ИЗМЕНЕНО: Вызываем create_algorithm, который сам установит sort_order ---
+                print(f"PostgreSQLDatabaseManager: Создание нового алгоритма (копии) с данными: {new_algorithm_data}")
+                new_algorithm_id = self.create_algorithm(new_algorithm_data)
+                # --- ---
+                if isinstance(new_algorithm_id, int) and new_algorithm_id > 0:
+                    print(f"PostgreSQLDatabaseManager: Алгоритм ID {original_algorithm_id} успешно дублирован. Новый ID: {new_algorithm_id}")
+                    
+                    # 4. Дублируем действия оригинального алгоритма
+                    cursor.execute("""
+                        SELECT id, description, start_offset, end_offset, contact_phones, report_materials
+                        FROM {self.SCHEMA_NAME}.actions WHERE algorithm_id = %s ORDER BY start_offset
+                    """.format(self=self), (original_algorithm_id,))
+                    original_actions_rows = cursor.fetchall()
+                    
+                    # --- ИСПРАВЛЕНО: Преобразование кортежей в список словарей ---
+                    original_actions = []
+                    for action_row in original_actions_rows:
+                        action_dict = {
+                            'id': action_row[0],
+                            'description': action_row[1],
+                            'start_offset': action_row[2],
+                            'end_offset': action_row[3],
+                            'contact_phones': action_row[4],
+                            'report_materials': action_row[5]
+                        }
+                        original_actions.append(action_dict)
+                    # --- ---
+                    
+                    actions_duplicated_count = 0
+                    for original_action in original_actions:
+                        print(f"PostgreSQLDatabaseManager: Дублирование действия ID {original_action['id']}...")
                         
-            except Exception as e_actions:
-                logger.error(f"Ошибка при дублировании действий для нового алгоритма {new_algorithm_id}: {e_actions}")
-                import traceback
-                traceback.print_exc()
-                # Примечание: Сам алгоритм уже создан, просто действия не дублированы.
-                # Можно решить, считать ли это критической ошибкой или нет.
-                # В данном случае, мы возвращаем ID алгоритма, но логируем ошибку.
-            # --- КОНЕЦ НОВОЙ ЛОГИКИ ---
-            
-            # 5. Возвращаем ID нового алгоритма (с дублированными действиями или без)
-            return new_algorithm_id
-        else:
-            logger.error(f"Ошибка при дублировании алгоритма ID {original_algorithm_id}. Метод create_algorithm вернул: {new_algorithm_id}")
+                        # --- ИЗМЕНЕНО: Формируем данные для нового действия ---
+                        # Не копируем ID оригинального действия
+                        # Привязываем к НОВОМУ алгоритму
+                        # Копируем остальные поля
+                        new_action_data = {
+                            'algorithm_id': new_algorithm_id, # <-- ВАЖНО: Новый algorithm_id
+                            'description': original_action.get('description', ''),
+                            'start_offset': original_action.get('start_offset'),
+                            'end_offset': original_action.get('end_offset'),
+                            'contact_phones': original_action.get('contact_phones'),
+                            'report_materials': original_action.get('report_materials')
+                        }
+                        # --- ---
+                        
+                        # Создаем копию действия в БД
+                        new_action_id = self.create_action(new_action_data)
+                        if isinstance(new_action_id, int) and new_action_id > 0:
+                            print(f"PostgreSQLDatabaseManager: Действие ID {original_action['id']} дублировано как ID {new_action_id} для нового алгоритма {new_algorithm_id}.")
+                            actions_duplicated_count += 1
+                        else:
+                            print(f"PostgreSQLDatabaseManager: Не удалось дублировать действие ID {original_action['id']} для алгоритма {new_algorithm_id}.")
+                    
+                    print(f"PostgreSQLDatabaseManager: Для нового алгоритма ID {new_algorithm_id} дублировано {actions_duplicated_count} из {len(original_actions)} действий.")
+                    self.connection.commit()
+                    return new_algorithm_id
+                else:
+                    print(f"PostgreSQLDatabaseManager: Ошибка при создании нового алгоритма (копии). Результат create_algorithm: {new_algorithm_id}")
+                    self.connection.rollback()
+                    return -1
+        except psycopg2.Error as e:
+            print(f"PostgreSQLDatabaseManager: Ошибка БД при дублировании алгоритма {original_algorithm_id}: {e}")
+            self.connection.rollback()
+            import traceback
+            traceback.print_exc()
+            return -1
+        except Exception as e:
+            print(f"PostgreSQLDatabaseManager: Неизвестная ошибка при дублировании алгоритма {original_algorithm_id}: {e}")
+            self.connection.rollback()
+            import traceback
+            traceback.print_exc()
             return -1
 
 # ... (другие методы класса PostgreSQLDatabaseManager) ...
@@ -1637,6 +1666,7 @@ class PostgreSQLDatabaseManager:
     def stop_algorithm(self, execution_id: int, local_completed_at_dt: datetime.datetime) -> bool:
         """
         Останавливает (меняет статус на 'completed') запущенный алгоритм (execution) по его ID.
+        Также устанавливает статус 'skipped' для всех незавершённых action_executions.
         Устанавливает completed_at в переданное местное время.
 
         :param execution_id: ID execution'а для остановки.
@@ -1660,23 +1690,56 @@ class PostgreSQLDatabaseManager:
         try:
             with self.connection.cursor() as cursor:
                 # --- ИЗМЕНЕНО: Используем переданное local_completed_at_dt ---
-                # Обновляем статус и время завершения
-                query = """
+                # 1. Обновляем статус и время завершения algorithm_execution
+                query_algorithm = """
                     UPDATE app_schema.algorithm_executions
                     SET status = 'completed', completed_at = %s, updated_at = CURRENT_TIMESTAMP
                     WHERE id = %s AND status = 'active'; -- Обновляем только если статус был 'active'
                 """
                 # Передаём local_completed_at_dt как параметр в запрос
-                cursor.execute(query, (local_completed_at_dt, execution_id))
+                cursor.execute(query_algorithm, (local_completed_at_dt, execution_id))
+                rows_affected_algorithm = cursor.rowcount
                 # --- ---
-                rows_affected = cursor.rowcount
-                self.connection.commit()
-
-                if rows_affected > 0:
+                
+                if rows_affected_algorithm > 0:
                     print(f"PostgreSQLDatabaseManager: Execution ID {execution_id} успешно остановлен. Время завершения: {local_completed_at_dt}")
+                    
+                    # --- НОВОЕ: Обновляем статусы action_executions ---
+                    # 2. Находим все action_executions для этого execution_id, которые ещё не завершены
+                    query_select_actions = """
+                        SELECT id, status, actual_end_time
+                        FROM app_schema.action_executions
+                        WHERE execution_id = %s AND status != 'completed'
+                    """
+                    cursor.execute(query_select_actions, (execution_id,))
+                    uncompleted_actions = cursor.fetchall()
+                    
+                    if uncompleted_actions:
+                        print(f"PostgreSQLDatabaseManager: Найдено {len(uncompleted_actions)} незавершённых action_executions для execution ID {execution_id}. Устанавливаем им статус 'skipped'.")
+                        
+                        # 3. Обновляем статус и actual_end_time для каждого из них
+                        action_ids_to_skip = [action[0] for action in uncompleted_actions]
+                        # Создаем строку с плейсхолдерами для IN (%s,%s,...)
+                        placeholders = ','.join(['%s'] * len(action_ids_to_skip))
+                        
+                        query_update_actions = f"""
+                            UPDATE app_schema.action_executions
+                            SET status = 'skipped', actual_end_time = %s, updated_at = CURRENT_TIMESTAMP
+                            WHERE id IN ({placeholders})
+                        """
+                        # Передаём local_completed_at_dt как время завершения для всех пропущенных действий
+                        cursor.execute(query_update_actions, (local_completed_at_dt,) + tuple(action_ids_to_skip))
+                        rows_affected_actions = cursor.rowcount
+                        print(f"PostgreSQLDatabaseManager: Обновлено {rows_affected_actions} action_executions на статус 'skipped'.")
+                    else:
+                        print(f"PostgreSQLDatabaseManager: Для execution ID {execution_id} нет незавершённых action_executions. Пропуск обновления действий.")
+                    # --- ---
+                    
+                    self.connection.commit()
                     return True
                 else:
                     print(f"PostgreSQLDatabaseManager: Execution ID {execution_id} не найден или уже был остановлен.")
+                    self.connection.rollback() # Откатываем, если ничего не изменилось
                     return False
         except psycopg2.Error as e:
             print(f"PostgreSQLDatabaseManager: Ошибка при остановке execution ID {execution_id}: {e}")
