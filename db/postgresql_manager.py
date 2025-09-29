@@ -1796,60 +1796,87 @@ class PostgreSQLDatabaseManager:
                     # --- ИЗМЕНЕНО: Логика в зависимости от time_type ---
                     if action['start_offset'] is not None:
                         if algorithm_time_type == 'астрономическое':
-                            # --- ЛОГИКА ДЛЯ АСТРОНОМИЧЕСКОГО ---
+                            # --- ЛОГИКА ДЛЯ АСТРОНОМИЧЕСКОГО (ИСПРАВЛЕНО) ---
                             print(f"PostgreSQLDatabaseManager: Рассчитываем calculated_start_time для астрономического времени действия ID {action['id']}.")
                             start_date_only = started_at_dt.date()
                             offset_timedelta_start = action['start_offset']
                             
                             if isinstance(offset_timedelta_start, datetime.timedelta):
-                                # Извлекаем компоненты времени из timedelta
+                                # --- ИЗМЕНЕНО: Извлекаем "время суток" и дни ---
                                 total_seconds = int(offset_timedelta_start.total_seconds())
-                                hours = total_seconds // 3600
-                                minutes = (total_seconds % 3600) // 60
-                                seconds = total_seconds % 60
-                                # Создаем новое datetime: дата_запуска + время_из_смещения
+                                seconds_in_day = 24 * 60 * 60 # 86400
+                                
+                                # Количество полных дней в смещении
+                                days = total_seconds // seconds_in_day
+                                # Остаток секунд для "времени суток"
+                                total_seconds_in_day = total_seconds % seconds_in_day
+                                
+                                # Извлекаем часы, минуты, секунды из остатка
+                                hours = total_seconds_in_day // 3600
+                                minutes = (total_seconds_in_day % 3600) // 60
+                                seconds = total_seconds_in_day % 60
+                                # --- ---
+                                
+                                # Создаем новое datetime: дата_запуска + дни + время_из_смещения
+                                # datetime.timedelta(days=days) корректно обработает переходы через месяцы/годы
                                 calculated_start_time = datetime.datetime.combine(
                                     start_date_only,
                                     datetime.time(hour=hours, minute=minutes, second=seconds)
-                                )
-                                print(f"PostgreSQLDatabaseManager:   Дата запуска: {start_date_only}, Время из смещения: {hours:02d}:{minutes:02d}:{seconds:02d}")
+                                ) + datetime.timedelta(days=days)
+                                print(f"PostgreSQLDatabaseManager:   Дата запуска: {start_date_only}, Дни: {days}, Время из смещения: {hours:02d}:{minutes:02d}:{seconds:02d}")
                                 print(f"PostgreSQLDatabaseManager:   Результат calculated_start_time: {calculated_start_time}")
                             else:
                                 print(f"PostgreSQLDatabaseManager: Ошибка - start_offset для действия {action['id']} не является timedelta: {type(offset_timedelta_start)}. Устанавливаю None.")
+                                calculated_start_time = None
+                            # --- ---
                         else:
                             # --- ЛОГИКА ДЛЯ ОПЕРАТИВНОГО ---
                             print(f"PostgreSQLDatabaseManager: Рассчитываем calculated_start_time для оперативного времени действия ID {action['id']}.")
                             calculated_start_time = started_at_dt + action['start_offset']
                             print(f"PostgreSQLDatabaseManager:   started_at_dt ({started_at_dt}) + start_offset ({action['start_offset']}) = {calculated_start_time}")
-
+                            # --- ---
+                    # --- ---
                     if action['end_offset'] is not None:
                         if algorithm_time_type == 'астрономическое':
-                            # --- ЛОГИКА ДЛЯ АСТРОНОМИЧЕСКОГО ---
+                            # --- ЛОГИКА ДЛЯ АСТРОНОМИЧЕСКОГО (ИСПРАВЛЕНО) ---
                             print(f"PostgreSQLDatabaseManager: Рассчитываем calculated_end_time для астрономического времени действия ID {action['id']}.")
                             start_date_only = started_at_dt.date()
                             offset_timedelta_end = action['end_offset']
                             
                             if isinstance(offset_timedelta_end, datetime.timedelta):
-                                # Извлекаем компоненты времени из timedelta
+                                # --- ИЗМЕНЕНО: Извлекаем "время суток" и дни ---
                                 total_seconds = int(offset_timedelta_end.total_seconds())
-                                hours = total_seconds // 3600
-                                minutes = (total_seconds % 3600) // 60
-                                seconds = total_seconds % 60
-                                # Создаем новое datetime: дата_запуска + время_из_смещения
+                                seconds_in_day = 24 * 60 * 60 # 86400
+                                
+                                # Количество полных дней в смещении
+                                days = total_seconds // seconds_in_day
+                                # Остаток секунд для "времени суток"
+                                total_seconds_in_day = total_seconds % seconds_in_day
+                                
+                                # Извлекаем часы, минуты, секунды из остатка
+                                hours = total_seconds_in_day // 3600
+                                minutes = (total_seconds_in_day % 3600) // 60
+                                seconds = total_seconds_in_day % 60
+                                # --- ---
+                                
+                                # Создаем новое datetime: дата_запуска + дни + время_из_смещения
+                                # datetime.timedelta(days=days) корректно обработает переходы через месяцы/годы
                                 calculated_end_time = datetime.datetime.combine(
                                     start_date_only,
                                     datetime.time(hour=hours, minute=minutes, second=seconds)
-                                )
-                                print(f"PostgreSQLDatabaseManager:   Дата запуска: {start_date_only}, Время из смещения: {hours:02d}:{minutes:02d}:{seconds:02d}")
+                                ) + datetime.timedelta(days=days)
+                                print(f"PostgreSQLDatabaseManager:   Дата запуска: {start_date_only}, Дни: {days}, Время из смещения: {hours:02d}:{minutes:02d}:{seconds:02d}")
                                 print(f"PostgreSQLDatabaseManager:   Результат calculated_end_time: {calculated_end_time}")
                             else:
                                 print(f"PostgreSQLDatabaseManager: Ошибка - end_offset для действия {action['id']} не является timedelta: {type(offset_timedelta_end)}. Устанавливаю None.")
+                                calculated_end_time = None
+                            # --- ---
                         else:
                             # --- ЛОГИКА ДЛЯ ОПЕРАТИВНОГО ---
                             print(f"PostgreSQLDatabaseManager: Рассчитываем calculated_end_time для оперативного времени действия ID {action['id']}.")
                             calculated_end_time = started_at_dt + action['end_offset']
                             print(f"PostgreSQLDatabaseManager:   started_at_dt ({started_at_dt}) + end_offset ({action['end_offset']}) = {calculated_end_time}")
-                    # --- ---
+                            # --- ---
 
                     cursor.execute("""
                         INSERT INTO app_schema.action_executions (
