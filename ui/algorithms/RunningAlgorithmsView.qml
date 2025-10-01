@@ -4,6 +4,7 @@ import QtQuick 6.5
 import QtQuick.Controls 6.5
 import QtQuick.Layouts 6.5
 import QtQuick.Window 6.5 // <-- ДОБАВИТЬ ЭТОТ ИМПОРТ (для Window.window.scaleFactor)
+import "." // <-- НОВОЕ: Для импорта ExecutionDetailsWindow.qml
 // --- ---
 
 Item {
@@ -184,7 +185,26 @@ Item {
                                 // --- ---
                                 onClicked: {
                                     console.log("QML RunningAlgorithmsView: Запрошено развертывание execution ID:", model.id);
-                                    runningAlgorithmsViewRoot.expandAlgorithmRequested(model.id);
+                                    // --- НОВОЕ: Открытие ExecutionDetailsWindow ---
+                                    // Проверяем, что ExecutionDetailsWindow.qml существует
+                                    var component = Qt.createComponent("ExecutionDetailsWindow.qml");
+                                    if (component.status === Component.Ready) {
+                                        // Создаём новое окно
+                                        var detailsWindow = component.createObject(runningAlgorithmsViewRoot, {
+                                            "executionId": model.id // Передаём ID execution'а
+                                        });
+                                        if (detailsWindow) {
+                                            detailsWindow.show(); // Открываем окно
+                                            console.log("QML RunningAlgorithmsView: ExecutionDetailsWindow открыто для execution ID", model.id);
+                                        } else {
+                                            console.error("QML RunningAlgorithmsView: Не удалось создать объект ExecutionDetailsWindow.qml.");
+                                            // TODO: Показать сообщение пользователю
+                                        }
+                                    } else {
+                                        console.error("QML RunningAlgorithmsView: Ошибка загрузки ExecutionDetailsWindow.qml:", component.errorString());
+                                        // TODO: Показать сообщение пользователю
+                                    }
+                                    // --- ---
                                 }
                             }
                         }
@@ -474,7 +494,20 @@ Item {
                                 // --- ---
                                 onClicked: {
                                     console.log("QML RunningAlgorithmsView: Запрошено развертывание завершённого execution ID:", model.id);
-                                    runningAlgorithmsViewRoot.expandAlgorithmRequested(model.id);
+                                    var component = Qt.createComponent("ExecutionDetailsWindow.qml");
+                                    if (component.status === Component.Ready) {
+                                        var detailsWindow = component.createObject(runningAlgorithmsViewRoot, {
+                                            "executionId": model.id
+                                        });
+                                        if (detailsWindow) {
+                                            detailsWindow.show();
+                                            console.log("QML RunningAlgorithmsView: ExecutionDetailsWindow открыто для завершённого execution ID", model.id);
+                                        } else {
+                                            console.error("QML RunningAlgorithmsView: Не удалось создать объект ExecutionDetailsWindow.qml.");
+                                        }
+                                    } else {
+                                        console.error("QML RunningAlgorithmsView: Ошибка загрузки ExecutionDetailsWindow.qml:", component.errorString());
+                                    }
                                 }
                             }
                             // Можно добавить другие кнопки, например, "Печать отчёта"
