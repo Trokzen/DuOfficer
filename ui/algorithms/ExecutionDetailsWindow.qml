@@ -72,13 +72,16 @@ Window {
         if (actionsList && typeof actionsList === 'object') {
             console.log("QML ExecutionDetailsWindow: Длина списка (length):", actionsList.length);
             console.log("QML ExecutionDetailsWindow: Имеет ли свойство length:", actionsList.hasOwnProperty('length'));
+            console.log("QML ExecutionDetailsWindow: actionsList instanceof Array:", actionsList instanceof Array);
+            console.log("QML ExecutionDetailsWindow: Object.prototype.toString.call(actionsList):", Object.prototype.toString.call(actionsList));
         }
         // --- ---
 
-        // --- ИСПРАВЛЕНО: Более надёжная проверка на массив/список ---
-        if (actionsList && Array.isArray(actionsList)) {
+        // --- ИСПРАВЛЕНО: Проверка на "массивоподобный" объект ---
+        // if (actionsList && Array.isArray(actionsList)) {
+        if (actionsList && typeof actionsList === 'object' && actionsList.length !== undefined && actionsList.length >= 0) {
         // --- ---
-            console.log("QML ExecutionDetailsWindow: Полученный список является массивом. Количество элементов:", actionsList.length);
+            console.log("QML ExecutionDetailsWindow: Полученный список является массивоподобным. Количество элементов:", actionsList.length);
 
             if (actionsList.length === 0) {
                 console.log("QML ExecutionDetailsWindow: Список action_execution'ов пуст.");
@@ -86,11 +89,11 @@ Window {
 
             // Сортируем по calculated_start_time (если Python не отсортировал)
             // actionsList.sort(function(a, b) { ... }); // <-- Опционально, если Python уже отсортировал
-            actionExecutionsList = actionsList;
-            console.log("QML ExecutionDetailsWindow: Список action_execution'ов (из Python) загружен. Количество:", actionExecutionsList.length);
+            // actionExecutionsList = actionsList; // <-- Не копируем объект, а итерируемся по нему
+            console.log("QML ExecutionDetailsWindow: Список action_execution'ов (из Python) загружен как массивоподобный. Количество:", actionsList.length);
         } else {
             // --- ИСПРАВЛЕНО: Сообщение об ошибке ---
-            console.error("QML ExecutionDetailsWindow: Python не вернул корректный массив для action_executions. Получен тип:", typeof actionsList, "Значение:", actionsList);
+            console.error("QML ExecutionDetailsWindow: Python не вернул корректный массивоподобный объект для action_executions. Получен тип:", typeof actionsList, "Значение:", actionsList);
             // --- ---
             actionExecutionsList = [];
             // Не возвращаем, пусть модель очистится и обновится пустой
@@ -98,8 +101,12 @@ Window {
 
         // После загрузки данных, обновляем представление
         actionsModel.clear();
-        for (var i = 0; i < actionExecutionsList.length; i++) {
-            var actionExec = actionExecutionsList[i];
+        // --- ИЗМЕНЕНО: Цикл для "массивоподобного" объекта ---
+        // for (var i = 0; i < actionExecutionsList.length; i++) {
+        //     var actionExec = actionExecutionsList[i];
+        for (var i = 0; i < actionsList.length; i++) {
+            var actionExec = actionsList[i]; // <-- Используем actionsList
+        // --- ---
             // --- Явное копирование свойств ---
             // Это помогает избежать проблем с QJSValue/QVariantMap, которые могут
             // не сериализоваться корректно внутри ListModel.
@@ -136,6 +143,7 @@ Window {
         // --- ---
     }
 
+    // --- Основной контент ---
     // --- Основной контент ---
     ScrollView {
         anchors.fill: parent
@@ -252,12 +260,21 @@ Window {
             // --- ---
 
             // --- Таблица действий ---
-            // Используем ListView с фиксированными высотами строк и горизонтальным делегатом
+            // Используем Rectangle как контейнер для ListView
             Rectangle {
                 Layout.fillWidth: true
-                Layout.fillHeight: true // Занимает оставшееся место
-                border.color: "#bdc3c7"
+                // --- ИСПРАВЛЕНО: Не используем Layout.fillHeight: true ---
+                // Layout.fillHeight: true // <-- БЫЛО: Забирает всё пространство
+                Layout.preferredHeight: 400 // <-- НОВОЕ: Фиксированная высота, можно регулировать
+                // Layout.maximumHeight: parent.height * 0.6 // <-- АЛЬТЕРНАТИВА: Максимум 60% от высоты родителя ScrollView
+                // --- ---
+                // border.color: "#bdc3c7"
                 color: "white"
+
+                // --- ДОБАВИТЬ: Видимая граница для диагностики ---
+                border.width: 2
+                border.color: "red" // <-- ВРЕМЕННО
+                // --- ---
 
                 // Модель для ListView
                 ListModel {
@@ -273,338 +290,364 @@ Window {
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
+                    // --- ДОБАВИТЬ: Видимая граница для диагностики ---
+                    // background: Rectangle { border.color: "blue"; border.width: 1; color: "transparent" } // <-- УБРАНО: Нет свойства background
+                    // --- ---
+
                     // Делегат для строки таблицы
                     delegate: Rectangle {
                         id: rowDelegate
-                        width: actionsListView.width
-                        height: 100 // Фиксированная высота строки, можно регулировать
-                        color: index % 2 ? "#f9f9f9" : "#ffffff" // Чередующийся фон
-                        border.color: "#eee"
+                        width: actionsListView.width // Ширина равна ширине ListView
+                        height: 60 // Высота строки
+                        // Цвет фона для наглядности
+                        color: index % 2 ? "#f0f0f0" : "#ffffff" // Чередующийся фон
+                        border.color: "#ccc"
+                        border.width: 1
 
-                        // Горизонтальное расположение ячеек
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 1 // Отступы внутри строки
-                            spacing: 1 // Отступы между ячейками
-
-                            // --- Ячейка 1: Статус ---
-                            Rectangle {
-                                Layout.preferredWidth: parent.width * 0.04 // ~4% ширины
-                                Layout.fillHeight: true
-                                color: "transparent"
-                                border.color: "#ccc"
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: {
-                                        if (model.status === "completed") return "✅";
-                                        else if (model.status === "skipped") return "❌";
-                                        else return "⏸"; // pending, in_progress
-                                    }
-                                    font.pixelSize: 16
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                            }
-                            // --- ---
-
-                            // --- Ячейка 2: № ---
-                            Rectangle {
-                                Layout.preferredWidth: parent.width * 0.03 // ~3% ширины
-                                Layout.fillHeight: true
-                                color: "transparent"
-                                border.color: "#ccc"
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: (index + 1).toString() // Номер по порядку
-                                    // --- Привязка шрифта ---
-                                    font.family: appData.fontFamily || "Arial"
-                                    font.pointSize: appData.fontSize || 10
-                                    // --- ---
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                            }
-                            // --- ---
-
-                            // --- Ячейка 3: Описание ---
-                            Rectangle {
-                                Layout.preferredWidth: parent.width * 0.18 // ~18% ширины
-                                Layout.fillHeight: true
-                                color: "transparent"
-                                border.color: "#ccc"
-                                Text {
-                                    anchors.fill: parent
-                                    anchors.margins: 5
-                                    text: model.snapshot_description || ""
-                                    // --- Привязка шрифта ---
-                                    font.family: appData.fontFamily || "Arial"
-                                    font.pointSize: appData.fontSize || 10
-                                    // --- ---
-                                    wrapMode: Text.Wrap // Перенос
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                            }
-                            // --- ---
-
-                            // --- Ячейка 4: Начало ---
-                            Rectangle {
-                                Layout.preferredWidth: parent.width * 0.08 // ~8% ширины
-                                Layout.fillHeight: true
-                                color: "transparent"
-                                border.color: "#ccc"
-                                Text {
-                                    anchors.fill: parent
-                                    anchors.margins: 5
-                                    text: {
-                                        var start_time = model.calculated_start_time;
-                                        if (!start_time) return "Не задано";
-                                        // Попробуем распарсить и отформатировать
-                                        var dateObj = new Date(start_time);
-                                        if (isNaN(dateObj.getTime())) {
-                                            // Если парсинг не удался, выводим как есть
-                                            return start_time;
-                                        }
-                                        // Формат: "HH:MM\nDD.MM"
-                                        var timeStr = dateObj.toLocaleTimeString(Qt.locale(), "HH:mm");
-                                        var dateStr = dateObj.toLocaleDateString(Qt.locale(), "dd.MM");
-                                        return timeStr + "\n" + dateStr;
-                                    }
-                                    // --- Привязка шрифта ---
-                                    font.family: appData.fontFamily || "Arial"
-                                    font.pointSize: appData.fontSize || 10
-                                    // --- ---
-                                    wrapMode: Text.Wrap // Перенос
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                            }
-                            // --- ---
-
-                            // --- Ячейка 5: Окончание ---
-                            Rectangle {
-                                Layout.preferredWidth: parent.width * 0.08 // ~8% ширины
-                                Layout.fillHeight: true
-                                color: "transparent"
-                                border.color: "#ccc"
-                                Text {
-                                    anchors.fill: parent
-                                    anchors.margins: 5
-                                    text: {
-                                        var end_time = model.calculated_end_time;
-                                        if (!end_time) return "Не задано";
-                                        var dateObj = new Date(end_time);
-                                        if (isNaN(dateObj.getTime())) {
-                                            return end_time;
-                                        }
-                                        var timeStr = dateObj.toLocaleTimeString(Qt.locale(), "HH:mm");
-                                        var dateStr = dateObj.toLocaleDateString(Qt.locale(), "dd.MM");
-                                        return timeStr + "\n" + dateStr;
-                                    }
-                                    // --- Привязка шрифта ---
-                                    font.family: appData.fontFamily || "Arial"
-                                    font.pointSize: appData.fontSize || 10
-                                    // --- ---
-                                    wrapMode: Text.Wrap
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                            }
-                            // --- ---
-
-                            // --- Ячейка 6: Телефоны ---
-                            Rectangle {
-                                Layout.preferredWidth: parent.width * 0.08 // ~8% ширины
-                                Layout.fillHeight: true
-                                color: "transparent"
-                                border.color: "#ccc"
-                                Text {
-                                    anchors.fill: parent
-                                    anchors.margins: 5
-                                    text: model.snapshot_contact_phones || ""
-                                    // --- Привязка шрифта ---
-                                    font.family: appData.fontFamily || "Arial"
-                                    font.pointSize: appData.fontSize || 10
-                                    // --- ---
-                                    wrapMode: Text.Wrap
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                            }
-                            // --- ---
-
-                            // --- Ячейка 7: Отчетный материал ---
-                            Rectangle {
-                                Layout.preferredWidth: parent.width * 0.10 // ~10% ширины
-                                Layout.fillHeight: true
-                                color: "transparent"
-                                border.color: "#ccc"
-                                ScrollView { // ScrollView для прокрутки, если файлов много
-                                    anchors.fill: parent
-                                    anchors.margins: 2
-                                    clip: true
-                                    // Text для отображения и кликабельности
-                                    TextEdit { // Используем TextEdit для гиперссылок
-                                        id: reportMaterialsText
-                                        textFormat: TextEdit.RichText // Для HTML-like форматирования
-                                        text: {
-                                            var materials = model.snapshot_report_materials || "";
-                                            if (!materials) return "";
-                                            // Разбиваем по новым строкам или другим разделителям
-                                            var paths = materials.split('\n'); // Или split(';') или split(',') в зависимости от хранения
-                                            var html = "";
-                                            for (var i = 0; i < paths.length; i++) {
-                                                var path = paths[i].trim();
-                                                if (path) {
-                                                    // Убираем file:/// префикс, если он есть
-                                                    if (path.startsWith("file:///")) {
-                                                        path = path.substring(8);
-                                                    }
-                                                    // Создаём кликабельную ссылку
-                                                    html += "<a href=\"" + path + "\">" + Qt.escape(path) + "</a><br/>";
-                                                }
-                                            }
-                                            return html;
-                                        }
-                                        // --- Привязка шрифта ---
-                                        font.family: appData.fontFamily || "Arial"
-                                        font.pointSize: appData.fontSize || 10
-                                        // --- ---
-                                        onLinkActivated: {
-                                             console.log("QML ExecutionDetailsWindow: Кликнута ссылка на файл:", link);
-                                             executionDetailsWindow.openFile(link);
-                                        }
-                                        readOnly: true
-                                        wrapMode: TextEdit.Wrap
-                                        // horizontalAlignment: TextEdit.AlignHCenter // Не работает для RichText
-                                        // verticalAlignment: TextEdit.AlignVCenter // Не работает для RichText
-                                    }
-                                }
-                            }
-                            // --- ---
-
-                            // --- Ячейка 8: Факт. время выполнения ---
-                            Rectangle {
-                                Layout.preferredWidth: parent.width * 0.08 // ~8% ширины
-                                Layout.fillHeight: true
-                                color: "transparent"
-                                border.color: "#ccc"
-                                Text {
-                                    anchors.fill: parent
-                                    anchors.margins: 5
-                                    text: {
-                                        var actual_time = model.actual_end_time;
-                                        if (!actual_time) return ""; // Пусто, если не выполнено
-                                        var dateObj = new Date(actual_time);
-                                        if (isNaN(dateObj.getTime())) {
-                                            return actual_time;
-                                        }
-                                        var timeStr = dateObj.toLocaleTimeString(Qt.locale(), "HH:mm");
-                                        var dateStr = dateObj.toLocaleDateString(Qt.locale(), "dd.MM");
-                                        return timeStr + "\n" + dateStr;
-                                    }
-                                    // --- Привязка шрифта ---
-                                    font.family: appData.fontFamily || "Arial"
-                                    font.pointSize: appData.fontSize || 10
-                                    // --- ---
-                                    wrapMode: Text.Wrap
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                            }
-                            // --- ---
-
-                            // --- Ячейка 9: Статус ---
-                            Rectangle {
-                                Layout.preferredWidth: parent.width * 0.07 // ~7% ширины
-                                Layout.fillHeight: true
-                                color: "transparent"
-                                border.color: "#ccc"
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: {
-                                        if (model.status === "completed") return "Выполнено";
-                                        else if (model.status === "pending") return "Ожидает";
-                                        else if (model.status === "in_progress") return "В процессе";
-                                        else if (model.status === "skipped") return "Пропущено";
-                                        else return model.status; // На всякий случай
-                                    }
-                                    // --- Привязка шрифта ---
-                                    font.family: appData.fontFamily || "Arial"
-                                    font.pointSize: appData.fontSize || 10
-                                    // --- ---
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                    wrapMode: Text.Wrap
-                                }
-                            }
-                            // --- ---
-
-                            // --- Ячейка 10: Кому доложено ---
-                            Rectangle {
-                                Layout.preferredWidth: parent.width * 0.08 // ~8% ширины
-                                Layout.fillHeight: true
-                                color: "transparent"
-                                border.color: "#ccc"
-                                Text {
-                                    anchors.fill: parent
-                                    anchors.margins: 5
-                                    text: model.reported_to || ""
-                                    // --- Привязка шрифта ---
-                                    font.family: appData.fontFamily || "Arial"
-                                    font.pointSize: appData.fontSize || 10
-                                    // --- ---
-                                    wrapMode: Text.Wrap
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                            }
-                            // --- ---
-
-                            // --- Ячейка 11: Кнопка ---
-                            Rectangle {
-                                Layout.preferredWidth: parent.width * 0.07 // ~7% ширины
-                                Layout.fillHeight: true
-                                color: "transparent"
-                                border.color: "#ccc"
-                                Button {
-                                    anchors.centerIn: parent
-                                    text: model.status === "completed" ? "Изменить" : "Выполнить"
-                                    // --- Привязка шрифта ---
-                                    font.family: appData.fontFamily || "Arial"
-                                    font.pointSize: (appData.fontSize || 10) * 0.8 // Чуть меньше
-                                    // --- ---
-                                    onClicked: {
-                                        console.log("QML ExecutionDetailsWindow: Кнопка выполнения нажата для action_execution ID", model.id);
-                                        // Открываем диалог редактирования action_execution
-                                        var component = Qt.createComponent("ActionExecutionEditorDialog.qml");
-                                        if (component.status === Component.Ready) {
-                                            var dialog = component.createObject(executionDetailsWindow, {
-                                                "executionId": executionId, // Передаём executionId
-                                                "currentActionExecutionId": model.id, // Передаём ID конкретного action_execution
-                                                "isEditMode": true // Режим редактирования
-                                            });
-                                            if (dialog) {
-                                                dialog.onActionExecutionSaved.connect(function() {
-                                                     console.log("QML ExecutionDetailsWindow: Получен сигнал о сохранении action_execution. Перезагружаем данные.");
-                                                     executionDetailsWindow.loadExecutionData();
-                                                     executionUpdated(executionId); // Уведомляем родителя
-                                                });
-                                                dialog.open();
-                                            } else {
-                                                console.error("QML ExecutionDetailsWindow: Не удалось создать ActionExecutionEditorDialog (режим редактирования).");
-                                                showInfoMessage("Ошибка: Не удалось открыть диалог редактирования действия.");
-                                            }
-                                        } else {
-                                             console.error("QML ExecutionDetailsWindow: Ошибка загрузки ActionExecutionEditorDialog.qml:", component.errorString());
-                                             showInfoMessage("Ошибка загрузки диалога редактирования действия.");
-                                        }
-                                    }
-                                }
-                            }
-                            // --- ---
+                        // Просто текст с ID и описанием
+                        Text {
+                            anchors.centerIn: parent
+                            text: "ID: " + model.id + ", Действие: " + model.snapshot_description
+                            font.family: appData.fontFamily || "Arial"
+                            font.pointSize: appData.fontSize || 10
+                            color: "black"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
                         }
                     }
+
+                    // delegate: Rectangle {
+                    //     id: rowDelegate
+                    //     width: actionsListView.width
+                    //     height: 60 // Фиксированная высота строки, можно регулировать
+                    //     color: index % 2 ? "#f9f9f9" : "#ffffff" // Чередующийся фон
+                    //     border.color: "#eee"
+
+                    //     // Горизонтальное расположение ячеек
+                    //     RowLayout {
+                    //         anchors.fill: parent
+                    //         anchors.margins: 1 // Отступы внутри строки
+                    //         spacing: 1 // Отступы между ячейками
+
+                    //         // ... (ваш код ячеек без изменений) ...
+                    //         // --- Ячейка 1: Статус ---
+                    //         Rectangle {
+                    //             Layout.preferredWidth: parent.width * 0.04 // ~4% ширины
+                    //             Layout.fillHeight: true
+                    //             color: "transparent"
+                    //             border.color: "#ccc"
+                    //             Text {
+                    //                 anchors.centerIn: parent
+                    //                 text: {
+                    //                     if (model.status === "completed") return "✅";
+                    //                     else if (model.status === "skipped") return "❌";
+                    //                     else return "⏸"; // pending, in_progress
+                    //                 }
+                    //                 font.pixelSize: 16
+                    //                 horizontalAlignment: Text.AlignHCenter
+                    //                 verticalAlignment: Text.AlignVCenter
+                    //             }
+                    //         }
+                    //         // --- ---
+
+                    //         // --- Ячейка 2: № ---
+                    //         Rectangle {
+                    //             Layout.preferredWidth: parent.width * 0.03 // ~3% ширины
+                    //             Layout.fillHeight: true
+                    //             color: "transparent"
+                    //             border.color: "#ccc"
+                    //             Text {
+                    //                 anchors.centerIn: parent
+                    //                 text: (index + 1).toString() // Номер по порядку
+                    //                 // --- Привязка шрифта ---
+                    //                 font.family: appData.fontFamily || "Arial"
+                    //                 font.pointSize: appData.fontSize || 10
+                    //                 // --- ---
+                    //                 horizontalAlignment: Text.AlignHCenter
+                    //                 verticalAlignment: Text.AlignVCenter
+                    //             }
+                    //         }
+                    //         // --- ---
+
+                    //         // --- Ячейка 3: Описание ---
+                    //         Rectangle {
+                    //             Layout.preferredWidth: parent.width * 0.18 // ~18% ширины
+                    //             Layout.fillHeight: true
+                    //             color: "transparent"
+                    //             border.color: "#ccc"
+                    //             Text {
+                    //                 anchors.fill: parent
+                    //                 anchors.margins: 5
+                    //                 text: model.snapshot_description || ""
+                    //                 // --- Привязка шрифта ---
+                    //                 font.family: appData.fontFamily || "Arial"
+                    //                 font.pointSize: appData.fontSize || 10
+                    //                 // --- ---
+                    //                 wrapMode: Text.Wrap // Перенос
+                    //                 horizontalAlignment: Text.AlignHCenter
+                    //                 verticalAlignment: Text.AlignVCenter
+                    //             }
+                    //         }
+                    //         // --- ---
+
+                    //         // --- Ячейка 4: Начало ---
+                    //         Rectangle {
+                    //             Layout.preferredWidth: parent.width * 0.08 // ~8% ширины
+                    //             Layout.fillHeight: true
+                    //             color: "transparent"
+                    //             border.color: "#ccc"
+                    //             Text {
+                    //                 anchors.fill: parent
+                    //                 anchors.margins: 5
+                    //                 text: {
+                    //                     var start_time = model.calculated_start_time;
+                    //                     if (!start_time) return "Не задано";
+                    //                     // Попробуем распарсить и отформатировать
+                    //                     var dateObj = new Date(start_time);
+                    //                     if (isNaN(dateObj.getTime())) {
+                    //                         // Если парсинг не удался, выводим как есть
+                    //                         return start_time;
+                    //                     }
+                    //                     // Формат: "HH:MM\nDD.MM"
+                    //                     var timeStr = dateObj.toLocaleTimeString(Qt.locale(), "HH:mm");
+                    //                     var dateStr = dateObj.toLocaleDateString(Qt.locale(), "dd.MM");
+                    //                     return timeStr + "\n" + dateStr;
+                    //                 }
+                    //                 // --- Привязка шрифта ---
+                    //                 font.family: appData.fontFamily || "Arial"
+                    //                 font.pointSize: appData.fontSize || 10
+                    //                 // --- ---
+                    //                 wrapMode: Text.Wrap // Перенос
+                    //                 horizontalAlignment: Text.AlignHCenter
+                    //                 verticalAlignment: Text.AlignVCenter
+                    //             }
+                    //         }
+                    //         // --- ---
+
+                    //         // --- Ячейка 5: Окончание ---
+                    //         Rectangle {
+                    //             Layout.preferredWidth: parent.width * 0.08 // ~8% ширины
+                    //             Layout.fillHeight: true
+                    //             color: "transparent"
+                    //             border.color: "#ccc"
+                    //             Text {
+                    //                 anchors.fill: parent
+                    //                 anchors.margins: 5
+                    //                 text: {
+                    //                     var end_time = model.calculated_end_time;
+                    //                     if (!end_time) return "Не задано";
+                    //                     var dateObj = new Date(end_time);
+                    //                     if (isNaN(dateObj.getTime())) {
+                    //                         return end_time;
+                    //                     }
+                    //                     var timeStr = dateObj.toLocaleTimeString(Qt.locale(), "HH:mm");
+                    //                     var dateStr = dateObj.toLocaleDateString(Qt.locale(), "dd.MM");
+                    //                     return timeStr + "\n" + dateStr;
+                    //                 }
+                    //                 // --- Привязка шрифта ---
+                    //                 font.family: appData.fontFamily || "Arial"
+                    //                 font.pointSize: appData.fontSize || 10
+                    //                 // --- ---
+                    //                 wrapMode: Text.Wrap
+                    //                 horizontalAlignment: Text.AlignHCenter
+                    //                 verticalAlignment: Text.AlignVCenter
+                    //             }
+                    //         }
+                    //         // --- ---
+
+                    //         // --- Ячейка 6: Телефоны ---
+                    //         Rectangle {
+                    //             Layout.preferredWidth: parent.width * 0.08 // ~8% ширины
+                    //             Layout.fillHeight: true
+                    //             color: "transparent"
+                    //             border.color: "#ccc"
+                    //             Text {
+                    //                 anchors.fill: parent
+                    //                 anchors.margins: 5
+                    //                 text: model.snapshot_contact_phones || ""
+                    //                 // --- Привязка шрифта ---
+                    //                 font.family: appData.fontFamily || "Arial"
+                    //                 font.pointSize: appData.fontSize || 10
+                    //                 // --- ---
+                    //                 wrapMode: Text.Wrap
+                    //                 horizontalAlignment: Text.AlignHCenter
+                    //                 verticalAlignment: Text.AlignVCenter
+                    //             }
+                    //         }
+                    //         // --- ---
+
+                    //         // --- Ячейка 7: Отчетный материал ---
+                    //         Rectangle {
+                    //             Layout.preferredWidth: parent.width * 0.10 // ~10% ширины
+                    //             Layout.fillHeight: true
+                    //             color: "transparent"
+                    //             border.color: "#ccc"
+                    //             ScrollView { // ScrollView для прокрутки, если файлов много
+                    //                 anchors.fill: parent
+                    //                 anchors.margins: 2
+                    //                 clip: true
+                    //                 // Text для отображения и кликабельности
+                    //                 TextEdit { // Используем TextEdit для гиперссылок
+                    //                     id: reportMaterialsText
+                    //                     textFormat: TextEdit.RichText // Для HTML-like форматирования
+                    //                     text: {
+                    //                         var materials = model.snapshot_report_materials || "";
+                    //                         if (!materials) return "";
+                    //                         // Разбиваем по новым строкам или другим разделителям
+                    //                         var paths = materials.split('\n'); // Или split(';') или split(',') в зависимости от хранения
+                    //                         var html = "";
+                    //                         for (var i = 0; i < paths.length; i++) {
+                    //                             var path = paths[i].trim();
+                    //                             if (path) {
+                    //                                 // Убираем file:/// префикс, если он есть
+                    //                                 if (path.startsWith("file:///")) {
+                    //                                     path = path.substring(8);
+                    //                                 }
+                    //                                 // Создаём кликабельную ссылку
+                    //                                 html += "<a href=\"" + path + "\">" + Qt.escape(path) + "</a><br/>";
+                    //                             }
+                    //                         }
+                    //                         return html;
+                    //                     }
+                    //                     // --- Привязка шрифта ---
+                    //                     font.family: appData.fontFamily || "Arial"
+                    //                     font.pointSize: appData.fontSize || 10
+                    //                     // --- ---
+                    //                     onLinkActivated: {
+                    //                          console.log("QML ExecutionDetailsWindow: Кликнута ссылка на файл:", link);
+                    //                          executionDetailsWindow.openFile(link);
+                    //                     }
+                    //                     readOnly: true
+                    //                     wrapMode: TextEdit.Wrap
+                    //                     // horizontalAlignment: TextEdit.AlignHCenter // Не работает для RichText
+                    //                     // verticalAlignment: TextEdit.AlignVCenter // Не работает для RichText
+                    //                 }
+                    //             }
+                    //         }
+                    //         // --- ---
+
+                    //         // --- Ячейка 8: Факт. время выполнения ---
+                    //         Rectangle {
+                    //             Layout.preferredWidth: parent.width * 0.08 // ~8% ширины
+                    //             Layout.fillHeight: true
+                    //             color: "transparent"
+                    //             border.color: "#ccc"
+                    //             Text {
+                    //                 anchors.fill: parent
+                    //                 anchors.margins: 5
+                    //                 text: {
+                    //                     var actual_time = model.actual_end_time;
+                    //                     if (!actual_time) return ""; // Пусто, если не выполнено
+                    //                     var dateObj = new Date(actual_time);
+                    //                     if (isNaN(dateObj.getTime())) {
+                    //                         return actual_time;
+                    //                     }
+                    //                     var timeStr = dateObj.toLocaleTimeString(Qt.locale(), "HH:mm");
+                    //                     var dateStr = dateObj.toLocaleDateString(Qt.locale(), "dd.MM");
+                    //                     return timeStr + "\n" + dateStr;
+                    //                 }
+                    //                 // --- Привязка шрифта ---
+                    //                 font.family: appData.fontFamily || "Arial"
+                    //                 font.pointSize: appData.fontSize || 10
+                    //                 // --- ---
+                    //                 wrapMode: Text.Wrap
+                    //                 horizontalAlignment: Text.AlignHCenter
+                    //                 verticalAlignment: Text.AlignVCenter
+                    //             }
+                    //         }
+                    //         // --- ---
+
+                    //         // --- Ячейка 9: Статус ---
+                    //         Rectangle {
+                    //             Layout.preferredWidth: parent.width * 0.07 // ~7% ширины
+                    //             Layout.fillHeight: true
+                    //             color: "transparent"
+                    //             border.color: "#ccc"
+                    //             Text {
+                    //                 anchors.centerIn: parent
+                    //                 text: {
+                    //                     if (model.status === "completed") return "Выполнено";
+                    //                     else if (model.status === "pending") return "Ожидает";
+                    //                     else if (model.status === "in_progress") return "В процессе";
+                    //                     else if (model.status === "skipped") return "Пропущено";
+                    //                     else return model.status; // На всякий случай
+                    //                 }
+                    //                 // --- Привязка шрифта ---
+                    //                 font.family: appData.fontFamily || "Arial"
+                    //                 font.pointSize: appData.fontSize || 10
+                    //                 // --- ---
+                    //                 horizontalAlignment: Text.AlignHCenter
+                    //                 verticalAlignment: Text.AlignVCenter
+                    //                 wrapMode: Text.Wrap
+                    //             }
+                    //         }
+                    //         // --- ---
+
+                    //         // --- Ячейка 10: Кому доложено ---
+                    //         Rectangle {
+                    //             Layout.preferredWidth: parent.width * 0.08 // ~8% ширины
+                    //             Layout.fillHeight: true
+                    //             color: "transparent"
+                    //             border.color: "#ccc"
+                    //             Text {
+                    //                 anchors.fill: parent
+                    //                 anchors.margins: 5
+                    //                 text: model.reported_to || ""
+                    //                 // --- Привязка шрифта ---
+                    //                 font.family: appData.fontFamily || "Arial"
+                    //                 font.pointSize: appData.fontSize || 10
+                    //                 // --- ---
+                    //                 wrapMode: Text.Wrap
+                    //                 horizontalAlignment: Text.AlignHCenter
+                    //                 verticalAlignment: Text.AlignVCenter
+                    //             }
+                    //         }
+                    //         // --- ---
+
+                    //         // --- Ячейка 11: Кнопка ---
+                    //         Rectangle {
+                    //             Layout.preferredWidth: parent.width * 0.07 // ~7% ширины
+                    //             Layout.fillHeight: true
+                    //             color: "transparent"
+                    //             border.color: "#ccc"
+                    //             Button {
+                    //                 anchors.centerIn: parent
+                    //                 text: model.status === "completed" ? "Изменить" : "Выполнить"
+                    //                 // --- Привязка шрифта ---
+                    //                 font.family: appData.fontFamily || "Arial"
+                    //                 font.pointSize: (appData.fontSize || 10) * 0.8 // Чуть меньше
+                    //                 // --- ---
+                    //                 onClicked: {
+                    //                     console.log("QML ExecutionDetailsWindow: Кнопка выполнения нажата для action_execution ID", model.id);
+                    //                     // Открываем диалог редактирования action_execution
+                    //                     var component = Qt.createComponent("ActionExecutionEditorDialog.qml");
+                    //                     if (component.status === Component.Ready) {
+                    //                         var dialog = component.createObject(executionDetailsWindow, {
+                    //                             "executionId": executionId, // Передаём executionId
+                    //                             "currentActionExecutionId": model.id, // Передаём ID конкретного action_execution
+                    //                             "isEditMode": true // Режим редактирования
+                    //                         });
+                    //                         if (dialog) {
+                    //                             dialog.onActionExecutionSaved.connect(function() {
+                    //                                  console.log("QML ExecutionDetailsWindow: Получен сигнал о сохранении action_execution. Перезагружаем данные.");
+                    //                                  executionDetailsWindow.loadExecutionData();
+                    //                                  executionUpdated(executionId); // Уведомляем родителя
+                    //                             });
+                    //                             dialog.open();
+                    //                         } else {
+                    //                             console.error("QML ExecutionDetailsWindow: Не удалось создать ActionExecutionEditorDialog (режим редактирования).");
+                    //                             showInfoMessage("Ошибка: Не удалось открыть диалог редактирования действия.");
+                    //                         }
+                    //                     } else {
+                    //                          console.error("QML ExecutionDetailsWindow: Ошибка загрузки ActionExecutionEditorDialog.qml:", component.errorString());
+                    //                          showInfoMessage("Ошибка загрузки диалога редактирования действия.");
+                    //                     }
+                    //                 }
+                    //             }
+                    //         }
+                    //         // --- ---
+                    //     }
+                    // }
 
                     // Заголовки столбцов (реализация может быть сложнее, чем здесь)
                     header: Rectangle {
@@ -656,8 +699,8 @@ Window {
             // --- ---
 
             // --- Информация под таблицей ---
-            Rectangle {
-                Layout.fillWidth: true
+            Rectangle { // <-- ВЕРНЁМ Layout.fillWidth: true
+                Layout.fillWidth: true // <-- БЫЛО false, стало true
                 Layout.preferredHeight: 40
                 color: "#ecf0f1"
                 border.color: "#bdc3c7"
