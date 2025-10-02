@@ -2044,6 +2044,155 @@ class PostgreSQLDatabaseManager:
             traceback.print_exc()
             return []
 
+    def get_algorithm_execution_by_id(self, execution_id: int) -> dict:
+        """
+        Получает данные конкретного экземпляра выполнения алгоритма (execution) по его ID.
+        Включает информацию о пользователе, создавшем execution, на момент запуска.
+        ВНИМАНИЕ: Этот метод НЕ ДОЛЖЕН использовать ту же транзакцию, что и другие,
+        которые могут быть "сломаны". Временно делаем rollback, чтобы изолировать ошибку.
+        :param execution_id: ID execution'а.
+        :return: Словарь с данными execution'а или None, если не найден.
+        """
+        if not self.connection:
+            print("PostgreSQLDatabaseManager: Нет подключения к БД.")
+            logger.error("PostgreSQLDatabaseManager: Нет подключения к БД.")
+            return None
+
+        try:
+            # --- ВРЕМЕННОЕ РЕШЕНИЕ: Откатываем текущую транзакцию ---
+            # Это сбросит состояние и позволит выполнить запрос "с чистого листа"
+            # ВНИМАНИЕ: Это может повлиять на другие операции, ожидающие commit!
+            # Используем только для диагностики.
+            print(f"PostgreSQLDatabaseManager: [DEBUG] Выполняем rollback перед запросом execution ID {execution_id} для изоляции.")
+            self.connection.rollback()
+            # --- ---
+
+            with self.connection.cursor() as cursor:
+                # SQL-запрос для получения данных execution'а и имени пользователя
+                # Используем LEFT JOIN, чтобы получить данные даже если пользователь был удалён
+                # В этом случае created_by_user_display_name будет NULL
+                sql_query = """
+                    SELECT
+                        ae.id,
+                        ae.algorithm_id,
+                        ae.snapshot_name,
+                        ae.snapshot_category,
+                        ae.snapshot_time_type,
+                        ae.snapshot_description,
+                        ae.started_at,
+                        ae.completed_at,
+                        ae.status,
+                        ae.created_by_user_id,
+                        ae.created_by_user_display_name, -- Имя, сохранённое на момент запуска
+                        -- ae.notes, -- <-- УДАЛЕНО: Столбец 'notes' не существует в таблице algorithm_executions
+                        ae.created_at,
+                        ae.updated_at
+                    FROM app_schema.algorithm_executions ae
+                    WHERE ae.id = %s
+                """
+                cursor.execute(sql_query, (execution_id,))
+                row = cursor.fetchone()
+
+                if row:
+                    # Преобразуем результат в словарь
+                    # Порядок столбцов в SELECT должен соответствовать порядку в row
+                    execution_data = {
+                        'id': row[0],
+                        'algorithm_id': row[1],
+                        'snapshot_name': row[2],
+                        'snapshot_category': row[3],
+                        'snapshot_time_type': row[4],
+                        'snapshot_description': row[5],
+                        'started_at': row[6].isoformat() if row[6] else None, # Преобразуем datetime в строку
+                        'completed_at': row[7].isoformat() if row[7] else None,
+                        'status': row[8],
+                        'created_by_user_id': row[9],
+                        'created_by_user_display_name': row[10],
+                        # 'notes': row[11], # <-- УДАЛЕНО: Соответствующий элемент в словаре тоже убираем
+                        'created_at': row[11].isoformat() if row[11] else None, # Индекс сдвинулся на 1
+                        'updated_at': row[12].isoformat() if row[12] else None, # Индекс сдвинулся на 1
+                    }
+                    logger.info(f"PostgreSQLDatabaseManager: Получены данные execution ID {execution_id}.")
+                    return execution_data
+                else:
+                    logger.warning(f"PostgreSQLDatabaseManager: Execution с ID {execution_id} не найден.")
+                    return None
+
+        except psycopg2.Error as e:
+            logger.error(f"PostgreSQLDatabaseManager: Ошибка при получении execution ID {execution_id}: {e}")
+            print(f"PostgreSQLDatabaseManager: Ошибка при получении execution ID {execution_id}: {e}")
+            # self.connection.rollback() # Уже был выполнен выше, если ошибка произошла после него
+            return None
+        except Exception as e:
+            logger.error(f"PostgreSQLDatabaseManager: Неизвестная ошибка при получении execution ID {execution_id}: {e}")
+            print(f"PostgreSQLDatabaseManager: Неизвестная ошибка при получении execution ID {execution_id}: {e}")
+            # self.connection.rollback() # Уже был выполнен выше, если ошибка произошла после него
+            return None
+
+    def get_action_executions_by_execution_id(self, execution_id: int) -> list:
+        """
+        Получает список всех выполнений действий (action_execution'ов) для конкретного execution'а.
+        Результат сортируется по calculated_start_time.
+        :param execution_id: ID execution'а.
+        :return: Список словарей с данными action_execution'ов или пустой список, если не найдены.
+                 Возвращает None в случае ошибки.
+        """
+        if not self.connection:
+            print("PostgreSQLDatabaseManager: Нет подключения к БД.")
+            logger.error("PostgreSQLDatabaseManager: Нет подключения к БД.")
+            return None
+
+        try:
+            with self.connection.cursor() as cursor:
+                # SQL-запрос для получения данных action_execution'ов
+                # Сортировка по calculated_start_time
+                sql_query = """
+                    SELECT
+                        ae.id,
+                        ae.execution_id,
+                        ae.snapshot_description,
+                        ae.snapshot_contact_phones,
+                        ae.snapshot_report_materials,
+                        ae.calculated_start_time,
+                        ae.calculated_end_time,
+                        ae.actual_end_time,
+                        ae.status,
+                        ae.reported_to,
+                        ae.notes,
+                        ae.created_at,
+                        ae.updated_at
+                    FROM app_schema.action_executions ae
+                    WHERE ae.execution_id = %s
+                    ORDER BY ae.calculated_start_time ASC -- Сортировка в БД
+                """
+                cursor.execute(sql_query, (execution_id,))
+                rows = cursor.fetchall()
+
+                # Получаем названия колонок
+                colnames = [desc[0] for desc in cursor.description]
+
+                action_executions_list = []
+                for row in rows:
+                    # Создаем словарь из строки результата
+                    action_exec_dict = dict(zip(colnames, row))
+                    # Преобразуем datetime в строку, если они не None
+                    for time_field in ['calculated_start_time', 'calculated_end_time', 'actual_end_time', 'created_at', 'updated_at']:
+                        if action_exec_dict.get(time_field):
+                            action_exec_dict[time_field] = action_exec_dict[time_field].isoformat()
+                    action_executions_list.append(action_exec_dict)
+
+                logger.info(f"PostgreSQLDatabaseManager: Получено {len(action_executions_list)} action_execution'ов для execution ID {execution_id}.")
+                return action_executions_list
+
+        except psycopg2.Error as e:
+            logger.error(f"PostgreSQLDatabaseManager: Ошибка при получении action_execution'ов для execution ID {execution_id}: {e}")
+            print(f"PostgreSQLDatabaseManager: Ошибка при получении action_execution'ов для execution ID {execution_id}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"PostgreSQLDatabaseManager: Неизвестная ошибка при получении action_execution'ов для execution ID {execution_id}: {e}")
+            print(f"PostgreSQLDatabaseManager: Неизвестная ошибка при получении action_execution'ов для execution ID {execution_id}: {e}")
+            return None
+
 # --- Пример использования (для тестирования модуля отдельно) ---
 if __name__ == "__main__":
     # Для тестирования в standalone-режиме нужно получить конфиг из SQLite

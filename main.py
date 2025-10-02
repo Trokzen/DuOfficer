@@ -1751,6 +1751,42 @@ class ApplicationData(QObject):
             print("Python: Ошибка - pg_database_manager не инициализирован.")
             return []
 
+    @Slot(int, result='QVariant') # Указываем QVariant для QML
+    def getExecutionById(self, execution_id: int):
+        """
+        QML Slot для получения данных execution'а по ID.
+        Вызывает метод из PostgreSQLDatabaseManager.
+        :param execution_id: ID execution'а.
+        :return: Словарь с данными или None.
+        """
+        print(f"Python ApplicationData: Запрос данных execution ID {execution_id}")
+        if self.pg_database_manager: 
+            execution_data = self.pg_database_manager.get_algorithm_execution_by_id(execution_id)
+            print(f"Python ApplicationData: Получены данные из БД для execution ID {execution_id}: {execution_data}")
+            return execution_data # Возвращаем словарь или None
+        else:
+            print("Python ApplicationData: Менеджер PostgreSQL недоступен.")
+            return None
+
+    @Slot(int, result='QVariant') # Указываем QVariant для QML
+    def getActionExecutionsByExecutionId(self, execution_id: int):
+        """
+        QML Slot для получения списка action_execution'ов по ID execution'а.
+        Вызывает метод из PostgreSQLDatabaseManager.
+        :param execution_id: ID execution'а.
+        :return: Список словарей с данными action_execution'ов или None.
+        """
+        print(f"Python ApplicationData: Запрос списка action_execution'ов для execution ID {execution_id}")
+        # --- ИСПРАВЛЕНО: Используем правильное имя атрибута ---
+        if self.pg_database_manager: # <-- Было: self.pg_db_manager
+            action_executions_list = self.pg_database_manager.get_action_executions_by_execution_id(execution_id)
+            print(f"Python ApplicationData: Получен список из {len(action_executions_list) if action_executions_list is not None else 0} action_execution'ов из БД для execution ID {execution_id}.")
+            return action_executions_list # Возвращаем список или None
+        else:
+            print("Python ApplicationData: Менеджер PostgreSQL недоступен.")
+            return None
+        # --- ---
+
     def minimize_window(self):
         if self.window:
             self.window.showMinimized()

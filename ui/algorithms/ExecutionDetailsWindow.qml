@@ -45,7 +45,7 @@ Window {
 
         // Получаем данные execution'а
         var execData = appData.getExecutionById(executionId);
-        console.log("QML ExecutionDetailsWindow: Получены данные execution (сырой):", JSON.stringify(execData).substring(0, 500));
+        console.log("QML ExecutionDetailsWindow: Получены данные execution (сырой):", execData ? JSON.stringify(execData).substring(0, 500) : "null/undefined");
 
         if (execData && typeof execData === 'object' && execData.hasOwnProperty('toVariant')) {
             execData = execData.toVariant();
@@ -65,39 +65,75 @@ Window {
 
         // Получаем список action_execution'ов
         var actionsList = appData.getActionExecutionsByExecutionId(executionId);
-        console.log("QML ExecutionDetailsWindow: Получен список action_executions (сырой):", JSON.stringify(actionsList).substring(0, 500));
-
-        if (actionsList && typeof actionsList === 'object' && actionsList.hasOwnProperty('toVariant')) {
-            actionsList = actionsList.toVariant();
+        // --- ДОБАВИМ БОЛЬШЕ ИНФОРМАЦИИ ---
+        console.log("QML ExecutionDetailsWindow: Получен список action_executions (сырой):", actionsList ? JSON.stringify(actionsList).substring(0, 500) : "null/undefined");
+        console.log("QML ExecutionDetailsWindow: Тип полученного списка:", typeof actionsList);
+        console.log("QML ExecutionDetailsWindow: Является ли массивом (Array.isArray):", Array.isArray(actionsList));
+        if (actionsList && typeof actionsList === 'object') {
+            console.log("QML ExecutionDetailsWindow: Длина списка (length):", actionsList.length);
+            console.log("QML ExecutionDetailsWindow: Имеет ли свойство length:", actionsList.hasOwnProperty('length'));
         }
+        // --- ---
 
+        // --- ИСПРАВЛЕНО: Более надёжная проверка на массив/список ---
         if (actionsList && Array.isArray(actionsList)) {
-            // Сортируем по calculated_start_time
-            actionsList.sort(function(a, b) {
-                // Преобразуем строки времени в Date объекты для сравнения
-                // Формат времени из БД, предположим, ISO: "YYYY-MM-DD HH:MM:SS"
-                var dateA = new Date(a.calculated_start_time);
-                var dateB = new Date(b.calculated_start_time);
-                if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
-                    console.warn("QML ExecutionDetailsWindow: Ошибка парсинга времени для сортировки action_executions. Используем оригинальный порядок.");
-                    // Если парсинг не удался, возвращаем оригинальный порядок
-                    return 0;
-                }
-                return dateA.getTime() - dateB.getTime();
-            });
+        // --- ---
+            console.log("QML ExecutionDetailsWindow: Полученный список является массивом. Количество элементов:", actionsList.length);
+
+            if (actionsList.length === 0) {
+                console.log("QML ExecutionDetailsWindow: Список action_execution'ов пуст.");
+            }
+
+            // Сортируем по calculated_start_time (если Python не отсортировал)
+            // actionsList.sort(function(a, b) { ... }); // <-- Опционально, если Python уже отсортировал
             actionExecutionsList = actionsList;
-            console.log("QML ExecutionDetailsWindow: Список action_executions отсортирован и загружен. Количество:", actionExecutionsList.length);
+            console.log("QML ExecutionDetailsWindow: Список action_execution'ов (из Python) загружен. Количество:", actionExecutionsList.length);
         } else {
-            console.error("QML ExecutionDetailsWindow: Не удалось получить корректный список action_executions.");
+            // --- ИСПРАВЛЕНО: Сообщение об ошибке ---
+            console.error("QML ExecutionDetailsWindow: Python не вернул корректный массив для action_executions. Получен тип:", typeof actionsList, "Значение:", actionsList);
+            // --- ---
             actionExecutionsList = [];
+            // Не возвращаем, пусть модель очистится и обновится пустой
         }
 
         // После загрузки данных, обновляем представление
         actionsModel.clear();
         for (var i = 0; i < actionExecutionsList.length; i++) {
-            actionsModel.append(actionExecutionsList[i]);
+            var actionExec = actionExecutionsList[i];
+            // --- Явное копирование свойств ---
+            // Это помогает избежать проблем с QJSValue/QVariantMap, которые могут
+            // не сериализоваться корректно внутри ListModel.
+            // Убедимся, что 'notes' включено, так как оно есть в action_executions
+            var actionExecCopy = {
+                "id": actionExec["id"],
+                "execution_id": actionExec["execution_id"],
+                "snapshot_description": actionExec["snapshot_description"] || "",
+                "snapshot_contact_phones": actionExec["snapshot_contact_phones"] || "",
+                "snapshot_report_materials": actionExec["snapshot_report_materials"] || "",
+                "calculated_start_time": actionExec["calculated_start_time"] || "",
+                "calculated_end_time": actionExec["calculated_end_time"] || "",
+                "actual_end_time": actionExec["actual_end_time"] || "",
+                "status": actionExec["status"] || "unknown",
+                "reported_to": actionExec["reported_to"] || "",
+                "notes": actionExec["notes"] || "", // <-- ДОБАВЛЕНО: Поле 'notes' для action_executions
+                "created_at": actionExec["created_at"] || "",
+                "updated_at": actionExec["updated_at"] || ""
+            };
+            // --- ---
+            actionsModel.append(actionExecCopy);
+            console.log("QML ExecutionDetailsWindow: Action_execution", i, "добавлен в модель (id:", actionExecCopy.id, ").");
         }
-        console.log("QML ExecutionDetailsWindow: Модель ListView обновлена.");
+        console.log("QML ExecutionDetailsWindow: Модель ListView action_executions обновлена. Элементов:", actionsModel.count);
+
+        // --- ДОБАВИМ ОТЛАДКУ СОДЕРЖИМОГО МОДЕЛИ ---
+        if (actionsModel.count > 0) {
+            try {
+                console.log("QML ExecutionDetailsWindow: Первый элемент в модели (для проверки):", JSON.stringify(actionsModel.get(0)));
+            } catch (e_log) {
+                console.warn("QML ExecutionDetailsWindow: Не удалось залогировать первый элемент модели:", e_log.toString());
+            }
+        }
+        // --- ---
     }
 
     // --- Основной контент ---
