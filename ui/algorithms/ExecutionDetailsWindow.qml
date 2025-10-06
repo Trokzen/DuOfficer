@@ -1,4 +1,3 @@
-// ui/algorithms/ExecutionDetailsWindow.qml
 import QtQuick 6.5
 import QtQuick.Controls 6.5
 import QtQuick.Layouts 6.5
@@ -16,21 +15,77 @@ Window {
     // --- Свойства ---
     property int executionId: -1
     property var executionData: null
+
+    // Доступная ширина для таблицы (с учётом отступов)
+    property real availableTableWidth: width - 20 // 10px слева + 10px справа
+
+    // Заголовки (9 столбцов)
     property var columnHeaders: [
-        "Статус", "№", "Описание", "Начало", "Окончание",
-        "Телефоны", "Отчёт", "Факт", "Статус (текст)",
-        "Доложено", "Примечания", "Действие"
+        "Статус",              // ← обновлено
+        "№",
+        "Описание",
+        "Начало",
+        "Окончание",
+        "Телефоны",
+        "Отчётные материалы",
+        "Кому доложено",
+        "Выполнение"           // ← обновлено
     ]
+
+    // Проценты ширины (в сумме 100%)
+    property var columnWidthPercents: [5, 3, 40, 6, 6, 8, 9, 8, 15]
 
     // --- Сигналы ---
     signal executionUpdated(int executionId)
 
     // --- Вспомогательные функции ---
     function openFile(filePath) {
-        if (Qt.openUrlExternally("file:///" + filePath)) {
+        print("try to open file:", filePath);
+        if (filePath.startsWith("file://")) {
+            if (Qt.openUrlExternally(filePath)) {
+                console.log("Файл открыт (URL):", filePath);
+                return;
+            }
+            console.warn("Не удалось открыть URL:", filePath);
+            return;
+        }
+
+        var normalizedPath = filePath.replace(/\\/g, "/");
+        var url = "file:///" + normalizedPath;
+
+        if (Qt.openUrlExternally(url)) {
             console.log("Файл открыт:", filePath);
         } else {
-            console.warn("Не удалось открыть файл:", filePath);
+            console.warn("Не удалось открыть файл через URL:", url);
+        }
+    }
+
+    function executeAction(actionNumber) {
+        var actionsList = appData.getActionExecutionsByExecutionId(executionId);
+        if (!Array.isArray(actionsList) || actionNumber < 1 || actionNumber > actionsList.length) {
+            showInfoMessage("Неверный номер действия");
+            return;
+        }
+
+        var action = actionsList[actionNumber - 1];
+        if (!action || !action.id) {
+            showInfoMessage("Действие не содержит ID");
+            return;
+        }
+
+        if (typeof appData.executeActionExecution !== 'function') {
+            showInfoMessage("Метод выполнения не доступен");
+            return;
+        }
+
+        try {
+            appData.executeActionExecution(action.id);
+            showInfoMessage("Действие отмечено как выполненное");
+            loadExecutionData();
+            executionUpdated(executionId);
+        } catch (e) {
+            console.error("Ошибка выполнения действия:", e);
+            showInfoMessage("Не удалось выполнить действие");
         }
     }
 
@@ -52,6 +107,15 @@ Window {
             .replace(/'/g, "&#039;");
     }
 
+    function formatDateTime(dateTimeStr) {
+        if (!dateTimeStr) return "";
+        var dt = new Date(dateTimeStr);
+        if (isNaN(dt.getTime())) return dateTimeStr;
+        var timeStr = Qt.formatDateTime(dt, "HH:mm");
+        var dateStr = Qt.formatDateTime(dt, "dd.MM.yyyy");
+        return timeStr + "\n" + dateStr;
+    }
+
     // --- Загрузка данных ---
     function loadExecutionData() {
         if (executionId <= 0) return;
@@ -64,7 +128,7 @@ Window {
             return;
         }
         executionData = execData;
-        title = "Детали выполнения: " + (execData.snapshot_name || "Без названия");
+        title = "Детали выполнения: " + (executionData.snapshot_name || "Без названия");
 
         var actionsList = appData.getActionExecutionsByExecutionId(executionId);
         if (!Array.isArray(actionsList) && !(actionsList && actionsList.length !== undefined)) {
@@ -78,46 +142,48 @@ Window {
         var jsRows = [];
         for (var i = 0; i < actionsList.length; i++) {
             var a = actionsList[i];
-            var id = a.id || -1;
             var status = String(a.status || "unknown");
             var desc = String(a.snapshot_description || "");
             var phones = String(a.snapshot_contact_phones || "");
             var materials = String(a.snapshot_report_materials || "");
             var start = String(a.calculated_start_time || "");
             var end = String(a.calculated_end_time || "");
-            var actual = String(a.actual_end_time || "");
             var reported = String(a.reported_to || "");
-            var notes = String(a.notes || "");
+            // Примечания больше не используются напрямую
 
-            function fmt(dtStr) {
-                if (!dtStr) return "";
-                var d = new Date(dtStr);
-                return isNaN(d) ? dtStr : d.toLocaleTimeString(Qt.locale(), "HH:mm") + "\n" + d.toLocaleDateString(Qt.locale(), "dd.MM");
+            // === Формируем HTML для столбца "Выполнение" ===
+            var executionHtml = "";
+            if (status === "completed" && end) {
+                executionHtml = "✅ Выполнено<br/>" + formatDateTime(end);
+            } else {
+                executionHtml = '<a href="execute:' + (i + 1) + '">Выполнить</a>';
             }
 
+            // === Формируем HTML для отчётных материалов ===
             var htmlMaterials = "";
             if (materials) {
-                materials.split('\n').forEach(path => {
-                    if (path = path.trim()) {
-                        if (path.startsWith("file:///")) path = path.substring(8);
-                        htmlMaterials += `<a href="${path}">${escapeHtml(path)}</a><br/>`;
+                materials.split('\n').forEach(rawPath => {
+                    var trimmedPath = rawPath.trim();
+                    if (!trimmedPath) return;
+                    var cleanPath = trimmedPath;
+                    if (cleanPath.startsWith("file:///")) {
+                        cleanPath = cleanPath.substring(8);
                     }
+                    var fileName = cleanPath.split(/[\\/]/).pop();
+                    htmlMaterials += `<a href="${cleanPath}">${escapeHtml(fileName)}</a><br/>`;
                 });
             }
 
             jsRows.push({
                 "Статус": status,
-                "№": id,
+                "№": i + 1,
                 "Описание": desc,
-                "Начало": fmt(start),
-                "Окончание": fmt(end),
+                "Начало": formatDateTime(start),
+                "Окончание": formatDateTime(end),
                 "Телефоны": phones,
-                "Отчёт": htmlMaterials,
-                "Факт": fmt(actual),
-                "Статус (текст)": mapStatusToText(status),
-                "Доложено": reported,
-                "Примечания": notes,
-                "Действие": ""
+                "Отчётные материалы": htmlMaterials,
+                "Кому доложено": reported,
+                "Выполнение": executionHtml  // ← обновлено
             });
         }
 
@@ -156,7 +222,7 @@ Window {
             Item { Layout.fillWidth: true }
             Button { text: "Добавить действие"; onClicked: { /* ... */ } }
             Button { text: "Авто"; onClicked: { /* ... */ } }
-            Button { text: "Печать"; onClicked: showInfoMessage("В разработке"); }
+            Button { text: "🖨 Печать"; onClicked: showInfoMessage("В разработке"); }
             Button { text: "Закрыть"; onClicked: close() }
         }
 
@@ -167,15 +233,20 @@ Window {
             spacing: 0
 
             // --- РУЧНЫЕ ЗАГОЛОВКИ ---
-            RowLayout {
+            Row {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 40
+                width: availableTableWidth
+                x: 10
+
                 Repeater {
                     model: columnHeaders
                     Rectangle {
-                        Layout.fillWidth: true
+                        width: Math.max(20, availableTableWidth * columnWidthPercents[index] / 100)
+                        height: 40
                         color: "#e0e0e0"
                         border.color: "#ccc"
+                        border.width: 1
                         Text {
                             anchors.centerIn: parent
                             text: modelData
@@ -199,7 +270,7 @@ Window {
                     rowHeightProvider: function(row) { return 100; }
 
                     columnWidthProvider: function(col) {
-                        return width / columnHeaders.length;
+                        return Math.max(20, availableTableWidth * columnWidthPercents[col] / 100);
                     }
 
                     delegate: Rectangle {
@@ -208,20 +279,25 @@ Window {
                         color: row % 2 ? "#f9f9f9" : "#ffffff"
                         border.color: "#eee"
 
-                        // Столбец 0: Статус (иконка)
-                        Text {
+                        // Столбец 0: Статус + Иконка действия
+                        Item {
                             visible: column === 0
                             anchors.fill: parent
                             anchors.margins: 5
-                            text: {
-                                var s = model.display;
-                                return s === "completed" ? "✅" :
-                                       s === "skipped" ? "❌" :
-                                       s === "pending" ? "⏸" :
-                                       s === "in_progress" ? "🔄" : "?";
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: {
+                                    var s = model.display;
+                                    return s === "completed" ? "✅" :
+                                        s === "skipped" ? "❌" :
+                                        s === "pending" ? "⏸" :
+                                        s === "in_progress" ? "🔄" : "?";
+                                }
+                                font.pixelSize: 16
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
                             }
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
                         }
 
                         // Столбец 1: №
@@ -234,68 +310,142 @@ Window {
                             verticalAlignment: Text.AlignVCenter
                         }
 
-                        // Столбец 2: Описание
-                        Text {
+                        // Столбец 2: Описание — с ToolTip
+                        Item {
                             visible: column === 2
                             anchors.fill: parent
                             anchors.margins: 5
-                            text: model.display || ""
-                            wrapMode: Text.WordWrap
-                            horizontalAlignment: Text.AlignLeft
-                            verticalAlignment: Text.AlignTop
+
+                            Text {
+                                id: descText
+                                anchors.fill: parent
+                                text: model.display || ""
+                                wrapMode: Text.WordWrap
+                                horizontalAlignment: Text.AlignLeft
+                                verticalAlignment: Text.AlignTop
+                                elide: Text.ElideRight
+                            }
+
+                            ToolTip {
+                                id: descTip
+                                text: model.display || ""
+                                visible: descText.truncated && hovered
+                                delay: 500
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onEntered: descTip.open()
+                                onExited: descTip.close()
+                            }
                         }
 
-                        // Столбцы 3–5, 7–10: текст
-                        Text {
-                            visible: [3,4,5,7,8,9,10].indexOf(column) >= 0
+                        // Столбцы 3–5, 7: текст с ToolTip
+                        Item {
+                            visible: [3,4,5,7].indexOf(column) >= 0
                             anchors.fill: parent
                             anchors.margins: 5
-                            text: model.display || (column === 3 || column === 4 ? "Не задано" : "")
-                            wrapMode: Text.Wrap
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
+
+                            Text {
+                                id: textEl
+                                anchors.fill: parent
+                                text: model.display || (column === 3 || column === 4 ? "Не задано" : "")
+                                wrapMode: Text.Wrap
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                            }
+
+                            ToolTip {
+                                id: textTip
+                                text: model.display || ""
+                                visible: textEl.truncated && hovered
+                                delay: 500
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onEntered: textTip.open()
+                                onExited: textTip.close()
+                            }
                         }
 
-                        // Столбец 6: Отчёт (HTML)
+                        // Столбец 6: Отчётные материалы (HTML)
                         ScrollView {
                             visible: column === 6
                             anchors.fill: parent
                             anchors.margins: 2
                             clip: true
                             TextEdit {
+                                id: reportText
                                 textFormat: TextEdit.RichText
                                 text: model.display || ""
                                 readOnly: true
                                 wrapMode: TextEdit.Wrap
                                 onLinkActivated: executionDetailsWindow.openFile(link)
+
+                                ToolTip {
+                                    id: reportTip
+                                    text: model.display.replace(/<[^>]*>/g, '') || ""
+                                    visible: reportText.hovered && reportText.text.length > 50
+                                    delay: 500
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    acceptedButtons: Qt.NoButton
+                                    onEntered: reportTip.open()
+                                    onExited: reportTip.close()
+                                }
                             }
                         }
 
-                        // Столбец 11: Кнопка
-                        Button {
-                            visible: column === 11
-                            anchors.centerIn: parent
-                            text: {
-                                var status = actionsTableModel.rows[row]["Статус"];
-                                return status === "completed" ? "Изменить" : "Выполнить";
-                            }
-                            onClicked: {
-                                var id = actionsTableModel.rows[row]["№"];
-                                var comp = Qt.createComponent("ActionExecutionEditorDialog.qml");
-                                if (comp.status === Component.Ready) {
-                                    var dlg = comp.createObject(executionDetailsWindow, {
-                                        executionId: executionId,
-                                        currentActionExecutionId: id,
-                                        isEditMode: true
-                                    });
-                                    if (dlg) {
-                                        dlg.onActionExecutionSaved.connect(() => {
-                                            loadExecutionData();
-                                            executionUpdated(executionId);
-                                        });
-                                        dlg.open();
+                        // Столбец 8: Выполнение — интерактивный
+                        Item {
+                            visible: column === 8
+                            anchors.fill: parent
+                            anchors.margins: 5
+
+                            Button {
+                                id: actionButton
+                                anchors.centerIn: parent
+                                text: model["Статус"] === "completed" ? "✏️ Изменить" : "▶️ Выполнить"
+                                //icon.visible: false
+
+                                font.pixelSize: 12
+                                padding: 4
+                                horizontalPadding: 8
+
+                                onClicked: {
+                                    if (model["Статус"] === "completed") {
+                                        var comp = Qt.createComponent("ActionExecutionEditorDialog.qml");
+                                        if (comp.status === Component.Ready) {
+                                            var dlg = comp.createObject(executionDetailsWindow, {
+                                                executionId: executionId,
+                                                currentActionExecutionId: model["№"], // ← из model
+                                                isEditMode: true
+                                            });
+                                            if (dlg) {
+                                                dlg.onActionExecutionSaved.connect(() => {
+                                                    loadExecutionData();
+                                                    executionUpdated(executionId);
+                                                });
+                                                dlg.open();
+                                            }
+                                        }
+                                    } else {
+                                        executeAction(model["№"]); // ← из model
                                     }
                                 }
+                            }
+
+                            ToolTip {
+                                text: model["Статус"] === "completed" ? "Редактировать результаты" : "Отметить как выполненное"
+                                visible: actionButton.hovered
+                                delay: 500
                             }
                         }
                     }
@@ -329,6 +479,7 @@ Window {
         parent: contentItem
         background: Rectangle { color: "lightyellow"; border.color: "orange"; radius: 5 }
         Text {
+            id: infoText
             anchors.centerIn: parent
             anchors.margins: 10
             wrapMode: Text.Wrap
@@ -360,11 +511,8 @@ Window {
         TableModelColumn { display: "Начало" }
         TableModelColumn { display: "Окончание" }
         TableModelColumn { display: "Телефоны" }
-        TableModelColumn { display: "Отчёт" }
-        TableModelColumn { display: "Факт" }
-        TableModelColumn { display: "Статус (текст)" }
-        TableModelColumn { display: "Доложено" }
-        TableModelColumn { display: "Примечания" }
-        TableModelColumn { display: "Действие" }
+        TableModelColumn { display: "Отчётные материалы" }
+        TableModelColumn { display: "Кому доложено" }
+        TableModelColumn { display: "Выполнение" }
     }
 }
