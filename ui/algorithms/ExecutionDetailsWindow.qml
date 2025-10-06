@@ -310,7 +310,7 @@ Window {
                             verticalAlignment: Text.AlignVCenter
                         }
 
-                        // Столбец 2: Описание — с ToolTip
+                        // Столбец 2: Описание — без скролла, только клик и тултип
                         Item {
                             visible: column === 2
                             anchors.fill: parent
@@ -323,7 +323,23 @@ Window {
                                 wrapMode: Text.WordWrap
                                 horizontalAlignment: Text.AlignLeft
                                 verticalAlignment: Text.AlignTop
-                                elide: Text.ElideRight
+                                font.pixelSize: 13
+                                elide: Text.ElideRight  // обрезаем, если не помещается
+                            }
+
+                            // Единый MouseArea для клика и hover
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+
+                                onClicked: {
+                                    fullDescriptionDialog.descriptionText = model.display || "";
+                                    fullDescriptionDialog.open();
+                                }
+
+                                onEntered: descTip.open()
+                                onExited: descTip.close()
                             }
 
                             ToolTip {
@@ -331,13 +347,6 @@ Window {
                                 text: model.display || ""
                                 visible: descText.truncated && hovered
                                 delay: 500
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                onEntered: descTip.open()
-                                onExited: descTip.close()
                             }
                         }
 
@@ -496,6 +505,29 @@ Window {
             infoTimer.start();
         }
     }
+
+    // --- Модальное окно для полного описания ---
+    Dialog {
+        id: fullDescriptionDialog
+        title: "Полное описание"
+        standardButtons: Dialog.Close
+        modal: true
+        width: 600
+        height: 400
+
+        TextArea {
+            id: fullDescTextArea
+            text: fullDescriptionDialog.descriptionText
+            readOnly: true
+            wrapMode: TextEdit.Wrap
+            selectByMouse: true
+            anchors.fill: parent
+            anchors.margins: 10
+        }
+
+        property string descriptionText: ""
+    }
+
     function showInfoMessage(msg) { infoPopup.show(msg); }
 
     // --- Обработчики ---
