@@ -2193,6 +2193,259 @@ class PostgreSQLDatabaseManager:
             print(f"PostgreSQLDatabaseManager: Неизвестная ошибка при получении action_execution'ов для execution ID {execution_id}: {e}")
             return None
 
+
+    # db/postgresql_manager.py
+    # ... (импорты, logger, класс ...) ...
+
+    def create_action_execution(self, execution_id: int, action_execution_data: dict) -> bool:
+        """
+        Создает новое action_execution, связанное с execution_id.
+        :param execution_id: ID execution'а.
+        :param action_execution_data: Данные нового action_execution'а.
+                                     Ожидается словарь с ключами, соответствующими полям в БД.
+        :return: True, если успешно, иначе False.
+        """
+        logger.debug(f"PostgreSQLDatabaseManager: create_action_execution called with execution_id={execution_id}, data={action_execution_data}")
+
+        if not isinstance(execution_id, int) or execution_id <= 0:
+            logger.error("PostgreSQLDatabaseManager: Некорректный execution_id.")
+            return False
+
+        if not isinstance(action_execution_data, dict):
+            logger.error("PostgreSQLDatabaseManager: action_execution_data должно быть словарем.")
+            return False
+
+        # --- 1. Подготовить данные для вставки ---
+        # Определяем разрешенные поля (те, которые реально существуют в БД)
+        # Убедитесь, что этот список соответствует вашей схеме БД!
+        # Например, если у вас нет поля 'actual_start_time', удалите его отсюда.
+        allowed_fields_in_db = {
+            'snapshot_description',
+            'calculated_start_time',      # ← используем calculated как факт
+            'calculated_end_time',
+            'snapshot_contact_phones',
+            'snapshot_report_materials',
+            'reported_to',
+            'notes'
+        }
+        
+        # Создаем копию данных, содержащую только разрешенные поля
+        prepared_data = {k: v for k, v in action_execution_data.items() if k in allowed_fields_in_db}
+        logger.debug(f"PostgreSQLDatabaseManager: Подготовленные данные (до преобразования времени): {prepared_data}")
+        
+        # Добавляем execution_id
+        prepared_data['execution_id'] = execution_id
+        # --- ---
+
+        # --- 2. Обработка абсолютных дат/времени ---
+        # Предполагаем, что поля 'actual_start_time' и 'actual_end_time' содержат
+        # строки в формате 'dd.MM.yyyy HH:mm:ss' или пустые/None.
+        # Нужно преобразовать их в datetime.datetime Python'а.
+        
+        def parse_datetime_string(datetime_str: str) -> datetime.datetime | None:
+            """Вспомогательная функция для парсинга строки даты/времени."""
+            if not datetime_str or not isinstance(datetime_str, str):
+                return None
+            datetime_str = datetime_str.strip()
+            if not datetime_str:
+                return None
+            try:
+                # Пробуем распарсить строку в datetime
+                # datetime.datetime.strptime("05.10.2025 14:30:00", "%d.%m.%Y %H:%M:%S")
+                parsed_dt = datetime.datetime.strptime(datetime_str, "%d.%m.%Y %H:%M:%S")
+                logger.debug(f"PostgreSQLDatabaseManager: Строка '{datetime_str}' успешно преобразована в datetime: {parsed_dt}")
+                return parsed_dt
+            except ValueError as e:
+                logger.warning(f"PostgreSQLDatabaseManager: Неверный формат строки даты/времени '{datetime_str}': {e}")
+                return None # Или поднять исключение, если это критично
+
+        # Преобразуем 'actual_start_time'
+        if 'actual_start_time' in prepared_data:
+            start_time_str = prepared_data['actual_start_time']
+            prepared_data['actual_start_time'] = parse_datetime_string(start_time_str)
+            # Psycopg2 автоматически преобразует datetime.datetime в TIMESTAMP для PostgreSQL
+            # Если значение None, в БД пойдет NULL
+
+        # Преобразуем 'actual_end_time'
+        if 'actual_end_time' in prepared_data:
+            end_time_str = prepared_data['actual_end_time']
+            prepared_data['actual_end_time'] = parse_datetime_string(end_time_str)
+            # Psycopg2 автоматически преобразует datetime.datetime в TIMESTAMP для PostgreSQL
+            # Если значение None, в БД пойдет NULL
+
+        logger.debug(f"PostgreSQLDatabaseManager: Подготовленные данные (после преобразования времени): {prepared_data}")
+        # --- ---
+
+        # --- 3. Подготовить SQL-запрос ---
+        try:
+            with self._get_connection() as conn: # <-- Используем _get_connection (с подчеркиванием)
+                with conn.cursor() as cursor:
+                    # Проверяем, существует ли execution_id
+                    cursor.execute(
+                        f"SELECT 1 FROM {self.SCHEMA_NAME}.algorithm_executions WHERE id = %s;", (execution_id,)
+                    )
+                    if not cursor.fetchone():
+                         logger.error(f"PostgreSQLDatabaseManager: Execution ID {execution_id} не существует.")
+                         return False
+
+                    # Подготавливаем список колонок и значений
+                    columns = list(prepared_data.keys())
+                    values = [prepared_data[col] for col in columns] # Список значений, включая datetime или None
+                    
+                    # Создаем SQL-строки для запроса
+                    columns_str = ', '.join(columns)
+                    placeholders_str = ', '.join(['%s'] * len(values)) # %s для всех значений, включая datetime
+                    
+                    sql_query = f"""
+                        INSERT INTO {self.SCHEMA_NAME}.action_executions ({columns_str})
+                        VALUES ({placeholders_str})
+                        RETURNING id; -- Возвращаем ID нового action_execution
+                    """
+
+                    logger.debug(f"PostgreSQLDatabaseManager: Выполняем SQL: {cursor.mogrify(sql_query, values)}")
+                    cursor.execute(sql_query, values)
+                    new_action_id_row = cursor.fetchone()
+                    new_action_id = new_action_id_row[0] if new_action_id_row else None
+                    # conn.commit() вызывается автоматически при выходе из контекстного менеджера `with conn:`
+                    if new_action_id:
+                        logger.info(f"PostgreSQLDatabaseManager: Новое action_execution (ID: {new_action_id}) добавлено для execution ID {execution_id}.")
+                        return True # Или return new_action_id, если хотите возвращать ID
+                    else:
+                        logger.error(f"PostgreSQLDatabaseManager: Не удалось получить ID нового action_execution для execution ID {execution_id}.")
+                        return False
+
+        except psycopg2.IntegrityError as e:
+             # Это может быть ошибка нарушения внешнего ключа (execution_id не существует)
+             # или уникальности (если такое возможно). Обычно IntegrityError.
+             logger.error(f"PostgreSQLDatabaseManager: Ошибка целостности БД при добавлении action_execution для execution ID {execution_id}: {e}")
+             # conn.rollback() вызывается автоматически при выходе из `with conn:` в случае исключения
+             return False
+        except psycopg2.Error as e: # Ловим более общие ошибки psycopg2
+             logger.error(f"PostgreSQLDatabaseManager: Ошибка БД psycopg2 при добавлении action_execution для execution ID {execution_id}: {e}")
+             # conn.rollback() вызывается автоматически
+             return False
+        except Exception as e:
+             logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при добавлении action_execution для execution ID {execution_id}: {e}")
+             # conn.rollback() вызывается автоматически
+             return False
+        # --- ---
+
+    def update_action_execution(self, action_execution_id: int, action_execution_data: dict) -> bool:
+        """
+        Обновляет существующее action_execution.
+        :param action_execution_id: ID action_execution'а.
+        :param action_execution_data: Данные для обновления.
+        :return: True, если успешно, иначе False.
+        """
+        logger.debug(f"PostgreSQLDatabaseManager: update_action_execution called with action_execution_id={action_execution_id}, data={action_execution_data}")
+
+        if not isinstance(action_execution_id, int) or action_execution_id <= 0:
+            logger.error("PostgreSQLDatabaseManager: Некорректный action_execution_id.")
+            return False
+
+        if not isinstance(action_execution_data, dict):
+            logger.error("PostgreSQLDatabaseManager: action_execution_data должно быть словарем.")
+            return False
+
+        # --- 1. Подготовить данные для обновления ---
+        # Определяем разрешенные поля (те, которые реально существуют в БД)
+        # Убедитесь, что этот список соответствует вашей схеме БД!
+        # Исключаем 'id' и 'execution_id' из обновляемых полей, если они не должны меняться.
+        allowed_fields_in_db = {
+            'snapshot_description',
+            'calculated_start_time',      # ← используем calculated как факт
+            'calculated_end_time',
+            'snapshot_contact_phones',
+            'snapshot_report_materials',
+            'reported_to',
+            'notes'
+        }
+        
+        # Создаем копию данных, содержащую только разрешенные поля
+        prepared_data = {k: v for k, v in action_execution_data.items() if k in allowed_fields_in_db}
+        logger.debug(f"PostgreSQLDatabaseManager: Подготовленные данные для обновления (до преобразования времени): {prepared_data}")
+        # --- ---
+
+        # --- 2. Обработка абсолютных дат/времени (аналогично create_action_execution) ---
+        def parse_datetime_string(datetime_str: str) -> datetime.datetime | None:
+            """Вспомогательная функция для парсинга строки даты/времени."""
+            if not datetime_str or not isinstance(datetime_str, str):
+                return None
+            datetime_str = datetime_str.strip()
+            if not datetime_str:
+                return None
+            try:
+                parsed_dt = datetime.datetime.strptime(datetime_str, "%d.%m.%Y %H:%M:%S")
+                logger.debug(f"PostgreSQLDatabaseManager: Строка '{datetime_str}' успешно преобразована в datetime: {parsed_dt}")
+                return parsed_dt
+            except ValueError as e:
+                logger.warning(f"PostgreSQLDatabaseManager: Неверный формат строки даты/времени '{datetime_str}': {e}")
+                return None
+
+        # Преобразуем 'actual_start_time'
+        if 'actual_start_time' in prepared_data:
+            start_time_str = prepared_data['actual_start_time']
+            prepared_data['actual_start_time'] = parse_datetime_string(start_time_str)
+
+        # Преобразуем 'actual_end_time'
+        if 'actual_end_time' in prepared_data:
+            end_time_str = prepared_data['actual_end_time']
+            prepared_data['actual_end_time'] = parse_datetime_string(end_time_str)
+
+        logger.debug(f"PostgreSQLDatabaseManager: Подготовленные данные для обновления (после преобразования времени): {prepared_data}")
+        # --- ---
+
+        # --- 3. Подготовить SQL-запрос UPDATE ---
+        if not prepared_data:
+            logger.warning("PostgreSQLDatabaseManager: Нет данных для обновления.")
+            return False # Или True, если это допустимо
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cursor:
+                    # Проверяем, существует ли action_execution_id
+                    cursor.execute(
+                        f"SELECT 1 FROM {self.SCHEMA_NAME}.action_executions WHERE id = %s;", (action_execution_id,)
+                    )
+                    if not cursor.fetchone():
+                         logger.error(f"PostgreSQLDatabaseManager: Action_execution ID {action_execution_id} не существует.")
+                         return False
+
+                    # Подготавливаем SET часть запроса
+                    set_clauses = []
+                    values = []
+                    for key, value in prepared_data.items():
+                        set_clauses.append(f"{key} = %s")
+                        values.append(value) # Добавляем значение (datetime, строка, None и т.д.)
+
+                    # Добавляем action_execution_id в конец списка значений для WHERE
+                    values.append(action_execution_id)
+
+                    set_clause_str = ", ".join(set_clauses)
+                    sql_query = f"""
+                        UPDATE {self.SCHEMA_NAME}.action_executions
+                        SET {set_clause_str}
+                        WHERE id = %s;
+                    """
+
+                    logger.debug(f"PostgreSQLDatabaseManager: Выполняем SQL UPDATE: {cursor.mogrify(sql_query, values)}")
+                    cursor.execute(sql_query, values)
+                    # conn.commit() вызывается автоматически
+                    affected_rows = cursor.rowcount
+                    logger.info(f"PostgreSQLDatabaseManager: Обновлено {affected_rows} записей action_execution с ID {action_execution_id}.")
+                    return affected_rows > 0 # True, если хотя бы одна строка была обновлена
+
+        except psycopg2.IntegrityError as e:
+             logger.error(f"PostgreSQLDatabaseManager: Ошибка целостности БД при обновлении action_execution ID {action_execution_id}: {e}")
+             return False
+        except psycopg2.Error as e:
+             logger.error(f"PostgreSQLDatabaseManager: Ошибка БД psycopg2 при обновлении action_execution ID {action_execution_id}: {e}")
+             return False
+        except Exception as e:
+             logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при обновлении action_execution ID {action_execution_id}: {e}")
+             return False
+        # --- ---
+
 # --- Пример использования (для тестирования модуля отдельно) ---
 if __name__ == "__main__":
     # Для тестирования в standalone-режиме нужно получить конфиг из SQLite

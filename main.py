@@ -1787,6 +1787,91 @@ class ApplicationData(QObject):
             return None
         # --- ---
 
+    # --- НОВЫЙ СЛОТ ДЛЯ ДОБАВЛЕНИЯ ACTION_EXECUTION ---
+    @Slot(int, 'QVariant', result=bool) # <-- ВАЖНО: сигнатура
+    def addActionExecution(self, execution_id: int, action_execution_: 'QVariant') -> bool: # <-- ИМЯ ПАРАМЕТРА С ПОДЧЁРКИВАНИЕМ
+        """
+        Добавляет новое action_execution к существующему execution.
+        Вызывается из QML.
+        :param execution_id: ID execution'а.
+        :param action_execution_: Данные нового action_execution'а (QVariantMap из QML).
+        :return: True, если успешно, иначе False.
+        """
+        # Сразу преобразуем QVariant в словарь Python
+        # action_execution_ - это параметр функции, являющийся QVariant
+        py_action_data = action_execution_.toVariant() # <-- Используем ПРАВИЛЬНОЕ имя параметра
+        
+        print(f"Python ApplicationData (из main.py): QML запросил добавление нового action_execution к execution ID {execution_id}. Преобразовано в: {py_action_data}")
+
+        # 1. Проверки (опционально, но рекомендуется)
+        if not isinstance(py_action_data, dict): # <-- Используем py_action_data
+             print("Python ApplicationData: ОШИБКА - action_execution_.toVariant() не вернул словарь.")
+             return False
+
+        if not isinstance(execution_id, int) or execution_id <= 0:
+            print(f"Python ApplicationData: Некорректный execution_id: {execution_id}")
+            return False
+
+        # 2. Вызвать метод менеджера БД
+        # Предполагается, что у вас есть это свойство, созданное после входа в систему
+        if self.pg_database_manager: 
+            try:
+                # Передаем ИМЕННО преобразованный словарь
+                success = self.pg_database_manager.create_action_execution(execution_id, py_action_data) # <-- Используем py_action_data
+                if success:
+                    print(f"Python ApplicationData: Новое action_execution успешно добавлено к execution ID {execution_id}.")
+                    return True
+                else:
+                    print(f"Python ApplicationData: Менеджер БД не смог добавить action_execution к execution ID {execution_id}.")
+                    return False # Или возвращать строку с ошибкой от менеджера
+            except Exception as e:
+                print(f"Python ApplicationData: Исключение при добавлении action_execution к execution ID {execution_id}: {e}")
+                import traceback
+                traceback.print_exc() # Для вывода полной трассировки
+                return False # Или возвращать строку с ошибкой
+        else:
+            print("Python ApplicationData: Ошибка - Нет подключения к БД PostgreSQL.")
+            return False
+    # --- КОНЕЦ СЛОТА ---
+
+    # --- НОВЫЙ СЛОТ ДЛЯ ПОЛУЧЕНИЯ ВРЕМЕНИ НАЧАЛА EXECUTION ---
+    @Slot(int, result=str) # <-- ВАЖНО: сигнатура, возвращает строку
+    def getExecutionStartedAt(self, execution_id: int) -> str:
+        """
+        Получает отформатированную строку started_at для execution по его ID.
+        Используется для установки значений по умолчанию в диалогах редактирования action_execution.
+        :param execution_id: ID execution'а.
+        :return: Строка в формате 'dd.MM.yyyy HH:mm:ss' или пустая строка в случае ошибки.
+        """
+        logger.debug(f"Python ApplicationData: QML запросил started_at для execution ID {execution_id}.")
+
+        if not isinstance(execution_id, int) or execution_id <= 0:
+            logger.error(f"Python ApplicationData: Некорректный execution_id: {execution_id}")
+            return ""
+
+        if self.pg_database_manager:
+            try:
+                # Предполагается, что у PostgreSQLDatabaseManager есть метод get_execution_by_id
+                # который возвращает словарь с данными execution'а, включая started_at как datetime.datetime
+                execution_data = self.pg_database_manager.get_execution_by_id(execution_id)
+                if execution_data and 'started_at' in execution_data and execution_data['started_at']:
+                    started_at_dt = execution_data['started_at']
+                    # Форматируем datetime в строку, понятную для UI
+                    # Используем strftime для форматирования
+                    formatted_time = started_at_dt.strftime('%d.%m.%Y %H:%M:%S')
+                    logger.debug(f"Python ApplicationData: Получено и отформатировано started_at для execution ID {execution_id}: {formatted_time}")
+                    return formatted_time
+                else:
+                    logger.warning(f"Python ApplicationData: Execution ID {execution_id} не найден или started_at отсутствует.")
+                    return ""
+            except Exception as e:
+                logger.exception(f"Python ApplicationData: Исключение при получении started_at для execution ID {execution_id}: {e}")
+                return ""
+        else:
+            logger.error("Python ApplicationData: Нет подключения к БД PostgreSQL.")
+            return ""
+    # --- КОНЕЦ СЛОТА ---
+
     def minimize_window(self):
         if self.window:
             self.window.showMinimized()

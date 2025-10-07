@@ -220,7 +220,46 @@ Window {
             spacing: 10
             Button { text: "График"; onClicked: showInfoMessage("В разработке"); }
             Item { Layout.fillWidth: true }
-            Button { text: "Добавить действие"; onClicked: { /* ... */ } }
+
+            Button {
+                text: "Добавить действие"
+                onClicked: {
+                    console.log("QML ExecutionDetailsWindow: Нажата кнопка 'Добавить действие' для execution ID:", executionId);
+
+                    // --- Создание и открытие диалога добавления нового action_execution ---
+                    var component = Qt.createComponent("ActionExecutionEditorDialog.qml");
+                    if (component.status === Component.Ready) {
+                        // Создаем диалог, передавая executionId и указывая, что это режим добавления
+                        var dialog = component.createObject(executionDetailsWindow, {
+                            "executionId": executionId, // Передаем ID текущего execution
+                            "isEditMode": false         // Режим добавления
+                            // currentActionExecutionId не передаем, так как его еще нет
+                        });
+
+                        if (dialog) {
+                            // Подключаемся к сигналу, который будет испущен при успешном сохранении
+                            dialog.onActionExecutionSaved.connect(function() {
+                                console.log("QML ExecutionDetailsWindow: Получен сигнал о сохранении нового action_execution. Перезагружаем данные таблицы.");
+                                // Перезагружаем данные в таблице
+                                executionDetailsWindow.loadExecutionData();
+                                // Опционально: уведомляем родителя об изменении
+                                executionUpdated(executionId);
+                            });
+
+                            console.log("QML ExecutionDetailsWindow: Диалог добавления action_execution создан успешно. Открываем.");
+                            dialog.open();
+                        } else {
+                            console.error("QML ExecutionDetailsWindow: Не удалось создать объект ActionExecutionEditorDialog (режим добавления).");
+                            showInfoMessage("Ошибка: Не удалось открыть диалог добавления действия.");
+                        }
+                    } else {
+                        console.error("QML ExecutionDetailsWindow: Ошибка загрузки компонента ActionExecutionEditorDialog.qml:", component.errorString());
+                        showInfoMessage("Ошибка загрузки диалога добавления действия: " + component.errorString());
+                    }
+                    // --- ---
+                }
+            }
+
             Button { text: "Авто"; onClicked: { /* ... */ } }
             Button { text: "🖨 Печать"; onClicked: showInfoMessage("В разработке"); }
             Button { text: "Закрыть"; onClicked: close() }
