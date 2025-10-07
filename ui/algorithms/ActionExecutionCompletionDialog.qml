@@ -623,6 +623,10 @@ Popup {
         }
     }
 
+    /**
+     * Загружает данные конкретного выполнения действия (action_execution) из Python
+     * и заполняет поля ввода.
+     */
     function loadActionExecutionData() {
         if (currentActionExecutionId <= 0) {
             console.warn("QML ActionExecutionCompletionDialog: currentActionExecutionId не задан, невозможно загрузить данные для редактирования.");
@@ -633,6 +637,7 @@ Popup {
         var actionExecData = appData.getActionExecutionById(currentActionExecutionId);
         console.log("QML ActionExecutionCompletionDialog: Получены данные action_execution (сырой):", JSON.stringify(actionExecData).substring(0, 500));
 
+        // Преобразование QJSValue/QVariant в JS-объект, если нужно
         if (actionExecData && typeof actionExecData === 'object' && actionExecData.hasOwnProperty('toVariant')) {
             console.log("QML ActionExecutionCompletionDialog: Обнаружен QJSValue, преобразование в JS-объект...");
             actionExecData = actionExecData.toVariant();
@@ -642,43 +647,150 @@ Popup {
         }
 
         if (actionExecData && typeof actionExecData === 'object') {
+            // Загружаем описание действия (snapshot_description)
             descriptionArea.text = actionExecData.snapshot_description || "";
             console.log("QML ActionExecutionCompletionDialog: Загружено описание:", descriptionArea.text);
 
+            // --- ИСПРАВЛЕНО: Загружаем фактическое время окончания ---
             var actualEndTime = actionExecData.actual_end_time;
             if (actualEndTime) {
-                console.log("QML ActionExecutionCompletionDialog: Загружено actual_end_time из БД:", actualEndTime);
-                var match1 = actualEndTime.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
-                var match2 = actualEndTime.match(/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
+                console.log("QML ActionExecutionCompletionDialog: Загружено actual_end_time из БД (до обработки):", actualEndTime, "Тип:", typeof actualEndTime);
 
-                if (match1) {
-                    actualEndDateField.text = match1[3] + "." + match1[2] + "." + match1[1];
-                    actualEndTimeHoursField.text = match1[4];
-                    actualEndTimeMinutesField.text = match1[5];
-                    actualEndTimeSecondsField.text = match1[6];
-                } else if (match2) {
-                    actualEndDateField.text = actualEndTime.substring(0, 10);
-                    actualEndTimeHoursField.text = actualEndTime.substring(11, 13);
-                    actualEndTimeMinutesField.text = actualEndTime.substring(14, 16);
-                    actualEndTimeSecondsField.text = actualEndTime.substring(17, 19);
+                var dateStr = "";
+                var timeStr = "";
+                var hours = "00";
+                var minutes = "00";
+                var seconds = "00";
+
+                // --- НАЧАЛО НОВОЙ ЛОГИКИ ОБРАБОТКИ ---
+                // Проверяем, является ли actualEndTime объектом Date (предполагаем, что Python datetime преобразуется в Date в QML)
+                if (actualEndTime instanceof Date) {
+                    console.log("QML ActionExecutionCompletionDialog: actual_end_time распознан как объект Date (instanceof).");
+                    // Используем Qt для форматирования
+                    dateStr = Qt.formatDate(actualEndTime, "dd.MM.yyyy");
+                    hours = Qt.formatTime(actualEndTime, "HH");
+                    minutes = Qt.formatTime(actualEndTime, "mm");
+                    seconds = Qt.formatTime(actualEndTime, "ss");
+                } else if (typeof actualEndTime === 'string') {
+                    console.log("QML ActionExecutionCompletionDialog: actual_end_time распознан как строка.");
+                    // Обработка строк (старая логика)
+                    processActualEndTimeString(actualEndTime, function(d, t) { dateStr = d; timeStr = t; }); // Вспомогательная функция
+                    if (timeStr) {
+                        var timeParts = timeStr.split(':');
+                        if (timeParts.length === 3) {
+                            hours = timeParts[0];
+                            minutes = timeParts[1];
+                            seconds = timeParts[2];
+                        }
+                    }
+                } else if (typeof actualEndTime === 'object' && actualEndTime !== null) {
+                    // Это объект, но не Date. Может быть QVariant или другой объект.
+                    console.log("QML ActionExecutionCompletionDialog: actual_end_time распознан как object (не Date). Попытка преобразования...");
+                    
+                    // Попробуем преобразовать в строку через Qt, если это QDateTime внутри QVariant
+                    // Qt.formatDateTime может иногда работать с QVariant(DateTime)
+                    try {
+                        var formattedDateTimeStr = Qt.formatDateTime(actualEndTime, "dd.MM.yyyy HH:mm:ss");
+                        if (formattedDateTimeStr && formattedDateTimeStr !== "01.01.1970 03:00:00") { // Исключаем_epoch_ по умолчанию
+                             console.log("QML ActionExecutionCompletionDialog: Qt.formatDateTime успешно преобразовал объект:", formattedDateTimeStr);
+                             // Разбираем отформатированную строку
+                             processActualEndTimeString(formattedDateTimeStr, function(d, t) { dateStr = d; timeStr = t; });
+                             if (timeStr) {
+                                var timePartsFormatted = timeStr.split(':');
+                                if (timePartsFormatted.length === 3) {
+                                    hours = timePartsFormatted[0];
+                                    minutes = timePartsFormatted[1];
+                                    seconds = timePartsFormatted[2];
+                                }
+                             }
+                        } else {
+                            console.warn("QML ActionExecutionCompletionDialog: Qt.formatDateTime вернул значение по умолчанию или пустую строку для объекта:", formattedDateTimeStr);
+                            throw new Error("Форматирование Qt не дало результата");
+                        }
+                    } catch (formatError) {
+                        console.warn("QML ActionExecutionCompletionDialog: Qt.formatDateTime не смог преобразовать объект:", formatError.message);
+                        // Если Qt.formatDateTime не сработал, попробуем toVariant, если это QJSValue
+                        if (actualEndTime.hasOwnProperty('toVariant')) {
+                            console.log("QML ActionExecutionCompletionDialog: Обнаружен toVariant, пробуем преобразовать...");
+                            try {
+                                var variantData = actualEndTime.toVariant();
+                                console.log("QML ActionExecutionCompletionDialog: toVariant вернул:", variantData, "Тип:", typeof variantData);
+                                // Рекурсивный вызов с преобразованными данными
+                                // Чтобы избежать бесконечной рекурсии, проверим тип
+                                if (variantData !== actualEndTime) { // Убедимся, что это новый объект
+                                    // Создаем временную копию функции для рекурсивного вызова
+                                    var tempProcessFunction = arguments.callee; // arguments.callee не всегда доступен в строгом режиме
+                                    // Лучше передать саму функцию как параметр или использовать именованную функцию
+                                    // Для простоты, просто вызовем обработку строки, если variantData - строка
+                                    if (typeof variantData === 'string') {
+                                        console.log("QML ActionExecutionCompletionDialog: toVariant вернул строку, обрабатываем...");
+                                        processActualEndTimeString(variantData, function(d, t) { dateStr = d; timeStr = t; });
+                                        if (timeStr) {
+                                            var timePartsVariant = timeStr.split(':');
+                                            if (timePartsVariant.length === 3) {
+                                                hours = timePartsVariant[0];
+                                                minutes = timePartsVariant[1];
+                                                seconds = timePartsVariant[2];
+                                            }
+                                        }
+                                    } else if (variantData instanceof Date) {
+                                        console.log("QML ActionExecutionCompletionDialog: toVariant вернул Date, обрабатываем...");
+                                        dateStr = Qt.formatDate(variantData, "dd.MM.yyyy");
+                                        hours = Qt.formatTime(variantData, "HH");
+                                        minutes = Qt.formatTime(variantData, "mm");
+                                        seconds = Qt.formatTime(variantData, "ss");
+                                    } else {
+                                        console.warn("QML ActionExecutionCompletionDialog: toVariant вернул неподдерживаемый тип:", typeof variantData, variantData);
+                                    }
+                                } else {
+                                     console.warn("QML ActionExecutionCompletionDialog: toVariant вернул тот же объект, пропускаем.");
+                                }
+                            } catch (toVariantError) {
+                                console.error("QML ActionExecutionCompletionDialog: Ошибка при вызове toVariant:", toVariantError.message);
+                            }
+                        } else {
+                            console.warn("QML ActionExecutionCompletionDialog: Объект не имеет метода toVariant.");
+                        }
+                    }
                 } else {
-                    console.warn("QML ActionExecutionCompletionDialog: Неизвестный формат actual_end_time:", actualEndTime);
+                     console.warn("QML ActionExecutionCompletionDialog: actual_end_time не является строкой, Date или object, тип:", typeof actualEndTime);
+                     // Оставляем dateStr и время как есть (00:00:00)
                 }
-            } else {
-                 console.log("QML ActionExecutionCompletionDialog: actual_end_time в БД отсутствует, поля времени остаются пустыми.");
-            }
+                // --- КОНЕЦ НОВОЙ ЛОГИКИ ОБРАБОТКИ ---
 
+                // Установка значений в поля
+                actualEndDateField.text = dateStr;
+                actualEndTimeHoursField.text = hours;
+                actualEndTimeMinutesField.text = minutes;
+                actualEndTimeSecondsField.text = seconds;
+
+                console.log("QML ActionExecutionCompletionDialog: Установлены значения из actual_end_time: дата =", dateStr, ", часы =", hours, ", минуты =", minutes, ", секунды =", seconds);
+            } else {
+                 console.log("QML ActionExecutionCompletionDialog: actual_end_time в БД отсутствует, поля времени остаются пустыми или 00:00:00.");
+                 // Поля уже очищены/установлены в 00:00:00 в else внизу, или оставим их пустыми/00
+                 // Если нужно, можно явно установить:
+                 // actualEndDateField.text = "";
+                 // actualEndTimeHoursField.text = "00";
+                 // actualEndTimeMinutesField.text = "00";
+                 // actualEndTimeSecondsField.text = "00";
+            }
+            // --- ---
+
+            // Загружаем "Кому доложено"
             reportedToField.text = actionExecData.reported_to || "";
             console.log("QML ActionExecutionCompletionDialog: Загружено reported_to:", reportedToField.text);
 
-            reportMaterialsArea.text = actionExecData.report_materials || "";
-            console.log("QML ActionExecutionCompletionDialog: Загружено report_materials (первых 200 символов):", reportMaterialsArea.text.substring(0, 200));
+            // Загружаем "Отчётные материалы" (исправлено на snapshot_report_materials)
+            reportMaterialsArea.text = actionExecData.snapshot_report_materials || "";
+            console.log("QML ActionExecutionCompletionDialog: Загружено snapshot_report_materials (первых 200 символов):", reportMaterialsArea.text.substring(0, 200));
 
+            // Загружаем "Примечания"
             notesArea.text = actionExecData.notes || "";
             console.log("QML ActionExecutionCompletionDialog: Загружено notes (первых 200 символов):", notesArea.text.substring(0, 200));
 
         } else {
              console.warn("QML ActionExecutionCompletionDialog: Не удалось получить корректные данные action_execution ID", currentActionExecutionId, "из Python.");
+             // Можно очистить поля или показать сообщение
              descriptionArea.text = "";
              actualEndDateField.text = "";
              actualEndTimeHoursField.text = "00";
@@ -690,23 +802,71 @@ Popup {
         }
     }
 
+
     function loadCurrentLocalTime() {
         console.log("QML ActionExecutionCompletionDialog: Загрузка текущего местного времени из appData.");
-        var localDate = appData.localDate;
-        var localTime = appData.localTime;
+        var localDate = appData.localDate; // Формат "DD.MM.YYYY"
+        var localTime = appData.localTime; // Формат "HH:MM:SS"
 
         console.log("QML ActionExecutionCompletionDialog: Получено местное время: дата =", localDate, ", время =", localTime);
 
-        actualEndDateField.text = localDate;
-
-        var timeParts = localTime.split(':');
-        if (timeParts.length === 3) {
-            actualEndTimeHoursField.text = timeParts[0];
-            actualEndTimeMinutesField.text = timeParts[1];
-            actualEndTimeSecondsField.text = timeParts[2];
+        if (localDate && typeof localDate === 'string') {
+            actualEndDateField.text = localDate;
         } else {
-            console.warn("QML ActionExecutionCompletionDialog: Невозможно разобрать местное время:", localTime);
+            console.warn("QML ActionExecutionCompletionDialog: localDate из appData некорректна:", localDate);
+            // Можно установить текущую дату JS
+            var now = new Date();
+            actualEndDateField.text = Qt.formatDate(now, "dd.MM.yyyy");
         }
+
+        if (localTime && typeof localTime === 'string') {
+            var timeParts = localTime.split(':');
+            if (timeParts.length === 3) {
+                actualEndTimeHoursField.text = timeParts[0];     // HH
+                actualEndTimeMinutesField.text = timeParts[1];   // MM
+                actualEndTimeSecondsField.text = timeParts[2];   // SS
+            } else {
+                console.warn("QML ActionExecutionCompletionDialog: Невозможно разобрать местное время:", localTime);
+                // Оставляем поля как есть (обычно 00:00:00) или устанавливаем 00:00:00
+                actualEndTimeHoursField.text = "00";
+                actualEndTimeMinutesField.text = "00";
+                actualEndTimeSecondsField.text = "00";
+            }
+        } else {
+             console.warn("QML ActionExecutionCompletionDialog: localTime из appData некорректна:", localTime);
+             // Оставляем поля как есть (обычно 00:00:00) или устанавливаем 00:00:00
+             actualEndTimeHoursField.text = "00";
+             actualEndTimeMinutesField.text = "00";
+             actualEndTimeSecondsField.text = "00";
+        }
+    }
+
+    /**
+     * Вспомогательная функция для разбора строки actual_end_time.
+     * @param {string} actualEndTimeStr - Строка времени из БД.
+     * @param {function(string, string)} callback - Callback для возврата dateStr и timeStr.
+     */
+    function processActualEndTimeString(actualEndTimeStr, callback) {
+        if (!callback) return;
+        var dateStr = "";
+        var timeStr = "";
+        if (typeof actualEndTimeStr === 'string') {
+            var match1 = actualEndTimeStr.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
+            var match2 = actualEndTimeStr.match(/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
+
+            if (match1) {
+                dateStr = match1[3] + "." + match1[2] + "." + match1[1]; // DD.MM.YYYY
+                timeStr = match1[4] + ":" + match1[5] + ":" + match1[6]; // HH:MM:SS
+            } else if (match2) {
+                dateStr = actualEndTimeStr.substring(0, 10); // DD.MM.YYYY
+                timeStr = actualEndTimeStr.substring(11, 19); // HH:MM:SS
+            } else {
+                console.warn("QML ActionExecutionCompletionDialog: processActualEndTimeString: Неизвестный формат строки actual_end_time:", actualEndTimeStr);
+            }
+        } else {
+            console.warn("QML ActionExecutionCompletionDialog: processActualEndTimeString: Входной параметр не является строкой:", typeof actualEndTimeStr, actualEndTimeStr);
+        }
+        callback(dateStr, timeStr);
     }
 
     onOpened: {
@@ -714,8 +874,27 @@ Popup {
         errorMessageLabel.text = "";
 
         if (isEditMode) {
+            // Режим редактирования: загружаем существующие данные
             actionExecutionCompletionDialog.loadActionExecutionData();
+            // --- НОВОЕ: Проверяем, было ли загружено время ---
+            // loadActionExecutionData обработал данные. Если actual_end_time в БД был null,
+            // поля времени могли остаться пустыми или сброшены.
+            // Проверим, установлены ли дата и время, и если нет - подставим текущее местное.
+            if (!actualEndDateField.text || actualEndDateField.text.trim() === "") {
+                 console.log("QML ActionExecutionCompletionDialog: actual_end_time в БД отсутствует или пустое. Подставляем текущее местное время.");
+                 actionExecutionCompletionDialog.loadCurrentLocalTime();
+                 // ПРИМЕЧАНИЕ: loadCurrentLocalTime устанавливает дату и время.
+                 // Если вы хотите, чтобы время было строго 00:00:00, а не текущее,
+                 // можно установить его вручную после loadCurrentLocalTime:
+                 // actualEndTimeHoursField.text = "00";
+                 // actualEndTimeMinutesField.text = "00";
+                 // actualEndTimeSecondsField.text = "00";
+            } else {
+                console.log("QML ActionExecutionCompletionDialog: actual_end_time из БД загружено или поля уже заполнены.");
+            }
+            // --- ---
         } else {
+            // Режим ввода: очищаем поля и подставляем текущее местное время
             descriptionArea.text = "";
             actualEndDateField.text = "";
             actualEndTimeHoursField.text = "00";
@@ -725,7 +904,11 @@ Popup {
             reportMaterialsArea.text = "";
             notesArea.text = "";
 
+            // Подставляем текущее местное время
             actionExecutionCompletionDialog.loadCurrentLocalTime();
         }
+
+        // Фокус на первое поле ввода (опционально)
+        // actualEndDateField.forceActiveFocus();
     }
 }

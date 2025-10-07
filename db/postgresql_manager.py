@@ -2515,7 +2515,22 @@ class PostgreSQLDatabaseManager:
                 if row:
                     # Преобразуем RealDictRow в словарь
                     result_dict = dict(row)
-                    logger.debug(f"PostgreSQLDatabaseManager: Получены данные action_execution ID {action_execution_id}: {result_dict}")
+                    
+                    # --- ИСПРАВЛЕНИЕ: Преобразование datetime в строки ---
+                    # Это необходимо для корректной передачи данных в QML и избежания QVariant(PySide::PyObjectWrapper)
+                    # Преобразуем конкретные поля, если они не None
+                    datetime_fields = ['calculated_start_time', 'calculated_end_time', 'actual_end_time']
+                    for field in datetime_fields:
+                        if result_dict.get(field) is not None:
+                            # Проверяем, является ли значение datetime объектом
+                            if isinstance(result_dict[field], datetime.datetime):
+                                # Преобразуем в строку в формате, удобном для QML
+                                result_dict[field] = result_dict[field].strftime("%d.%m.%Y %H:%M:%S")
+                            # Если значение уже строка (например, из-за предыдущих обработок), оставляем как есть
+                            # Если значение имеет другой тип (вряд ли), оно останется как есть, и QML получит его как есть
+                    # --- ---
+                    
+                    logger.debug(f"PostgreSQLDatabaseManager: Получены (и преобразованы) данные action_execution ID {action_execution_id}: {result_dict}")
                     return result_dict
                 else:
                     logger.warning(f"PostgreSQLDatabaseManager: Action execution ID {action_execution_id} не найден.")
@@ -2527,6 +2542,8 @@ class PostgreSQLDatabaseManager:
         except Exception as e:
             logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при получении action_execution ID {action_execution_id}: {e}")
             return None
+
+
 
 # --- Пример использования (для тестирования модуля отдельно) ---
 if __name__ == "__main__":
