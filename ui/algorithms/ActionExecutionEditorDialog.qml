@@ -1,4 +1,5 @@
 // ui/algorithms/ActionExecutionEditorDialog.qml
+// Диалог для редактирования/добавления action_execution
 import QtQuick 6.5
 import QtQuick.Controls 6.5
 import QtQuick.Layouts 6.5

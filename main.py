@@ -1872,6 +1872,79 @@ class ApplicationData(QObject):
             return ""
     # --- КОНЕЦ СЛОТА ---
 
+    @Slot(int, 'QVariant', result=bool)
+    def updateActionExecution(self, action_execution_id: int, action_execution_data: 'QVariant') -> bool:
+        """
+        QML Slot для обновления action_execution.
+        Вызывает метод из PostgreSQLDatabaseManager.
+        :param action_execution_id: ID action_execution для обновления.
+        :param action_execution_data: QVariantMap (словарь) с новыми данными.
+        :return: True, если успешно, иначе False.
+        """
+        print(f"Python ApplicationData: Запрос на обновление action_execution ID {action_execution_id} с данными: {action_execution_data}")
+
+        # Преобразование QVariantMap в обычный словарь Python
+        if hasattr(action_execution_data, 'toVariant'):
+            print("Python ApplicationData: Преобразование QVariantMap в словарь Python...")
+            try:
+                python_data = action_execution_data.toVariant()
+                print(f"Python ApplicationData: Преобразованные данные: {python_data}")
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка преобразования QVariantMap: {e}")
+                return False
+        else:
+            python_data = action_execution_data
+            print(f"Python ApplicationData: Данные уже являются словарем Python: {python_data}")
+
+        if not isinstance(python_data, dict):
+            print(f"Python ApplicationData: Ошибка - action_execution_data не является словарем. Тип: {type(python_data)}")
+            return False
+
+        if not isinstance(action_execution_id, int) or action_execution_id <= 0:
+            print(f"Python ApplicationData: Ошибка - некорректный action_execution_id: {action_execution_id}")
+            return False
+
+        if self.pg_database_manager:
+            try:
+                success = self.pg_database_manager.update_action_execution(action_execution_id, python_data)
+                if success:
+                    print(f"Python ApplicationData: Action execution ID {action_execution_id} успешно обновлён в БД.")
+                    # Возможно, стоит эмитить сигнал для обновления UI, если это не делает QML самостоятельно
+                    # self.actionExecutionUpdated.emit(action_execution_id)
+                    return True
+                else:
+                    print(f"Python ApplicationData: Не удалось обновить action_execution ID {action_execution_id} в БД.")
+                    return False
+            except Exception as e:
+                print(f"Python ApplicationData: Исключение при обновлении action_execution ID {action_execution_id}: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+        else:
+            print("Python ApplicationData: Менеджер PostgreSQL недоступен.")
+            return False
+
+    @Slot(int, result='QVariant') # Указываем QVariant для QML
+    def getActionExecutionById(self, action_execution_id: int):
+        """
+        QML Slot для получения данных action_execution по ID.
+        Вызывает метод из PostgreSQLDatabaseManager.
+        :param action_execution_id: ID action_execution.
+        :return: QVariant (словарь) с данными или None.
+        """
+        print(f"Python ApplicationData: Запрос данных action_execution ID {action_execution_id}")
+        if not isinstance(action_execution_id, int) or action_execution_id <= 0:
+            print(f"Python ApplicationData: Ошибка - некорректный action_execution_id: {action_execution_id}")
+            return None
+
+        if self.pg_database_manager:
+            action_execution_data = self.pg_database_manager.get_action_execution_by_id(action_execution_id)
+            print(f"Python ApplicationData: Получены данные из БД для action_execution ID {action_execution_id}: {action_execution_data}")
+            return action_execution_data # Возвращаем словарь или None
+        else:
+            print("Python ApplicationData: Менеджер PostgreSQL недоступен.")
+            return None
+
     def minimize_window(self):
         if self.window:
             self.window.showMinimized()

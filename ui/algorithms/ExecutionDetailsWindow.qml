@@ -1,3 +1,4 @@
+// ui/algorithms/ExecutionDetailsWindow.qml
 import QtQuick 6.5
 import QtQuick.Controls 6.5
 import QtQuick.Layouts 6.5
@@ -15,6 +16,7 @@ Window {
     // --- Свойства ---
     property int executionId: -1
     property var executionData: null
+    property var cachedActionsList: []
 
     // Доступная ширина для таблицы (с учётом отступов)
     property real availableTableWidth: width - 20 // 10px слева + 10px справа
@@ -130,7 +132,11 @@ Window {
         executionData = execData;
         title = "Детали выполнения: " + (executionData.snapshot_name || "Без названия");
 
+        // --- КЭШИРУЕМ СПИСОК action_executions ---
         var actionsList = appData.getActionExecutionsByExecutionId(executionId);
+        executionDetailsWindow.cachedActionsList = actionsList; // <-- Сохраняем в свойство
+        // --- ---
+
         if (!Array.isArray(actionsList) && !(actionsList && actionsList.length !== undefined)) {
             actionsList = [];
         } else if (!Array.isArray(actionsList)) {
@@ -142,6 +148,7 @@ Window {
         var jsRows = [];
         for (var i = 0; i < actionsList.length; i++) {
             var a = actionsList[i];
+            // var actionExecId = a.id; // <-- БОЛЬШЕ НЕ НУЖНО, сохраняем список целиком
             var status = String(a.status || "unknown");
             var desc = String(a.snapshot_description || "");
             var phones = String(a.snapshot_contact_phones || "");
@@ -149,7 +156,6 @@ Window {
             var start = String(a.calculated_start_time || "");
             var end = String(a.calculated_end_time || "");
             var reported = String(a.reported_to || "");
-            // Примечания больше не используются напрямую
 
             // === Формируем HTML для столбца "Выполнение" ===
             var executionHtml = "";
@@ -174,7 +180,9 @@ Window {
                 });
             }
 
+            // --- НЕ ДОБАВЛЯЕМ 'id' в объект jsRows ---
             jsRows.push({
+                // "id": actionExecId, // <-- УДАЛЕНО
                 "Статус": status,
                 "№": i + 1,
                 "Описание": desc,
@@ -183,8 +191,9 @@ Window {
                 "Телефоны": phones,
                 "Отчётные материалы": htmlMaterials,
                 "Кому доложено": reported,
-                "Выполнение": executionHtml  // ← обновлено
+                "Выполнение": executionHtml
             });
+            // --- ---
         }
 
         actionsTableModel.rows = jsRows;
@@ -452,46 +461,82 @@ Window {
                         }
 
                         // Столбец 8: Выполнение — интерактивный
-                        Item {
+                        Column {
                             visible: column === 8
                             anchors.fill: parent
                             anchors.margins: 5
+                            spacing: 5
 
                             Button {
                                 id: actionButton
-                                anchors.centerIn: parent
+                                anchors.horizontalCenter: parent.horizontalCenter
                                 text: model["Статус"] === "completed" ? "✏️ Изменить" : "▶️ Выполнить"
-                                //icon.visible: false
-
                                 font.pixelSize: 12
                                 padding: 4
                                 horizontalPadding: 8
 
                                 onClicked: {
-                                    if (model["Статус"] === "completed") {
-                                        var comp = Qt.createComponent("ActionExecutionEditorDialog.qml");
-                                        if (comp.status === Component.Ready) {
-                                            var dlg = comp.createObject(executionDetailsWindow, {
-                                                executionId: executionId,
-                                                currentActionExecutionId: model["№"], // ← из model
-                                                isEditMode: true
+                                    // --- ИСПОЛЬЗУЕМ ИНДЕКС row ДЛЯ ПОЛУЧЕНИЯ ID ИЗ КЭШИРОВАННОГО СПИСКА ---
+                                    // ВАЖНО: cachedActionsList должен быть доступен в области видимости delegate
+                                    // Лучший способ - это сделать его свойством компонента ExecutionDetailsWindow
+                                    // и обновлять его при loadExecutionData.
+                                    if (!executionDetailsWindow.cachedActionsList || row < 0 || row >= executionDetailsWindow.cachedActionsList.length) {
+                                        console.error("QML ExecutionDetailsWindow: Невозможно получить ID action_execution. Индекс за пределами диапазона или список не кэширован.");
+                                        showInfoMessage("Не удалось получить ID действия для завершения.");
+                                        return;
+                                    }
+                                    var actionExecId = executionDetailsWindow.cachedActionsList[row].id; // <-- Получаем ID по индексу строки
+                                    // --- ---
+
+                                    if (!actionExecId || actionExecId <= 0) {
+                                        console.error("QML ExecutionDetailsWindow: Невозможно открыть диалог завершения - некорректный ID action_execution из кэша:", actionExecId);
+                                        showInfoMessage("Не удалось получить ID действия для завершения.");
+                                        return;
+                                    }
+
+                                    console.log("QML ExecutionDetailsWindow: Нажата кнопка 'Выполнить'/'Изменить' для action_execution ID:", actionExecId);
+
+                                    // --- Создание и открытие диалога ActionExecutionCompletionDialog ---
+                                    var component = Qt.createComponent("ActionExecutionCompletionDialog.qml");
+                                    if (component.status === Component.Ready) {
+                                        var dialog = component.createObject(executionDetailsWindow, {
+                                            "executionId": executionId,
+                                            "currentActionExecutionId": actionExecId, // <-- Передаём ID
+                                            "isEditMode": true
+                                        });
+
+                                        if (dialog) {
+                                            dialog.actionExecutionSaved.connect(function() {
+                                                console.log("QML ExecutionDetailsWindow: Получен сигнал о сохранении данных action_execution. Перезагружаем данные таблицы.");
+                                                executionDetailsWindow.loadExecutionData();
+                                                executionUpdated(executionId);
                                             });
-                                            if (dlg) {
-                                                dlg.onActionExecutionSaved.connect(() => {
-                                                    loadExecutionData();
-                                                    executionUpdated(executionId);
-                                                });
-                                                dlg.open();
-                                            }
+
+                                            console.log("QML ExecutionDetailsWindow: Диалог ActionExecutionCompletionDialog создан и открыт для ID:", actionExecId);
+                                            dialog.open();
+                                        } else {
+                                            console.error("QML ExecutionDetailsWindow: Не удалось создать объект ActionExecutionCompletionDialog.");
+                                            showInfoMessage("Ошибка: Не удалось открыть диалог ввода данных.");
                                         }
                                     } else {
-                                        executeAction(model["№"]); // ← из model
+                                        console.error("QML ExecutionDetailsWindow: Ошибка загрузки компонента ActionExecutionCompletionDialog.qml:", component.errorString());
+                                        showInfoMessage("Ошибка загрузки диалога: " + component.errorString());
                                     }
+                                    // --- ---
                                 }
                             }
 
+                            Text {
+                                visible: model["Статус"] === "completed" && model["actual_end_time_display"] !== undefined && model["actual_end_time_display"] !== ""
+                                text: model["actual_end_time_display"] || model["actual_end_time"] || ""
+                                color: "#27ae60"
+                                font.pixelSize: 10
+                                horizontalAlignment: Text.AlignHCenter
+                                elide: Text.ElideRight
+                            }
+
                             ToolTip {
-                                text: model["Статус"] === "completed" ? "Редактировать результаты" : "Отметить как выполненное"
+                                text: model["Статус"] === "completed" ? "Редактировать результаты выполнения" : "Ввести данные о выполнении"
                                 visible: actionButton.hovered
                                 delay: 500
                             }
