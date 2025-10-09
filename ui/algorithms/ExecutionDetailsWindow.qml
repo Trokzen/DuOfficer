@@ -216,7 +216,39 @@ Window {
             Layout.fillWidth: true
             Layout.preferredHeight: 40
             spacing: 10
-            Button { text: "График"; onClicked: showInfoMessage("В разработке"); }
+
+            Button {
+                text: "График"
+                onClicked: {
+                    if (executionId <= 0) {
+                        showInfoMessage("Неверный ID выполнения");
+                        return;
+                    }
+
+                    var stats = appData.getActionExecutionStatsForPieChart(executionId);
+                    console.log("Статистика:", 
+                        "своевр.:", stats.on_time,
+                        "несвоевр.:", stats.late,
+                        "не вып.:", stats.not_done,
+                        "всего:", stats.total
+                    );
+
+                    var component = Qt.createComponent("ExecutionStatsChartDialog.qml");
+                    if (component.status === Component.Ready) {
+                        var dialog = component.createObject(executionDetailsWindow, {
+                            "stats": stats
+                        });
+                        if (dialog) {
+                            dialog.open();
+                        } else {
+                            showInfoMessage("Ошибка создания окна графика");
+                        }
+                    } else {
+                        showInfoMessage("Ошибка загрузки ExecutionStatsChartDialog.qml: " + component.errorString());
+                    }
+                }
+            }
+
             Item { Layout.fillWidth: true }
 
             Button {
