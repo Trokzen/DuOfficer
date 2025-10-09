@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QSystemTrayIcon, QMenu, QApplication, QMessageBox
 # --- ИМПОРТЫ для работы с БД ---
 from db.sqlite_config import SQLiteConfigManager
 from db.postgresql_manager import PostgreSQLDatabaseManager
+import datetime
 # --- ---
 
 
@@ -1944,6 +1945,65 @@ class ApplicationData(QObject):
         else:
             print("Python ApplicationData: Менеджер PostgreSQL недоступен.")
             return None
+
+    @Slot(int, result=bool)
+    def completeAllPendingActionsAutomatically(self, execution_id: int) -> bool:
+        """
+        Автоматически завершает все незавершённые действия в execution:
+        - status = 'completed'
+        - actual_end_time = calculated_end_time
+        """
+        print(f"Python: Запрошено автоматическое завершение всех действий для execution ID {execution_id}")
+        if not isinstance(execution_id, int) or execution_id <= 0:
+            print("Python: Ошибка — некорректный execution_id")
+            return False
+
+        if not self.pg_database_manager:
+            print("Python: Ошибка — нет подключения к PostgreSQL")
+            return False
+
+        try:
+            # Получаем все action_executions для этого execution
+            actions = self.pg_database_manager.get_action_executions_by_execution_id(execution_id)
+            if not actions:
+                print("Python: Нет действий для завершения")
+                return True  # или False — зависит от логики
+
+            updated_count = 0
+            for action in actions:
+                if action.get('status') != 'completed':
+                    calculated_end = action.get('calculated_end_time')
+                    if not calculated_end:
+                        continue
+
+                    try:
+                        dt = datetime.datetime.fromisoformat(calculated_end.replace('Z', '+00:00'))
+                        actual_end_formatted = dt.strftime('%d.%m.%Y %H:%M:%S')
+                    except Exception as e:
+                        print(f"Python: Ошибка парсинга calculated_end_time '{calculated_end}': {e}")
+                        continue
+
+                    update_data = {
+                        'actual_end_time': actual_end_formatted,
+                        'reported_to': 'Авто',
+                        'notes': 'Завершено автоматически'
+                    }
+
+                    # Обновляем через существующий метод
+                    success = self.pg_database_manager.update_action_execution(action['id'], update_data)
+                    if success:
+                        updated_count += 1
+                    else:
+                        print(f"Python: Не удалось обновить действие ID {action['id']}")
+
+            print(f"Python: Автоматически завершено {updated_count} действий")
+            return updated_count > 0
+
+        except Exception as e:
+            print(f"Python: Ошибка при автоматическом завершении действий: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
     def minimize_window(self):
         if self.window:

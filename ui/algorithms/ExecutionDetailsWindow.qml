@@ -250,7 +250,24 @@ Window {
                 }
             }
 
-            Button { text: "Авто"; onClicked: { /* ... */ } }
+            Button {
+                text: "Авто"
+                onClicked: {
+                    if (executionId <= 0) {
+                        showInfoMessage("Неверный ID выполнения");
+                        return;
+                    }
+                    var success = appData.completeAllPendingActionsAutomatically(executionId);
+                    if (success) {
+                        showInfoMessage("Все действия автоматически завершены");
+                        loadExecutionData(); // Обновляем таблицу
+                        executionUpdated(executionId);
+                    } else {
+                        showInfoMessage("Не удалось завершить действия");
+                    }
+                }
+            }
+
             Button { text: "🖨 Печать"; onClicked: showInfoMessage("В разработке"); }
             Button { text: "Закрыть"; onClicked: close() }
         }
