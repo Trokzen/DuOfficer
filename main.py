@@ -1953,6 +1953,7 @@ class ApplicationData(QObject):
         Автоматически завершает все незавершённые действия в execution:
         - status = 'completed'
         - actual_end_time = calculated_end_time
+        - notes: дополняет существующее примечание или устанавливает 'Завершено автоматически'
         """
         print(f"Python: Запрошено автоматическое завершение всех действий для execution ID {execution_id}")
         if not isinstance(execution_id, int) or execution_id <= 0:
@@ -1964,11 +1965,10 @@ class ApplicationData(QObject):
             return False
 
         try:
-            # Получаем все action_executions для этого execution
             actions = self.pg_database_manager.get_action_executions_by_execution_id(execution_id)
             if not actions:
                 print("Python: Нет действий для завершения")
-                return True  # или False — зависит от логики
+                return True
 
             updated_count = 0
             for action in actions:
@@ -1977,6 +1977,15 @@ class ApplicationData(QObject):
                     if not calculated_end:
                         continue
 
+                    # === ОБНОВЛЕНИЕ: Работа с примечаниями ===
+                    existing_notes = action.get('notes') or ""
+                    auto_note = "Завершено автоматически"
+                    new_notes = auto_note
+                    if existing_notes.strip():
+                        # Если уже есть примечание — добавляем новую строку
+                        new_notes = f"{existing_notes}\n\n{auto_note}"
+
+                    # Преобразуем calculated_end_time в нужный формат
                     try:
                         dt = datetime.datetime.fromisoformat(calculated_end.replace('Z', '+00:00'))
                         actual_end_formatted = dt.strftime('%d.%m.%Y %H:%M:%S')
@@ -1987,10 +1996,9 @@ class ApplicationData(QObject):
                     update_data = {
                         'actual_end_time': actual_end_formatted,
                         'reported_to': 'Авто',
-                        'notes': 'Завершено автоматически'
+                        'notes': new_notes
                     }
 
-                    # Обновляем через существующий метод
                     success = self.pg_database_manager.update_action_execution(action['id'], update_data)
                     if success:
                         updated_count += 1
@@ -2067,71 +2075,28 @@ class ApplicationData(QObject):
         except Exception as e:
             print(f"Ошибка при расчёте статистики для execution {execution_id}: {e}")
             return {"on_time": 0, "late": 0, "not_done": 0, "total": 0}
+
+
+    @Slot(int, str, result=bool)
+    def updateActionExecutionNotes(self, action_execution_id: int, notes: str) -> bool:
         """
-        Возвращает статистику по действиям execution'а для круговой диаграммы.
-        :return: {
-            "on_time": 5,
-            "late": 2,
-            "not_done": 3,
-            "total": 10
-        }
+        Обновляет поле 'notes' у action_execution.
         """
-        if not isinstance(execution_id, int) or execution_id <= 0:
-            return {"on_time": 0, "late": 0, "not_done": 0, "total": 0}
-
-        if not self.pg_database_manager:
-            return {"on_time": 0, "late": 0, "not_done": 0, "total": 0}
-
-        try:
-            actions = self.pg_database_manager.get_action_executions_by_execution_id(execution_id)
-            if not actions:
-                return {"on_time": 0, "late": 0, "not_done": 0, "total": 0}
-
-            on_time = 0
-            late = 0
-            not_done = 0
-
-            for a in actions:
-                status = a.get('status', 'pending')
-                if status != 'completed':
-                    not_done += 1
-                else:
-                    # Оба времени — строки в формате 'YYYY-MM-DDTHH:MM:SS'
-                    actual = a.get('actual_end_time')
-                    planned = a.get('calculated_end_time')
-
-                    if not actual or not planned:
-                        # Если нет данных — считаем несвоевременным или не выполненным?
-                        # По логике: если completed, но нет actual_end_time — ошибка, но всё же "выполнено"
-                        # Но у вас actual_end_time всегда заполняется при завершении → можно пропустить
-                        not_done += 1
-                        continue
-
-                    # Преобразуем строки в datetime
-                    try:
-                        actual_dt = datetime.datetime.fromisoformat(actual)
-                        planned_dt = datetime.datetime.fromisoformat(planned)
-                    except Exception:
-                        not_done += 1
-                        continue
-
-                    if actual_dt <= planned_dt:
-                        on_time += 1
-                    else:
-                        late += 1
-
-            total = len(actions)
-            return {
-                "on_time": on_time,
-                "late": late,
-                "not_done": not_done,
-                "total": total
-            }
-
-        except Exception as e:
-            print(f"Ошибка при расчёте статистики для execution {execution_id}: {e}")
-            return {"on_time": 0, "late": 0, "not_done": 0, "total": 0}
-
+        if not isinstance(action_execution_id, int) or action_execution_id <= 0:
+            print("Python: Некорректный action_execution_id")
+            return False
+        if self.pg_database_manager:
+            try:
+                # Обновляем только поле notes
+                success = self.pg_database_manager.update_action_execution(
+                    action_execution_id,
+                    {"notes": notes if notes.strip() else None}
+                )
+                return success
+            except Exception as e:
+                print(f"Python: Ошибка обновления примечаний: {e}")
+                return False
+        return False
 
     def minimize_window(self):
         if self.window:

@@ -155,6 +155,7 @@ Window {
             var start = String(a.calculated_start_time || "");
             var actualEnd = String(a.actual_end_time || ""); // ← ФАКТИЧЕСКОЕ ВРЕМЯ ОКОНЧАНИЯ
             var reported = String(a.reported_to || "");
+            var notes = String(a.notes || ""); // ← ДОБАВЛЕНО: примечания
 
             // === Формируем HTML для отчётных материалов (с защитой) ===
             var htmlMaterials = "";
@@ -180,12 +181,15 @@ Window {
                 "Телефоны": phones,
                 "Отчётные материалы": htmlMaterials,
                 "Кому доложено": reported,
+                "Примечания": notes, // ← ДОБАВЛЕНО
                 "isCompleted": (status === "completed"),
                 "actualEndTimeDisplay": (status === "completed" && actualEnd) ? formatDateTime(actualEnd) : ""
             });
         }
-
-        actionsTableModel.rows = jsRows;
+        actionsTableModel.clear();
+        for (var i = 0; i < jsRows.length; i++) {
+            actionsTableModel.appendRow(jsRows[i]);
+        }
     }
 
     // --- Основной контент ---
@@ -202,7 +206,21 @@ Window {
             border.color: "#34495e"
             Text {
                 anchors.centerIn: parent
-                text: executionData ? (executionData.snapshot_name || "Без названия") + "\n" + (executionData.started_at || "Не задано") : "Загрузка..."
+                text: {
+                    if (!executionData) return "Загрузка...";
+                    var name = executionData.snapshot_name || "Без названия";
+                    var startedAt = executionData.started_at;
+                    var formattedDate = "Не задано";
+                    if (startedAt) {
+                        var dt = new Date(startedAt);
+                        if (!isNaN(dt.getTime())) {
+                            var timeStr = Qt.formatDateTime(dt, "HH:mm:ss");
+                            var dateStr = Qt.formatDateTime(dt, "dd.MM.yyyy");
+                            formattedDate = timeStr + " " + dateStr; // ← hh:mm:ss dd.mm.yyyy
+                        }
+                    }
+                    return name + "\n" + formattedDate;
+                }
                 color: "white"
                 font.bold: true
                 horizontalAlignment: Text.AlignHCenter
@@ -353,7 +371,7 @@ Window {
 
                     delegate: Rectangle {
                         implicitWidth: actionsTableView.columnWidthProvider(column)
-                        implicitHeight: 100
+                        implicitHeight: 110
                         color: row % 2 ? "#f9f9f9" : "#ffffff"
                         border.color: "#eee"
 
@@ -500,6 +518,7 @@ Window {
                             anchors.margins: 5
                             spacing: 5
 
+                            // --- Основная кнопка "Выполнить/Изменить" ---
                             Button {
                                 id: actionButton
                                 anchors.horizontalCenter: parent.horizontalCenter
@@ -551,8 +570,17 @@ Window {
                                         showInfoMessage("Ошибка загрузки диалога: " + component.errorString());
                                     }
                                 }
+
+                                ToolTip {
+                                    text: actionsTableModel.rows[row].isCompleted
+                                        ? "Редактировать результаты выполнения"
+                                        : "Ввести данные о выполнении";
+                                    visible: actionButton.hovered
+                                    delay: 500
+                                }
                             }
 
+                            // --- Фактическое время выполнения (если есть) ---
                             Text {
                                 visible: {
                                     if (row >= actionsTableModel.rows.length) return false;
@@ -568,15 +596,59 @@ Window {
                                 width: parent.width
                             }
 
-                            ToolTip {
-                                text: {
-                                    if (row >= actionsTableModel.rows.length) return "Ввести данные о выполнении";
-                                    return actionsTableModel.rows[row].isCompleted
-                                        ? "Редактировать результаты выполнения"
-                                        : "Ввести данные о выполнении";
+                            // --- Кнопка "Примечания" ---
+                            Item {
+                                width: parent.width
+                                height: 24
+
+                                Button {
+                                    anchors.centerIn: parent
+                                    width: 24
+                                    height: 24
+                                    padding: 0
+                                    font.pixelSize: 14
+                                    // Иконки: 📝, 📄 если нет
+                                    text: {
+                                        if (row >= actionsTableModel.rows.length) return "📄";
+                                        var notes = actionsTableModel.rows[row]["Примечания"];
+                                        return (notes && notes.trim() !== "") ? "📄" : "📄";
+                                    }
+
+                                    onClicked: {
+                                        if (!executionDetailsWindow.cachedActionsList || row < 0 || row >= executionDetailsWindow.cachedActionsList.length) {
+                                            showInfoMessage("Не удалось получить ID действия.");
+                                            return;
+                                        }
+                                        var actionExecId = executionDetailsWindow.cachedActionsList[row].id;
+                                        if (!actionExecId || actionExecId <= 0) {
+                                            showInfoMessage("Некорректный ID действия.");
+                                            return;
+                                        }
+
+                                        var component = Qt.createComponent("ActionExecutionNotesDialog.qml");
+                                        if (component.status === Component.Ready) {
+                                            var dialog = component.createObject(executionDetailsWindow, {
+                                                "actionExecutionId": actionExecId,
+                                                "initialNotes": actionsTableModel.rows[row]["Примечания"] || ""
+                                            });
+                                            if (dialog) {
+                                                dialog.notesSaved.connect(function() {
+                                                    executionDetailsWindow.loadExecutionData(); // ← перезагружаем ВСЁ
+                                                    executionUpdated(executionId);
+                                                });
+                                                dialog.open();
+                                            } else {
+                                                showInfoMessage("Ошибка создания диалога примечаний.");
+                                            }
+                                        } else {
+                                            showInfoMessage("Ошибка загрузки ActionExecutionNotesDialog.qml: " + component.errorString());
+                                        }
+                                    }
+
+                                    ToolTip.text: "Примечания"
+                                    ToolTip.visible: hovered
+                                    ToolTip.delay: 500
                                 }
-                                visible: actionButton.hovered
-                                delay: 500
                             }
                         }
                     }
@@ -667,6 +739,7 @@ Window {
         TableModelColumn { display: "Телефоны" }
         TableModelColumn { display: "Отчётные материалы" }
         TableModelColumn { display: "Кому доложено" }
+        TableModelColumn { display: "Примечания" } 
         TableModelColumn { display: "isCompleted" }
         TableModelColumn { display: "actualEndTimeDisplay" }
     }
