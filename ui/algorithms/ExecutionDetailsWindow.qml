@@ -40,6 +40,14 @@ Window {
     // --- Сигналы ---
     signal executionUpdated(int executionId)
 
+    // --- Вспомогательные функции для стиля шрифта ---
+    function isFontBold(style) {
+        return style === "bold" || style === "bold_italic";
+    }
+    function isFontItalic(style) {
+        return style === "italic" || style === "bold_italic";
+    }
+
     // --- Вспомогательные функции ---
     function openFile(filePath) {
         print("try to open file:", filePath);
@@ -222,7 +230,10 @@ Window {
                     return name + "\n" + formattedDate;
                 }
                 color: "white"
-                font.bold: true
+                font.family: appData.fontFamily
+                font.pixelSize: appData.fontSize + 2
+                font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 wrapMode: Text.Wrap
@@ -237,6 +248,10 @@ Window {
 
             Button {
                 text: "График"
+                font.family: appData.fontFamily
+                font.pixelSize: appData.fontSize
+                font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
                 onClicked: {
                     if (executionId <= 0) {
                         showInfoMessage("Неверный ID выполнения");
@@ -271,6 +286,10 @@ Window {
 
             Button {
                 text: "Добавить действие"
+                font.family: appData.fontFamily
+                font.pixelSize: appData.fontSize
+                font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
                 onClicked: {
                     console.log("QML ExecutionDetailsWindow: Нажата кнопка 'Добавить действие' для execution ID:", executionId);
 
@@ -302,6 +321,10 @@ Window {
 
             Button {
                 text: "Авто"
+                font.family: appData.fontFamily
+                font.pixelSize: appData.fontSize
+                font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
                 onClicked: {
                     if (executionId <= 0) {
                         showInfoMessage("Неверный ID выполнения");
@@ -318,8 +341,22 @@ Window {
                 }
             }
 
-            Button { text: "🖨 Печать"; onClicked: showInfoMessage("В разработке"); }
-            Button { text: "Закрыть"; onClicked: close() }
+            Button {
+                text: "🖨 Печать"
+                font.family: appData.fontFamily
+                font.pixelSize: appData.fontSize
+                font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
+                onClicked: showInfoMessage("В разработке");
+            }
+            Button {
+                text: "Закрыть"
+                font.family: appData.fontFamily
+                font.pixelSize: appData.fontSize
+                font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
+                onClicked: close()
+            }
         }
 
         // --- ТАБЛИЦА С ЗАГОЛОВКАМИ ---
@@ -346,7 +383,10 @@ Window {
                         Text {
                             anchors.centerIn: parent
                             text: modelData
+                            font.family: appData.fontFamily
+                            font.pixelSize: appData.fontSize
                             font.bold: true
+                            font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
                             elide: Text.ElideRight
                         }
                     }
@@ -390,7 +430,10 @@ Window {
                                         s === "pending" ? "⏸" :
                                         s === "in_progress" ? "🔄" : "?";
                                 }
-                                font.pixelSize: 16
+                                font.family: appData.fontFamily
+                                font.pixelSize: appData.fontSize + 2
+                                font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                                font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                             }
@@ -402,6 +445,10 @@ Window {
                             anchors.fill: parent
                             anchors.margins: 5
                             text: model.display || "N/A"
+                            font.family: appData.fontFamily
+                            font.pixelSize: appData.fontSize
+                            font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                            font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
@@ -419,7 +466,10 @@ Window {
                                 wrapMode: Text.WordWrap
                                 horizontalAlignment: Text.AlignLeft
                                 verticalAlignment: Text.AlignTop
-                                font.pixelSize: 13
+                                font.family: appData.fontFamily
+                                font.pixelSize: appData.fontSize
+                                font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                                font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
                                 elide: Text.ElideRight
                             }
 
@@ -458,6 +508,10 @@ Window {
                                 wrapMode: Text.Wrap
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
+                                font.family: appData.fontFamily
+                                font.pixelSize: appData.fontSize
+                                font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                                font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
                                 elide: Text.ElideRight
                             }
 
@@ -488,6 +542,10 @@ Window {
                                 text: model.display || ""
                                 readOnly: true
                                 wrapMode: TextEdit.Wrap
+                                font.family: appData.fontFamily
+                                font.pixelSize: appData.fontSize
+                                font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                                font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
                                 onLinkActivated: executionDetailsWindow.openFile(link)
 
                                 ToolTip {
@@ -526,7 +584,10 @@ Window {
                                     if (row >= actionsTableModel.rows.length) return "▶️ Выполнить";
                                     return actionsTableModel.rows[row].isCompleted ? "✏️ Изменить" : "▶️ Выполнить";
                                 }
-                                font.pixelSize: 12
+                                font.family: appData.fontFamily
+                                font.pixelSize: appData.fontSize
+                                font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                                font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
                                 padding: 4
                                 horizontalPadding: 8
 
@@ -589,7 +650,10 @@ Window {
                                 }
                                 text: actionsTableModel.rows[row].actualEndTimeDisplay
                                 color: "black"
-                                font.pixelSize: 11
+                                font.family: appData.fontFamily
+                                font.pixelSize: appData.fontSize - 1
+                                font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                                font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                                 elide: Text.ElideRight
@@ -606,7 +670,10 @@ Window {
                                     width: 24
                                     height: 24
                                     padding: 0
-                                    font.pixelSize: 14
+                                    font.family: appData.fontFamily
+                                    font.pixelSize: appData.fontSize
+                                    font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                                    font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
                                     // Иконки: 📝, 📄 если нет
                                     text: {
                                         if (row >= actionsTableModel.rows.length) return "📄";
@@ -665,6 +732,10 @@ Window {
             Text {
                 anchors.centerIn: parent
                 text: (appData.postName || "Пост") + ": " + (executionData ? executionData.created_by_user_display_name : "—")
+                font.family: appData.fontFamily
+                font.pixelSize: appData.fontSize
+                font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
                 elide: Text.ElideRight
             }
         }
@@ -685,6 +756,10 @@ Window {
             id: infoText
             anchors.centerIn: parent
             anchors.margins: 10
+            font.family: appData.fontFamily
+            font.pixelSize: appData.fontSize
+            font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+            font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
             wrapMode: Text.Wrap
             horizontalAlignment: Text.AlignHCenter
         }
@@ -717,6 +792,10 @@ Window {
             selectByMouse: true
             anchors.fill: parent
             anchors.margins: 10
+            font.family: appData.fontFamily
+            font.pixelSize: appData.fontSize
+            font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+            font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
         }
 
         property string descriptionText: ""

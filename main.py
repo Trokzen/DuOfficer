@@ -39,7 +39,10 @@ class ApplicationData(QObject):
     printFontFamilyChanged = Signal()
     printFontSizeChanged = Signal()
     printFontStyleChanged = Signal()
-
+    # --- СИГНАЛЫ ДЛЯ ШРИФТА ИНТЕРФЕЙСА ---
+    fontFamilyChanged = Signal()
+    fontSizeChanged = Signal()
+    fontStyleChanged = Signal()
 
     def load_initial_settings(self):
         """Загружает начальные настройки при запуске приложения"""
@@ -133,7 +136,27 @@ class ApplicationData(QObject):
                         updated_print_props = True
                         print(f"Python: Загружен print_font_style: {self._print_font_style}")
 
+                    # font_family, font_size, font_style
+
+                    if 'font_family' in settings and settings['font_family']:
+                        self._font_family = settings['font_family']
+                        updated_appearance_props = True
+                        print(f"Python: Загружен font_family: {self._font_family}")
+
+                    if 'font_size' in settings and settings['font_size']:
+                        self._font_size = settings['font_size']
+                        updated_appearance_props = True
+                        print(f"Python: Загружен font_size: {self._font_size}")
+
+                    if 'font_style' in settings and settings['font_style']:
+                        self._font_style = settings['font_style']
+                        updated_appearance_props = True
+                        print(f"Python: Загружен font_style: {self._font_style}")
+
                     if updated_appearance_props:
+                        self.fontFamilyChanged.emit()
+                        self.fontSizeChanged.emit()
+                        self.fontStyleChanged.emit()
                         print("Python: Некоторые настройки внешнего вида обновлены из БД.")
                         # Уведомляем QML об общем изменении настроек (если нужно)
                         # self.settingsChanged.emit() # <-- Опционально: если используется глобальный сигнал
@@ -187,7 +210,12 @@ class ApplicationData(QObject):
         # Инициализируем путь к эмблеме значением по умолчанию или None
         self._background_image_path = None # <-- ИЛИ путь к дефолтной эмблеме, если нужно
 
-    # Загружаем начальные настройки
+        # --- ИНИЦИАЛИЗАЦИЯ СВОЙСТВ ШРИФТА ИНТЕРФЕЙСА ---
+        self._font_family = None
+        self._font_size = None
+        self._font_style = None
+
+        # Загружаем начальные настройки
         self.load_initial_settings()
         
         self.tray_icon = None
@@ -200,6 +228,8 @@ class ApplicationData(QObject):
 
         # Подключаемся к сигналу, когда объекты QML созданы
         self.engine.objectCreated.connect(self.on_qml_objects_created)
+
+
 
     def on_qml_objects_created(self, obj, url):
         """Вызывается, когда QML объекты загружены."""
@@ -349,6 +379,18 @@ class ApplicationData(QObject):
     @Property(str, notify=printFontStyleChanged) # <-- Добавлено
     def printFontStyle(self):                   # <-- Добавлено
         return self._print_font_style           # <-- Добавлено
+
+    @Property(str, notify=fontFamilyChanged)
+    def fontFamily(self):
+        return self._font_family
+
+    @Property(int, notify=fontSizeChanged)
+    def fontSize(self):
+        return self._font_size
+
+    @Property(str, notify=fontStyleChanged)
+    def fontStyle(self):
+        return self._font_style
 
     @Slot(str)
     def setDutyOfficer(self, name):
@@ -713,6 +755,22 @@ class ApplicationData(QObject):
                         self.printFontStyleChanged.emit() # <-- Добавлено
                         updated_print_props = True
                         print(f"Python: Обновлен print_font_style: {self._print_font_style}")
+
+                    # Внутри updateSettings(), после:
+                    if 'font_family' in new_settings:
+                        self._font_family = new_settings['font_family']
+                        self.fontFamilyChanged.emit()
+                        updated_props = True
+
+                    if 'font_size' in new_settings:
+                        self._font_size = int(new_settings['font_size'])
+                        self.fontSizeChanged.emit()
+                        updated_props = True
+
+                    if 'font_style' in new_settings:
+                        self._font_style = new_settings['font_style']
+                        self.fontStyleChanged.emit()
+                        updated_props = True
                     
                     return True
                 else:
