@@ -13,8 +13,13 @@ from PySide6.QtWidgets import QSystemTrayIcon, QMenu, QApplication, QMessageBox
 from db.sqlite_config import SQLiteConfigManager
 from db.postgresql_manager import PostgreSQLDatabaseManager
 import datetime
+# --- ИМПОРТЫ для печати ---
+from PySide6.QtPrintSupport import QPrinter, QPrintDialog
+from PySide6.QtGui import QTextDocument
+import html
+import os
+from datetime import datetime
 # --- ---
-
 
 class ApplicationData(QObject):
     """Класс для передачи данных и управления логикой в QML."""
@@ -2155,6 +2160,150 @@ class ApplicationData(QObject):
                 print(f"Python: Ошибка обновления примечаний: {e}")
                 return False
         return False
+
+    @Slot(int, result=bool)
+    def printExecutionDetailsAsPdf(self, execution_id: int) -> bool:
+        """
+        Генерирует и печатает отчёт по execution_id.
+        Вызывается из QML.
+        """
+        try:
+            # 1. Получаем данные
+            exec_data = self.pg_database_manager.get_algorithm_execution_by_id(execution_id)
+            actions = self.pg_database_manager.get_action_executions_by_execution_id(execution_id)
+            if not exec_data or not actions:
+                print("Нет данных для печати")
+                return False
+
+            # 2. Генерируем HTML
+            html_content = self._generate_execution_html(exec_data, actions)
+            if not html_content:
+                return False
+
+            # 3. Печать через QTextDocument
+            doc = QTextDocument()
+            doc.setHtml(html_content)
+
+            # 4. Показываем диалог печати
+            printer = QPrinter()
+            dialog = QPrintDialog(printer)
+            if dialog.exec() == QPrintDialog.Accepted:
+                doc.print_(printer)
+                return True
+            return False
+
+        except Exception as e:
+            print(f"Ошибка печати: {e}")
+            traceback.print_exc()
+            return False
+
+    def _generate_execution_html(self, exec_data, actions) -> str:
+        """Генерирует HTML-отчёт по выполнению."""
+        def escape(s):
+            return html.escape(str(s) if s is not None else "", quote=True)
+
+        def fmt_dt(dt_str):
+            if not dt_str:
+                return ""
+            try:
+                # Поддержка ISO и других форматов
+                dt = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
+                return dt.strftime("%d.%m.%Y %H:%M")
+            except Exception:
+                return str(dt_str)
+
+        title = escape(exec_data.get('snapshot_name', 'Без названия'))
+        started_at = fmt_dt(exec_data.get('started_at'))
+        user = escape(exec_data.get('created_by_user_display_name', '—'))
+
+        rows = []
+        for i, a in enumerate(actions, 1):
+            status = a.get('status', '')
+            status_text = {
+                'completed': '✅ Выполнено',
+                'skipped': '❌ Пропущено',
+                'pending': '⏸ Ожидает',
+                'in_progress': '🔄 В процессе'
+            }.get(status, escape(status))
+
+            desc = escape(a.get('snapshot_description', ''))
+            start = fmt_dt(a.get('calculated_start_time'))
+            end = fmt_dt(a.get('calculated_end_time'))
+            actual_end = fmt_dt(a.get('actual_end_time'))
+            phones = escape(a.get('snapshot_contact_phones', ''))
+            reported = escape(a.get('reported_to', ''))
+            notes = escape(a.get('notes', ''))
+
+            materials_html = ""
+            materials = a.get('snapshot_report_materials')
+            if materials:
+                for line in str(materials).splitlines():
+                    path = line.strip()
+                    if path:
+                        filename = os.path.basename(path)
+                        materials_html += f'<a href="{html.escape(path)}">{html.escape(filename)}</a><br>'
+
+            rows.append(f"""
+            <tr>
+                <td>{status_text}</td>
+                <td>{i}</td>
+                <td>{desc}</td>
+                <td>{start}</td>
+                <td>{end}</td>
+                <td>{phones}</td>
+                <td>{materials_html}</td>
+                <td>{reported}</td>
+                <td>{actual_end}<br><small>{notes}</small></td>
+            </tr>
+            """)
+
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Отчёт по выполнению</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; font-size: 12pt; }}
+                h1 {{ text-align: center; margin-bottom: 20px; }}
+                .header {{ margin-bottom: 20px; }}
+                table {{ width: 100%; border-collapse: collapse; }}
+                th, td {{ border: 1px solid #000; padding: 8px; vertical-align: top; }}
+                th {{ background-color: #f0f0f0; }}
+                tr:nth-child(even) {{ background-color: #fafafa; }}
+                a {{ color: #0066cc; text-decoration: none; }}
+                small {{ color: #666; }}
+            </style>
+        </head>
+        <body>
+            <h1>Детали выполнения алгоритма</h1>
+            <div class="header">
+                <p><strong>Алгоритм:</strong> {title}</p>
+                <p><strong>Начало:</strong> {started_at}</p>
+                <p><strong>Дежурный:</strong> {user}</p>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Статус</th>
+                        <th>№</th>
+                        <th>Описание</th>
+                        <th>Начало</th>
+                        <th>Окончание (план)</th>
+                        <th>Телефоны</th>
+                        <th>Отчётные материалы</th>
+                        <th>Кому доложено</th>
+                        <th>Выполнение (факт)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {''.join(rows)}
+                </tbody>
+            </table>
+            <p style="margin-top: 30px; text-align: right;">Подпись: ___________</p>
+        </body>
+        </html>
+        """
 
     def minimize_window(self):
         if self.window:

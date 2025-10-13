@@ -330,8 +330,18 @@ Window {
                 font.pixelSize: appData.fontSize
                 font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
                 font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
-                onClicked: showInfoMessage("В разработке");
+                onClicked: {
+                    if (executionId <= 0) {
+                        showInfoMessage("Неверный ID выполнения");
+                        return;
+                    }
+                    var success = appData.printExecutionDetailsAsPdf(executionId);
+                    if (!success) {
+                        showInfoMessage("Не удалось напечатать отчёт");
+                    }
+                }
             }
+
             Button {
                 text: "Закрыть"
                 font.family: appData.fontFamily
