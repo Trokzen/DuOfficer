@@ -325,6 +325,21 @@ Window {
             }
 
             Button {
+                text: "🖨 Предпросмотр"
+                font.family: appData.fontFamily
+                font.pixelSize: appData.fontSize
+                font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
+                onClicked: {
+                    if (executionId <= 0) {
+                        showInfoMessage("Неверный ID выполнения");
+                        return;
+                    }
+                    appData.previewExecutionDetails(executionId);
+                }
+            }
+
+            Button {
                 text: "🖨 Печать"
                 font.family: appData.fontFamily
                 font.pixelSize: appData.fontSize
@@ -335,10 +350,7 @@ Window {
                         showInfoMessage("Неверный ID выполнения");
                         return;
                     }
-                    var success = appData.printExecutionDetailsAsPdf(executionId);
-                    if (!success) {
-                        showInfoMessage("Не удалось напечатать отчёт");
-                    }
+                    appData.printExecutionDetails(executionId);
                 }
             }
 
