@@ -13,13 +13,14 @@ from PySide6.QtWidgets import QSystemTrayIcon, QMenu, QApplication, QMessageBox
 from db.sqlite_config import SQLiteConfigManager
 from db.postgresql_manager import PostgreSQLDatabaseManager
 import datetime
-# --- ИМПОРТЫ для печати ---
+# --- ИМПОРТЫ для работы с печатью ---
 from PySide6.QtPrintSupport import QPrinter, QPrintDialog
 from PySide6.QtGui import QTextDocument
 import html
 import os
-from datetime import datetime
+import re
 # --- ---
+
 
 class ApplicationData(QObject):
     """Класс для передачи данных и управления логикой в QML."""
@@ -2178,6 +2179,12 @@ class ApplicationData(QObject):
             from PySide6.QtPrintSupport import QPrintPreviewDialog
             printer = QPrinter(QPrinter.HighResolution)
             preview = QPrintPreviewDialog(printer)
+
+            # === РАСТЯГИВАЕМ НА ВЕСЬ ЭКРАН ===
+            screen = QApplication.primaryScreen()
+            preview.resize(screen.availableGeometry().size() * 0.9)
+            preview.move(screen.availableGeometry().topLeft())
+
             preview.paintRequested.connect(lambda p: doc.print_(p))
             preview.exec()
         except Exception as e:
@@ -2206,11 +2213,13 @@ class ApplicationData(QObject):
             print(f"Ошибка печати: {e}")
             traceback.print_exc()
 
+
     def _generate_execution_html(self, exec_data, actions) -> str:
-        """Генерирует HTML-отчёт по выполнению с учётом настроек печати."""
+        """Генерирует HTML-отчёт по выполнению с учётом настроек печати и корректной подписью."""
         import html
         import os
         from datetime import datetime
+        import re
 
         def escape(s):
             return html.escape(str(s) if s is not None else "", quote=True)
@@ -2226,19 +2235,52 @@ class ApplicationData(QObject):
 
         # === Настройки шрифта печати ===
         font_family = self._print_font_family or "Arial"
-        font_size = max(8, min(24, int(self._print_font_size or 12)))  # ограничим разумные размеры
+        font_size = max(8, min(24, int(self._print_font_size or 12)))
         font_style = self._print_font_style or "normal"
 
-        # Определяем CSS-стили для шрифта
         font_weight = "bold" if font_style in ("bold", "bold_italic") else "normal"
         font_style_css = "italic" if font_style in ("italic", "bold_italic") else "normal"
 
-        # === Данные ===
+        # === Данные заголовка ===
         title = escape(exec_data.get('snapshot_name', 'Без названия'))
-        post = escape(exec_data.get('created_by_post_name', exec_data.get('post_name', '—')))
-        user = escape(exec_data.get('created_by_user_display_name', '—'))
+        started_at_raw = exec_data.get('started_at')
+        started_at = fmt_dt(started_at_raw)
 
-        # === Подсчёт статистики ===
+        # === Подпись: парсинг ФИО и звания ===
+        # 1. Название поста — из appData (SQLite)
+        post_name = escape(self._post_name) if self._post_name else "Пост"
+
+        # 2. Пытаемся взять звание из отдельного поля (если сохранено при запуске)
+        rank = escape(exec_data.get('created_by_rank', ''))
+
+        # 3. Полное отображаемое имя (сохранено при запуске)
+        full_display = exec_data.get('created_by_user_display_name', '').strip()
+
+        # 4. Если звание не сохранено отдельно — извлекаем его из full_display
+        if not rank and full_display:
+            # Пример: "ст. лейтенант Иванов И.И." → звание = "ст. лейтенант"
+            # Ищем первую часть до фамилии (предполагаем, что фамилия начинается с заглавной буквы)
+            # Простой способ: всё до первой заглавной буквы, за которой следует строчная (начало фамилии)
+            match = re.match(r'^([^\w]*[А-Яа-яёЁ\s]+?)\s+([А-Я][а-яё]+)', full_display)
+            if match:
+                rank = escape(match.group(1).strip())
+                fio_part = full_display[len(rank):].strip()
+            else:
+                # Если не удалось распарсить — считаем, что всё — ФИО, звание пустое
+                fio_part = full_display
+        else:
+            fio_part = full_display
+
+        # 5. Очищаем ФИО от возможного дублирующего звания
+        if fio_part.startswith(rank):
+            fio_part = fio_part[len(rank):].strip()
+
+        # 6. Если ФИО пустое — используем заглушку
+        full_name = escape(fio_part) if fio_part else "—"
+
+        current_year = datetime.now().strftime("%Y")
+
+        # === Статистика ===
         total = len(actions)
         completed = sum(1 for a in actions if a.get('status') == 'completed')
         on_time = 0
@@ -2250,9 +2292,8 @@ class ApplicationData(QObject):
                     if actual <= planned:
                         on_time += 1
                 except Exception:
-                    pass  # если даты некорректны — не считаем как "вовремя"
+                    pass
 
-        # Проценты
         pct_completed = round(100 * completed / total, 1) if total > 0 else 0
         pct_on_time = round(100 * on_time / total, 1) if total > 0 else 0
 
@@ -2263,9 +2304,7 @@ class ApplicationData(QObject):
             start = fmt_dt(a.get('calculated_start_time'))
             end = fmt_dt(a.get('calculated_end_time'))
             phones = escape(a.get('snapshot_contact_phones', ''))
-            reported = escape(a.get('reported_to', ''))
 
-            # Отчётные материалы
             materials_html = ""
             materials = a.get('snapshot_report_materials')
             if materials:
@@ -2275,7 +2314,6 @@ class ApplicationData(QObject):
                         filename = os.path.basename(path)
                         materials_html += f'<a href="{html.escape(path)}">{html.escape(filename)}</a><br>'
 
-            # Выполнение
             status = a.get('status', '')
             if status == 'completed':
                 actual_end = fmt_dt(a.get('actual_end_time'))
@@ -2309,6 +2347,7 @@ class ApplicationData(QObject):
                     font-weight: {font_weight};
                     font-style: {font_style_css};
                     line-height: 1.4;
+                    margin: 20px;
                 }}
                 .header {{
                     text-align: center;
@@ -2319,16 +2358,23 @@ class ApplicationData(QObject):
                     font-size: {font_size + 4}pt;
                     font-weight: bold;
                 }}
+                .start-date {{
+                    margin-top: 8px;
+                    font-size: {font_size}pt;
+                }}
                 table {{
                     width: 100%;
+                    table-layout: fixed;
                     border-collapse: collapse;
                     margin-bottom: 20px;
                 }}
+                colgroup col {{ }}
                 th, td {{
                     border: 1px solid #000;
-                    padding: 8px;
+                    padding: 6px;
                     vertical-align: top;
                     text-align: left;
+                    word-wrap: break-word;
                 }}
                 th {{
                     background-color: #f0f0f0;
@@ -2338,10 +2384,19 @@ class ApplicationData(QObject):
                 .summary {{
                     margin-top: 20px;
                     font-weight: bold;
+                    font-size: {font_size}pt;
                 }}
-                .signature {{
-                    margin-top: 30px;
+                .signature-block {{
+                    margin-top: 40px;
+                    font-size: {font_size}pt;
+                }}
+                .signature-line-left {{
+                    text-align: left;
+                    margin: 4px 0;
+                }}
+                .signature-line-right {{
                     text-align: right;
+                    margin: 4px 0;
                 }}
                 a {{ color: #0066cc; text-decoration: none; }}
             </style>
@@ -2349,9 +2404,19 @@ class ApplicationData(QObject):
         <body>
             <div class="header">
                 <h1>{title}</h1>
+                <div class="start-date">Начало: {started_at}</div>
             </div>
 
             <table>
+                <colgroup>
+                    <col style="width: 5%;">
+                    <col style="width: 30%;">
+                    <col style="width: 10%;">
+                    <col style="width: 10%;">
+                    <col style="width: 12%;">
+                    <col style="width: 15%;">
+                    <col style="width: 18%;">
+                </colgroup>
                 <thead>
                     <tr>
                         <th>№</th>
@@ -2369,12 +2434,14 @@ class ApplicationData(QObject):
             </table>
 
             <div class="summary">
-                Итого: из {total} задач выполнено {completed} ({pct_completed}%),
-                своевременно — {on_time} ({pct_on_time}%)
+                Итого: из {total} задач выполнено {completed} ({pct_completed}%), своевременно — {on_time} ({pct_on_time}%)
             </div>
 
-            <div class="signature">
-                {post}: {user}
+            <div class="signature-block">
+                <div class="signature-line-left">{post_name}</div>
+                <div class="signature-line-left">{rank}</div>
+                <div class="signature-line-right">{full_name}</div>
+                <div class="signature-line-left">«____»  _________________ {current_year} г.</div>
             </div>
         </body>
         </html>
