@@ -2177,7 +2177,9 @@ class ApplicationData(QObject):
             doc.setHtml(html_content)
 
             from PySide6.QtPrintSupport import QPrintPreviewDialog
+            from PySide6.QtGui import QPageLayout 
             printer = QPrinter(QPrinter.HighResolution)
+            printer.setPageOrientation(QPageLayout.Landscape)
             preview = QPrintPreviewDialog(printer)
 
             # === РАСТЯГИВАЕМ НА ВЕСЬ ЭКРАН ===

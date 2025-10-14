@@ -448,7 +448,7 @@ Item {
                                     }
                                     SpinBox {
                                         id: printFontSizeSpinBox
-                                        from: 8
+                                        from: 3
                                         to: 72 // Можно увеличить диапазон
                                         value: 12 // Значение по умолчанию, будет обновлено в loadSettings
                                         Layout.preferredWidth: 150
