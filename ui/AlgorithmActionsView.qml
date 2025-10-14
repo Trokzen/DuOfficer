@@ -139,7 +139,7 @@ Item {
                                             anchors.rightMargin: 5
                                             anchors.verticalCenter: parent.verticalCenter
                                             color: "black" // Всегда черный
-                                            text: model.description || ""
+                                            text: algorithmActionsViewRoot.cleanSingleLineText(model.description || "")
                                             elide: Text.ElideRight
                                             font.pixelSize: 11
                                             font.bold: true // Оставляем жирный шрифт
@@ -404,6 +404,14 @@ Item {
         // --- ---
         
         console.log("QML AlgorithmActionsView: === КОНЕЦ ЗАГРУЗКИ СПИСКА ДЕЙСТВИЙ ===");
+    }
+
+    function cleanSingleLineText(text) {
+        if (typeof text !== 'string') return '';
+        // Заменяем все переводы строк и табуляции на пробелы
+        return text.replace(/[\r\n\t]+/g, ' ')
+                .replace(/\s+/g, ' ') // схлопываем множественные пробелы
+                .trim();
     }
 
     /**
