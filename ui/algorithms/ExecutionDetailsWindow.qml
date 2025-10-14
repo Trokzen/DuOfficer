@@ -770,21 +770,39 @@ Window {
         title: "Полное описание"
         standardButtons: Dialog.Close
         modal: true
-        width: 600
+        width: 800
         height: 400
-        TextArea {
-            id: fullDescTextArea
-            text: fullDescriptionDialog.descriptionText
-            readOnly: true
-            wrapMode: TextEdit.Wrap
-            selectByMouse: true
+
+        Flickable {
+            id: flickable
             anchors.fill: parent
             anchors.margins: 10
-            font.family: appData.fontFamily
-            font.pixelSize: appData.fontSize
-            font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
-            font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
+            clip: true
+            contentWidth: width          // ← 🔑 запрещает горизонтальную прокрутку
+            contentHeight: textContent.height
+
+            Text {
+                id: textContent
+                text: fullDescriptionDialog.descriptionText
+                width: flickable.width - 16   // ← ширина = ширина Flickable → перенос строк
+                wrapMode: Text.Wrap
+                font.family: appData.fontFamily
+                font.pixelSize: appData.fontSize
+                font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
+            }
+
+            // Вертикальный скроллбар (опционально, но красиво)
+            ScrollBar.vertical: ScrollBar {
+                parent: flickable.parent
+                anchors.top: flickable.top
+                anchors.right: flickable.right
+                anchors.bottom: flickable.bottom
+                size: flickable.visibleArea.heightRatio
+                position: flickable.visibleArea.yPosition
+            }
         }
+
         property string descriptionText: ""
     }
 
