@@ -460,10 +460,16 @@ Window {
                             visible: column === 2
                             anchors.fill: parent
                             anchors.margins: 5
+
                             Text {
                                 id: descText
                                 anchors.fill: parent
                                 text: model.display || ""
+                                color: {
+                                    if (row < 0 || row >= executionDetailsWindow.cachedActionsList.length) return "black";
+                                    var action = executionDetailsWindow.cachedActionsList[row];
+                                    return executionDetailsWindow.getDescriptionColor(action);
+                                }
                                 wrapMode: Text.WordWrap
                                 horizontalAlignment: Text.AlignLeft
                                 verticalAlignment: Text.AlignTop
@@ -473,6 +479,7 @@ Window {
                                 font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
                                 elide: Text.ElideRight
                             }
+
                             MouseArea {
                                 anchors.fill: parent
                                 hoverEnabled: true
@@ -484,6 +491,7 @@ Window {
                                 onEntered: descTip.open()
                                 onExited: descTip.close()
                             }
+
                             ToolTip {
                                 id: descTip
                                 text: model.display || ""
@@ -810,6 +818,60 @@ Window {
 
     onExecutionIdChanged: { if (executionId > 0) loadExecutionData(); }
     Component.onCompleted: { if (executionId > 0) loadExecutionData(); }
+
+    function getDescriptionColor(action) {
+        if (!action) return "black";
+
+        // --- Получаем "местное время" из appData ---
+        var localDateStr = appData.localDate; // "dd.MM.yyyy"
+        var localTimeStr = appData.localTime; // "HH:mm:ss"
+        var now = parseLocalDateTime(localDateStr, localTimeStr);
+        if (!now) return "black"; // ошибка парсинга
+
+        // --- Парсим даты из действия ---
+        var start = action.calculated_start_time ? new Date(action.calculated_start_time) : null;
+        var end = action.calculated_end_time ? new Date(action.calculated_end_time) : null;
+        var actualEnd = action.actual_end_time ? new Date(action.actual_end_time) : null;
+
+        // Проверка корректности дат
+        if (start && isNaN(start.getTime())) start = null;
+        if (end && isNaN(end.getTime())) end = null;
+        if (actualEnd && isNaN(actualEnd.getTime())) actualEnd = null;
+
+        // 1. Выполнено → зелёный
+        if (actualEnd) {
+            return "green";
+        }
+
+        // 2. Ещё не началось → серый
+        if (start && now < start) {
+            return "gray";
+        }
+
+        // 3. Просрочено → красный
+        if (end && now > end) {
+            return "red";
+        }
+
+        // 4. В процессе → жёлтый/оранжевый
+        return "orange";
+    }
+
+    function parseLocalDateTime(dateStr, timeStr) {
+        // dateStr: "dd.MM.yyyy", timeStr: "HH:mm:ss"
+        if (!dateStr || !timeStr) return null;
+        var dateParts = dateStr.split('.');
+        var timeParts = timeStr.split(':');
+        if (dateParts.length !== 3 || timeParts.length !== 3) return null;
+        var day = parseInt(dateParts[0], 10);
+        var month = parseInt(dateParts[1], 10) - 1; // JS: месяцы с 0
+        var year = parseInt(dateParts[2], 10);
+        var hours = parseInt(timeParts[0], 10);
+        var minutes = parseInt(timeParts[1], 10);
+        var seconds = parseInt(timeParts[2], 10);
+        var dt = new Date(year, month, day, hours, minutes, seconds);
+        return isNaN(dt.getTime()) ? null : dt;
+    }
 
     // --- Модель ---
     TableModel {
