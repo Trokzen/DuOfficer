@@ -1021,5 +1021,9 @@ Popup {
     onOpened: {
         console.log("QML ActionEditorDialog: Диалог открыт.");
         errorMessageLabel.text = "";
+        // --- АВТОВЫДЕЛЕНИЕ ОПИСАНИЯ ---
+        // Даем фокус и выделяем текст в descriptionArea
+        descriptionArea.forceActiveFocus();
+        descriptionArea.selectAll();
     }
 }
