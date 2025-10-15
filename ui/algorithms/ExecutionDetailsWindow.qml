@@ -873,6 +873,17 @@ Window {
         return isNaN(dt.getTime()) ? null : dt;
     }
 
+    Timer {
+        id: colorUpdateTimer
+        interval: 60000 // 1 минута
+        repeat: true
+        running: executionDetailsWindow.visible // только если окно видно
+        onTriggered: {
+            // Просто перезагружаем данные → цвета обновятся
+            executionDetailsWindow.loadExecutionData();
+        }
+    }
+
     // --- Модель ---
     TableModel {
         id: actionsTableModel
