@@ -4,6 +4,7 @@ import QtQuick.Controls 6.5
 import QtQuick.Layouts 6.5
 import QtQuick.Dialogs 6.5
 import Qt.labs.qmlmodels 1.0
+import QtQuick.Window 6.5 
 
 Window {
     id: executionDetailsWindow
@@ -34,6 +35,15 @@ Window {
     ]
 
     property var columnWidthPercents: [5, 5, 38, 6, 6, 8, 9, 8, 15] // немного увеличил "Номер"
+
+    property bool _maximizeOnce: true
+
+    onVisibleChanged: {
+        if (visible && _maximizeOnce) {
+            executionDetailsWindow.showMaximized();
+            _maximizeOnce = false; // чтобы не разворачивать при каждом скрытии/показе
+        }
+    }
 
     signal executionUpdated(int executionId)
 
