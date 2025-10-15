@@ -1005,7 +1005,10 @@ class PostgreSQLDatabaseManager:
             cursor = conn.cursor()
             # Используем полное имя таблицы с указанием схемы
             cursor.execute(
-                f"SELECT id, algorithm_id, description, start_offset, end_offset, contact_phones, report_materials, created_at, updated_at FROM {self.SCHEMA_NAME}.actions WHERE algorithm_id = %s ORDER BY start_offset ASC;",
+                f"SELECT id, algorithm_id, description, start_offset, end_offset, contact_phones, report_materials, created_at, updated_at "
+                f"FROM {self.SCHEMA_NAME}.actions "
+                f"WHERE algorithm_id = %s "
+                f"ORDER BY start_offset ASC, end_offset ASC, id ASC;",
                 (algorithm_id,)
             )
             rows = cursor.fetchall()
@@ -2163,7 +2166,10 @@ class PostgreSQLDatabaseManager:
                         ae.updated_at
                     FROM app_schema.action_executions ae
                     WHERE ae.execution_id = %s
-                    ORDER BY ae.calculated_start_time ASC -- Сортировка в БД
+                    ORDER BY
+                        ae.calculated_start_time ASC,
+                        ae.calculated_end_time ASC,
+                        ae.id ASC
                 """
                 cursor.execute(sql_query, (execution_id,))
                 rows = cursor.fetchall()
