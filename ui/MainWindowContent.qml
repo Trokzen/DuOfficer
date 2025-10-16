@@ -265,6 +265,7 @@ Item {
                         Button {
                             text: model.text
                             Layout.fillWidth: true
+                            hoverEnabled: false
                             // --- Корректируем высоту для первой кнопки ("Мероприятия") ---
                             Layout.preferredHeight: index === 0 ? parent.height * 0.18 : parent.height * 0.15 // Первая кнопка чуть выше
                             // --- ---
@@ -555,6 +556,7 @@ Item {
                          height: parent.height * 0.8
                          text: model.text
                          font.pixelSize: rootItem.scaleFactor * 10
+                         hoverEnabled: false
                          // --- Выделяем активную кнопку НАСТРОЕК ---
                          background: Rectangle {
                              color: (index === 2 && rootItem.currentRightPanelIndex === 5) ? "#2980b9" : "#7f8c8d"
