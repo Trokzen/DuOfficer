@@ -20,6 +20,7 @@ Window {
     property var cachedActionsList: []
     property real availableTableWidth: width - 20
     property bool isLoading: false
+    property bool isDialogOpen: false
 
     // ЗАМЕНА: "№" → "Номер" (во избежание проблем с привязкой)
     property var columnHeaders: [
@@ -283,8 +284,11 @@ Window {
                     var component = Qt.createComponent("ExecutionStatsChartDialog.qml");
                     if (component.status === Component.Ready) {
                         var dialog = component.createObject(executionDetailsWindow, { "stats": stats });
-                        if (dialog) dialog.open();
-                        else showInfoMessage("Ошибка создания окна графика");
+                        if (dialog) {
+                            executionDetailsWindow.isDialogOpen = true; // ← ДОБАВЛЕНО
+                            dialog.closed.connect(() => { executionDetailsWindow.isDialogOpen = false; }); // ← ДОБАВЛЕНО
+                            dialog.open();
+                        } else showInfoMessage("Ошибка создания окна графика");
                     } else {
                         showInfoMessage("Ошибка загрузки ExecutionStatsChartDialog.qml: " + component.errorString());
                     }
@@ -307,6 +311,8 @@ Window {
                             "isEditMode": false
                         });
                         if (dialog) {
+                            executionDetailsWindow.isDialogOpen = true; // ← ДОБАВЛЕНО
+                            dialog.closed.connect(() => { executionDetailsWindow.isDialogOpen = false; }); // ← ДОБАВЛЕНО
                             dialog.onActionExecutionSaved.connect(function() {
                                 executionDetailsWindow.loadExecutionData();
                                 executionUpdated(executionId);
@@ -507,15 +513,17 @@ Window {
                                     fullDescriptionDialog.descriptionText = model.display || "";
                                     fullDescriptionDialog.open();
                                 }
-                                onEntered: descTip.open()
+                                onEntered: {
+                                    if (descText.truncated) descTip.open();
+                                }
                                 onExited: descTip.close()
                             }
 
                             ToolTip {
                                 id: descTip
                                 text: model.display || ""
-                                visible: descText.truncated && hovered
                                 delay: 500
+                                // visible убран — управление через open()/close()
                             }
                         }
 
@@ -567,7 +575,7 @@ Window {
                                 font.pixelSize: appData.fontSize
                                 font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
                                 font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
-                                onLinkActivated: executionDetailsWindow.openFile(link)
+                                onLinkActivated: (url) => executionDetailsWindow.openFile(url)
 
                                 ToolTip {
                                     id: reportTip
@@ -633,6 +641,8 @@ Window {
                                             "isEditMode": true
                                         });
                                         if (dialog) {
+                                            executionDetailsWindow.isDialogOpen = true; // ← ДОБАВЛЕНО
+                                            dialog.closed.connect(() => { executionDetailsWindow.isDialogOpen = false; }); // ← ДОБАВЛЕНО
                                             dialog.actionExecutionSaved.connect(function() {
                                                 executionDetailsWindow.loadExecutionData();
                                                 executionUpdated(executionId);
@@ -717,6 +727,8 @@ Window {
                                                 "initialNotes": notes
                                             });
                                             if (dialog) {
+                                                executionDetailsWindow.isDialogOpen = true; // ← ДОБАВЛЕНО
+                                                dialog.closed.connect(() => { executionDetailsWindow.isDialogOpen = false; }); // ← ДОБАВЛЕНО
                                                 dialog.notesSaved.connect(function() {
                                                     executionDetailsWindow.loadExecutionData();
                                                     executionUpdated(executionId);
@@ -902,7 +914,7 @@ Window {
         id: colorUpdateTimer
         interval: 60000 // 1 минута
         repeat: true
-        running: executionDetailsWindow.visible // только если окно видно
+        running: executionDetailsWindow.visible && !executionDetailsWindow.isDialogOpen // только если окно видно
         onTriggered: {
             // Просто перезагружаем данные → цвета обновятся
             executionDetailsWindow.loadExecutionData();
