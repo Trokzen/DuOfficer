@@ -9,8 +9,8 @@ Popup {
     id: actionExecutionEditorDialog
     x: (parent.width - width) / 2
     y: (parent.height - height) / 2
-    width: Math.min(parent.width * 0.8, 600) // 80% ширины или максимум 600
-    height: Math.min(parent.height * 0.85, 500) // Увеличена высота для новых полей
+    width: Math.min(parent.width * 0.8, 800) // 80% ширины или максимум 600
+    height: Math.min(parent.height * 0.85, 600) // Увеличена высота для новых полей
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent

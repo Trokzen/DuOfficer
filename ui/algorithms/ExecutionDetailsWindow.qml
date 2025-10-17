@@ -18,8 +18,8 @@ Window {
     property int executionId: -1
     property var executionData: null
     property var cachedActionsList: []
-
     property real availableTableWidth: width - 20
+    property bool isLoading: false
 
     // ЗАМЕНА: "№" → "Номер" (во избежание проблем с привязкой)
     property var columnHeaders: [
@@ -35,8 +35,8 @@ Window {
     ]
 
     property var columnWidthPercents: [5, 5, 38, 6, 6, 8, 9, 8, 15] // немного увеличил "Номер"
-
     property bool _maximizeOnce: true
+
 
     onVisibleChanged: {
         if (visible && _maximizeOnce) {
@@ -133,85 +133,94 @@ Window {
 
     // --- Загрузка данных ---
     function loadExecutionData() {
-        console.log("=== loadExecutionData вызвана для executionId:", executionId, "===");
+        if (isLoading) return;
+        isLoading = true;
 
-        if (executionId <= 0) return;
+        Qt.callLater(function() {
+            try {
+                console.log("=== loadExecutionData вызвана для executionId:", executionId, "===");
 
-        var execData = appData.getExecutionById(executionId);
-        if (execData && execData.toVariant) execData = execData.toVariant();
-        if (!execData || typeof execData !== 'object') {
-            executionData = null;
-            title = "Детали выполнения (ошибка)";
-            console.error("Не удалось загрузить executionData");
-            return;
-        }
-        executionData = execData;
-        title = "Детали выполнения: " + (executionData.snapshot_name || "Без названия");
+                if (executionId <= 0) return;
 
-        // --- ГАРАНТИРОВАННОЕ ПРЕОБРАЗОВАНИЕ В JS-МАССИВ ---
-        var rawActions = appData.getActionExecutionsByExecutionId(executionId);
-        var actionsList = [];
-        if (rawActions && typeof rawActions === 'object' && rawActions.length !== undefined) {
-            for (var i = 0; i < rawActions.length; i++) {
-                actionsList.push(rawActions[i]);
-            }
-        }
-        console.log("Загружено action executions:", actionsList.length);
-        executionDetailsWindow.cachedActionsList = actionsList;
+                var execData = appData.getExecutionById(executionId);
+                if (execData && execData.toVariant) execData = execData.toVariant();
+                if (!execData || typeof execData !== 'object') {
+                    executionData = null;
+                    title = "Детали выполнения (ошибка)";
+                    console.error("Не удалось загрузить executionData");
+                    return;
+                }
+                executionData = execData;
+                title = "Детали выполнения: " + (executionData.snapshot_name || "Без названия");
 
-        var jsRows = [];
-        for (var i = 0; i < actionsList.length; i++) {
-            var a = actionsList[i];
-            var status = String(a.status || "unknown");
-            var desc = String(a.snapshot_description || "");
-            var phones = String(a.snapshot_contact_phones || "");
-            var materials = a.snapshot_report_materials;
-            if (typeof materials !== 'string') materials = "";
-            var start = String(a.calculated_start_time || "");
-            var actualEnd = String(a.actual_end_time || "");
-            var reported = String(a.reported_to || "");
-            var notes = String(a.notes || "");
-
-            var htmlMaterials = "";
-            if (materials) {
-                materials.split('\n').forEach(rawPath => {
-                    var trimmedPath = String(rawPath).trim();
-                    if (!trimmedPath) return;
-                    var cleanPath = trimmedPath;
-                    if (cleanPath.startsWith("file:///")) {
-                        cleanPath = cleanPath.substring(8);
+                // --- ГАРАНТИРОВАННОЕ ПРЕОБРАЗОВАНИЕ В JS-МАССИВ ---
+                var rawActions = appData.getActionExecutionsByExecutionId(executionId);
+                var actionsList = [];
+                if (rawActions && typeof rawActions === 'object' && rawActions.length !== undefined) {
+                    for (var i = 0; i < rawActions.length; i++) {
+                        actionsList.push(rawActions[i]);
                     }
-                    var fileName = cleanPath.split(/[\\/]/).pop() || cleanPath;
-                    htmlMaterials += `<a href="${cleanPath}">${escapeHtml(fileName)}</a><br/>`;
-                });
+                }
+                console.log("Загружено action executions:", actionsList.length);
+                executionDetailsWindow.cachedActionsList = actionsList;
+
+                var jsRows = [];
+                for (var i = 0; i < actionsList.length; i++) {
+                    var a = actionsList[i];
+                    var status = String(a.status || "unknown");
+                    var desc = String(a.snapshot_description || "");
+                    var phones = String(a.snapshot_contact_phones || "");
+                    var materials = a.snapshot_report_materials;
+                    if (typeof materials !== 'string') materials = "";
+                    var start = String(a.calculated_start_time || "");
+                    var actualEnd = String(a.actual_end_time || "");
+                    var reported = String(a.reported_to || "");
+                    var notes = String(a.notes || "");
+
+                    var htmlMaterials = "";
+                    if (materials) {
+                        materials.split('\n').forEach(rawPath => {
+                            var trimmedPath = String(rawPath).trim();
+                            if (!trimmedPath) return;
+                            var cleanPath = trimmedPath;
+                            if (cleanPath.startsWith("file:///")) {
+                                cleanPath = cleanPath.substring(8);
+                            }
+                            var fileName = cleanPath.split(/[\\/]/).pop() || cleanPath;
+                            htmlMaterials += `<a href="${cleanPath}">${escapeHtml(fileName)}</a><br/>`;
+                        });
+                    }
+
+                    jsRows.push({
+                        "Статус": status,
+                        "Номер": i + 1,               // ← изменено
+                        "Описание": desc,
+                        "Начало": formatDateTime(start),
+                        "Окончание": formatDateTime(String(a.calculated_end_time || "")),
+                        "Телефоны": phones,
+                        "Отчётные материалы": htmlMaterials,
+                        "Кому доложено": reported,
+                        "Примечания": notes
+                    });
+                }
+
+                console.log("Подготовлено строк для таблицы:", jsRows.length);
+                if (jsRows.length > 0) {
+                    console.log("Пример строки:", JSON.stringify(jsRows[0]));
+                }
+
+                if (actionsTableModel) {
+                    actionsTableModel.clear();
+                    for (var i = 0; i < jsRows.length; i++) {
+                        actionsTableModel.appendRow(jsRows[i]);
+                    }
+                } else {
+                    console.error("actionsTableModel не доступен!");
+                }
+            } finally {
+                isLoading = false;
             }
-
-            jsRows.push({
-                "Статус": status,
-                "Номер": i + 1,               // ← изменено
-                "Описание": desc,
-                "Начало": formatDateTime(start),
-                "Окончание": formatDateTime(String(a.calculated_end_time || "")),
-                "Телефоны": phones,
-                "Отчётные материалы": htmlMaterials,
-                "Кому доложено": reported,
-                "Примечания": notes
-            });
-        }
-
-        console.log("Подготовлено строк для таблицы:", jsRows.length);
-        if (jsRows.length > 0) {
-            console.log("Пример строки:", JSON.stringify(jsRows[0]));
-        }
-
-        if (actionsTableModel) {
-            actionsTableModel.clear();
-            for (var i = 0; i < jsRows.length; i++) {
-                actionsTableModel.appendRow(jsRows[i]);
-            }
-        } else {
-            console.error("actionsTableModel не доступен!");
-        }
+        });
     }
 
     ColumnLayout {
@@ -727,6 +736,12 @@ Window {
                             }
                         }
                     }
+                }
+                BusyIndicator {
+                    anchors.centerIn: actionsTableView
+                    running: executionDetailsWindow.isLoading
+                    visible: running
+                    z: 10
                 }
             }
         }
