@@ -1,25 +1,54 @@
 # main.py
+# =============================================================================
+# СТАНДАРТНЫЕ БИБЛИОТЕКИ PYTHON
+# =============================================================================
+import datetime
+import html
+import logging
+import os
+import re
 import sys
 import traceback
 from pathlib import Path
-from PySide6.QtCore import Qt, QUrl, QDateTime, QTimer, Slot, QSettings
-from PySide6.QtGui import QGuiApplication, QIcon, QAction
-from PySide6.QtQml import QQmlApplicationEngine
-from PySide6.QtCore import QObject, Signal, Property
+from typing import Any, Dict, Optional, Set
+
+# =============================================================================
+# БИБЛИОТЕКА PYSIDE6 - ОСНОВНЫЕ МОДУЛИ
+# =============================================================================
+
+# Графики и диаграммы
 from PySide6.QtCharts import QChart, QChartView, QPieSeries, QPieSlice
-# --- Импорты для трея и сообщений ---
-from PySide6.QtWidgets import QSystemTrayIcon, QMenu, QApplication, QMessageBox
-# --- ИМПОРТЫ для работы с БД ---
-from db.sqlite_config import SQLiteConfigManager
-from db.postgresql_manager import PostgreSQLDatabaseManager
-import datetime
-# --- ИМПОРТЫ для работы с печатью ---
+
+# Базовые классы и утилиты Qt Core
+from PySide6.QtCore import (
+    QDateTime, QObject, Property, QSettings, QTimer,
+    QUrl, Qt, Signal, Slot
+)
+
+# Графический интерфейс и обработка документов
+from PySide6.QtGui import QGuiApplication, QIcon, QAction, QTextDocument
+
+# Мультимедиа (звуковые уведомления)
+from PySide6.QtMultimedia import QSoundEffect
+
+# Печать и работа с принтерами
 from PySide6.QtPrintSupport import QPrinter, QPrintDialog
-from PySide6.QtGui import QTextDocument
-import html
-import os
-import re
-# --- ---
+
+# QML движок для работы с QML интерфейсами
+from PySide6.QtQml import QQmlApplicationEngine
+
+# Виджеты и элементы интерфейса
+from PySide6.QtWidgets import (
+    QApplication, QMenu, QMessageBox, QSystemTrayIcon
+)
+
+# =============================================================================
+# ЛОКАЛЬНЫЕ МОДУЛИ ПРИЛОЖЕНИЯ
+# =============================================================================
+
+# Менеджеры базы данных
+from db.postgresql_manager import PostgreSQLDatabaseManager  # Основная БД PostgreSQL
+from db.sqlite_config import SQLiteConfigManager            # Конфигурация в SQLite
 
 
 class ApplicationData(QObject):
@@ -234,6 +263,12 @@ class ApplicationData(QObject):
 
         # Подключаемся к сигналу, когда объекты QML созданы
         self.engine.objectCreated.connect(self.on_qml_objects_created)
+        # Атрибуты для уведомлений
+        self._notified_action_executions: Set[int] = set() # Хранит ID action_executions, для которых уже было уведомление
+        self._notification_timer: Optional[QTimer] = None
+        self._sound_approaching: Optional[QSoundEffect] = None
+        self._sound_overdue: Optional[QSoundEffect] = None
+        self._system_tray_icon: Optional[QSystemTrayIcon] = None # Для системных уведомлений
 
 
 
