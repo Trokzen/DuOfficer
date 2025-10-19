@@ -2573,7 +2573,8 @@ class PostgreSQLDatabaseManager:
             ae.calculated_end_time,
             ae.status, -- Явно указываем ae.status, он будет 'status' в словаре Python
             ae.snapshot_description,
-            exec.status AS execution_status
+            exec.status AS execution_status,
+            exec.snapshot_name -- <-- Добавляем snapshot_name из связанного execution
         FROM app_schema.action_executions ae
         JOIN app_schema.algorithm_executions exec ON ae.execution_id = exec.id
         WHERE exec.status = 'active' -- Только активные выполнения алгоритмов

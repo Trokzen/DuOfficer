@@ -2625,6 +2625,7 @@ class ApplicationData(QObject):
             action_status = action.get('status')
             execution_status = action.get('execution_status')
             action_description = action.get('snapshot_description', 'Действие без описания')
+            algorithm_name = action.get('snapshot_name', 'Неизвестный алгоритм')
 
             # Пропускаем, если уже уведомляли
             if action_exec_id in self._notified_action_executions:
@@ -2668,7 +2669,7 @@ class ApplicationData(QObject):
             if action_end_dt < local_now_dt:
                 print(f"Python: Обнаружено ПРОСРОЧЕННОЕ действие ID {action_exec_id} (execution {execution_id}).")
                 # Отправляем уведомление
-                self._send_notification(action_exec_id, execution_id, "Просрочено", action_description)
+                self._send_notification(action_exec_id, execution_id, algorithm_name, "Просрочено", action_description, action_end_dt)
                 # Воспроизводим звук
                 self._play_notification_sound("overdue")
                 # Добавляем в список уведомленных
@@ -2680,7 +2681,7 @@ class ApplicationData(QObject):
             if local_now_dt <= action_end_dt <= (local_now_dt + reminder_threshold):
                 print(f"Python: Обнаружено ПРИБЛИЖАЮЩЕЕСЯ действие ID {action_exec_id} (execution {execution_id}), дедлайн: {action_end_dt}.")
                 # Отправляем уведомление
-                self._send_notification(action_exec_id, execution_id, "Приближается", action_description)
+                self._send_notification(action_exec_id, execution_id, algorithm_name, "Приближается", action_description, action_end_dt)
                 # Воспроизводим звук
                 self._play_notification_sound("approaching")
                 # Добавляем в список уведомленных
@@ -2691,7 +2692,7 @@ class ApplicationData(QObject):
         print("Python: Проверка дедлайнов завершена.")
     # --- Конец метода _check_action_deadlines ---
 
-    def _send_notification(self, action_exec_id: int, execution_id: int, status_type: str, description: str):
+    def _send_notification(self, action_exec_id: int, execution_id: int, algorithm_name: str, status_type: str, description: str, calculated_end_time: datetime.datetime):
         """Отправляет визуальное уведомление через NotificationContainerWidget."""
         # Проверяем внутреннюю переменную настройки '_use_persistent_reminders'
         use_reminders = getattr(self, '_use_persistent_reminders', False)
@@ -2699,8 +2700,22 @@ class ApplicationData(QObject):
             print(f"Python: Уведомление '{status_type}' для action_execution {action_exec_id} подавлено (уведомления отключены).")
             return # Уведомления отключены
 
+        # --- ОБНОВЛЕНО: Формирование заголовка и сообщения ---
         title = f"Уведомление о действии ({status_type})"
-        message = f"ID выполнения: {execution_id}\nID действия: {action_exec_id}\n{description}"
+        formatted_end_time = calculated_end_time.strftime("%d.%m.%Y %H:%M:%S")
+
+        # --- СОКРАЩЕНИЕ ТЕКСТА ---
+        max_algorithm_name_length = 40 # Максимальная длина названия алгоритма
+        max_description_length = 120    # Максимальная длина описания действия
+
+        truncated_algorithm_name = algorithm_name if len(algorithm_name) <= max_algorithm_name_length else algorithm_name[:max_algorithm_name_length-3] + "..."
+        truncated_description = description if len(description) <= max_description_length else description[:max_description_length-3] + "..."
+        # --- ---
+
+        # --- ИЗМЕНЕНО: "Действие" -> "Мероприятие" и использование сокращённых текстов ---
+        # message = f"Алгоритм: {algorithm_name}\nДействие: {description}\nВремя окончания: {formatted_end_time}" # <-- СТАРОЕ
+        message = f"Алгоритм: {truncated_algorithm_name}\nМероприятие: {truncated_description}\nВремя окончания: {formatted_end_time}" # <-- НОВОЕ
+        # --- ---
 
         # Отправляем уведомление в контейнер
         try:
@@ -2709,14 +2724,15 @@ class ApplicationData(QObject):
                 title=title,
                 message=message,
                 icon_type="Warning" if status_type == "Просрочено" else "Information",
-                duration_ms=10000 # 10 секунд, например
+                duration_ms=200000 # 10 секунд, например
             )
-            print(f"Python: Добавлено визуальное уведомление в контейнер: {status_type} - {description[:50]}...")
+            print(f"Python: Добавлено визуальное уведомление в контейнер: {status_type} - {truncated_description[:50]}... (Алгоритм: {truncated_algorithm_name[:30]}..., Время: {formatted_end_time})") # <-- Обновлен лог, используем сокращённые версии
 
         except Exception as e:
             print(f"Python: Ошибка при добавлении уведомления в контейнер: {e}")
             import traceback
             traceback.print_exc()
+
 
     def _play_notification_sound(self, status_type: str):
         """Воспроизводит звук уведомления."""

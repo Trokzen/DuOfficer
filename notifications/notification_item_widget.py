@@ -1,17 +1,24 @@
 # notifications/notification_item_widget.py
 import sys
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit # <-- Добавлен QTextEdit для альтернативы
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QPalette, QFont
 
 class NotificationItemWidget(QWidget):
-    def __init__(self, title, message, icon_type, duration_ms, container_widget, parent=None): # <-- Добавлен container_widget
+    def __init__(self, title, message, icon_type, duration_ms, container_widget, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(80)
+        # --- УВЕЛИЧЕНО: Фиксированная высота для каждого уведомления ---
+        self.setFixedHeight(120) # <-- Увеличено с 80 до 120 (примерно в 1.5 раза)
+        # --- ---
         self.setAutoFillBackground(True)
 
         # --- Сохраняем ссылку на контейнер ---
-        self.container_widget = container_widget # <-- Сохраняем
+        self.container_widget = container_widget
+        # --- ---
+
+        # --- УВЕЛИЧЕНО: Установка шрифта ---
+        font = QFont("Arial", 9) # <-- Увеличен размер шрифта (примерно в 1.5 раза от 9, если был 9)
+        self.setFont(font)
         # --- ---
 
         # --- Настройка фона в зависимости от типа ---
@@ -36,10 +43,17 @@ class NotificationItemWidget(QWidget):
 
         self.title_label = QLabel(title)
         self.title_label.setWordWrap(True)
-        self.title_label.setStyleSheet("font-weight: bold;")
+        self.title_label.setStyleSheet("font-weight: bold;") # Убедимся, что заголовок жирный
+        # self.title_label.setFont(font) # Применить шрифт, если установлен
 
+        # --- УВЕЛИЧЕНО: QLabel для сообщения с ограничением высоты ---
         self.message_label = QLabel(message)
         self.message_label.setWordWrap(True)
+        # self.message_label.setFont(font) # Применить шрифт, если установлен
+        self.message_label.setMaximumHeight(60) # <-- Ограничиваем высоту текста (примерное значение)
+        self.message_label.setOpenExternalLinks(True) # Позволяет открывать ссылки в message
+        # self.message_label.setTextInteractionFlags(Qt.TextSelectableByMouse) # Позволяет выделять текст
+        # --- ---
 
         content_layout.addWidget(self.title_label)
         content_layout.addWidget(self.message_label)
@@ -47,18 +61,22 @@ class NotificationItemWidget(QWidget):
 
         # --- Кнопка закрытия ---
         close_button = QPushButton("×")
-        close_button.setFixedSize(20, 20)
+        # --- УВЕЛИЧЕНО: Размер кнопки ---
+        close_button.setFixedSize(25, 25) # <-- Увеличено с 20x20 до 25x25 (примерно в 1.5 раза)
+        # --- ---
         close_button.setStyleSheet(
             "QPushButton {"
             "   border: 1px solid gray;"
-            "   border-radius: 10px;"
+            "   border-radius: 12px;" # --- УВЕЛИЧЕНО: Радиус для круглой кнопки ---
             "   font-weight: bold;"
+            "   font-size: 12px;" # <-- Увеличен размер шрифта на кнопке
             "   background-color: lightgray;"
             "}"
             "QPushButton:hover {"
             "   background-color: #ffcccc;"
             "}"
         )
+        # close_button.setFont(font) # Применить шрифт, если установлен
         close_button.clicked.connect(self._on_close_clicked)
 
         # --- Добавляем элементы в основной макет ---
@@ -80,20 +98,16 @@ class NotificationItemWidget(QWidget):
         self._cleanup()
 
     def _cleanup(self):
-        # Останавливаем таймер
         self.auto_hide_timer.stop()
 
-        # Удаляем себя из родительского макета
-        parent_layout = self.parent().layout() # <-- parent() это self.content_widget
+        parent_layout = self.parent().layout()
         if parent_layout:
             parent_layout.removeWidget(self)
 
-        # Скрываем и удаляем виджет
         self.hide()
         self.deleteLater()
 
         # --- УВЕДОМЛЯЕМ РОДИТЕЛЬСКИЙ КОНТЕЙНЕР ОБ УДАЛЕНИИ ---
-        # Вызываем метод у сохраненного контейнера
         if hasattr(self.container_widget, 'on_item_removed'):
             self.container_widget.on_item_removed()
         # --- ---
