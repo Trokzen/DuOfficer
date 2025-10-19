@@ -41,6 +41,8 @@ from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtWidgets import (
     QApplication, QMenu, QMessageBox, QSystemTrayIcon
 )
+
+from notifications.notification_container_widget import NotificationContainerWidget
 # =============================================================================
 # ЛОКАЛЬНЫЕ МОДУЛИ ПРИЛОЖЕНИЯ
 # =============================================================================
@@ -287,6 +289,8 @@ class ApplicationData(QObject):
         self._notification_timer: Optional[QTimer] = None
         self._sound_approaching: Optional[QSoundEffect] = None
         self._sound_overdue: Optional[QSoundEffect] = None
+        # --- ИНИЦИАЛИЗАЦИЯ КОНТЕЙНЕРА УВЕДОМЛЕНИЙ ---
+        self.notification_container = NotificationContainerWidget()
 
 
 
@@ -2540,7 +2544,7 @@ class ApplicationData(QObject):
         self._notification_timer = QTimer()
         self._notification_timer.timeout.connect(self._check_action_deadlines)
         # Проверяем раз в 30 секунд (30000 миллисекунд)
-        self._notification_timer.start(30000) # 30 секунд
+        self._notification_timer.start(5000) # 5 секунд
         print("Python: Таймер проверки дедлайнов действий запущен (30 секунд).")
 
         # Инициализация QSoundEffect для звуков
@@ -2688,9 +2692,8 @@ class ApplicationData(QObject):
     # --- Конец метода _check_action_deadlines ---
 
     def _send_notification(self, action_exec_id: int, execution_id: int, status_type: str, description: str):
-        """Отправляет визуальное уведомление через NotificationWidget."""
+        """Отправляет визуальное уведомление через NotificationContainerWidget."""
         # Проверяем внутреннюю переменную настройки '_use_persistent_reminders'
-        # (Опционально: можно оставить проверку, если логика отключения уведомлений общая)
         use_reminders = getattr(self, '_use_persistent_reminders', False)
         if not use_reminders:
             print(f"Python: Уведомление '{status_type}' для action_execution {action_exec_id} подавлено (уведомления отключены).")
@@ -2699,13 +2702,19 @@ class ApplicationData(QObject):
         title = f"Уведомление о действии ({status_type})"
         message = f"ID выполнения: {execution_id}\nID действия: {action_exec_id}\n{description}"
 
-        # Создаем и показываем новое уведомление
+        # Отправляем уведомление в контейнер
         try:
-            # Определяем тип иконки/цвета для NotificationWidget (например, строкой)
-            icon_type_for_widget = "Warning" if status_type == "Просрочено" else "Information"
+            # Используем ОДИН экземпляр контейнера
+            self.notification_container.add_notification(
+                title=title,
+                message=message,
+                icon_type="Warning" if status_type == "Просрочено" else "Information",
+                duration_ms=10000 # 10 секунд, например
+            )
+            print(f"Python: Добавлено визуальное уведомление в контейнер: {status_type} - {description[:50]}...")
 
         except Exception as e:
-            print(f"Python: Ошибка при создании уведомления (QWidget): {e}")
+            print(f"Python: Ошибка при добавлении уведомления в контейнер: {e}")
             import traceback
             traceback.print_exc()
 
@@ -2780,5 +2789,11 @@ if __name__ == "__main__":
 
     if not engine.rootObjects():
         sys.exit(-1)
+
+    # --- ПОДКЛЮЧАЕМ ОЧИСТКУ ПРИ ЗАВЕРШЕНИИ ПРИЛОЖЕНИЯ ---
+    # Подключаем сигнал aboutToQuit к методу уничтожения контейнера у data_context
+    # Lambda используется для захвата ссылки на data_context в момент подключения
+    app.aboutToQuit.connect(lambda dc=data_context: dc.notification_container.deleteLater() if hasattr(dc, 'notification_container') else None)
+    # --- ---
 
     sys.exit(app.exec())
