@@ -788,6 +788,18 @@ class ApplicationData(QObject):
                         updated_properties = True
                         print(f"Python: Обновлен background_image_path: {self._background_image_path}")
 
+                    if 'use_persistent_reminders' in new_settings:
+                        # Преобразуем 1/0 из SQLite в True/False
+                        self._use_persistent_reminders = bool(new_settings['use_persistent_reminders'])
+                        print(f"Python: Обновлен _use_persistent_reminders: {self._use_persistent_reminders}")
+                        # updated_props или другой флаг можно добавить, если нужно уведомлять QML об этом изменении
+
+                    if 'sound_enabled' in new_settings:
+                        # Преобразуем 1/0 из SQLite в True/False
+                        self._sound_enabled = bool(new_settings['sound_enabled'])
+                        print(f"Python: Обновлен _sound_enabled: {self._sound_enabled}")
+                        # updated_props или другой флаг можно добавить, если нужно уведомлять QML об этом изменении
+
                     if updated_properties:
                         print("Python: Локальные свойства обновлены.")
                         self.settingsChanged.emit()
@@ -2544,7 +2556,7 @@ class ApplicationData(QObject):
         self._notification_timer = QTimer()
         self._notification_timer.timeout.connect(self._check_action_deadlines)
         # Проверяем раз в 30 секунд (30000 миллисекунд)
-        self._notification_timer.start(5000) # 5 секунд
+        self._notification_timer.start(10000) # 10 секунд
         print("Python: Таймер проверки дедлайнов действий запущен (30 секунд).")
 
         # Инициализация QSoundEffect для звуков
@@ -2700,7 +2712,7 @@ class ApplicationData(QObject):
             print(f"Python: Уведомление '{status_type}' для action_execution {action_exec_id} подавлено (уведомления отключены).")
             return # Уведомления отключены
 
-        # --- ОБНОВЛЕНО: Формирование заголовка и сообщения ---
+        # --- Формирование заголовка и сообщения ---
         title = f"Уведомление о действии ({status_type})"
         formatted_end_time = calculated_end_time.strftime("%d.%m.%Y %H:%M:%S")
 
@@ -2711,10 +2723,7 @@ class ApplicationData(QObject):
         truncated_algorithm_name = algorithm_name if len(algorithm_name) <= max_algorithm_name_length else algorithm_name[:max_algorithm_name_length-3] + "..."
         truncated_description = description if len(description) <= max_description_length else description[:max_description_length-3] + "..."
         # --- ---
-
-        # --- ИЗМЕНЕНО: "Действие" -> "Мероприятие" и использование сокращённых текстов ---
-        # message = f"Алгоритм: {algorithm_name}\nДействие: {description}\nВремя окончания: {formatted_end_time}" # <-- СТАРОЕ
-        message = f"Алгоритм: {truncated_algorithm_name}\nМероприятие: {truncated_description}\nВремя окончания: {formatted_end_time}" # <-- НОВОЕ
+        message = f"Алгоритм: {truncated_algorithm_name}\nМероприятие: {truncated_description}\nВремя окончания: {formatted_end_time}"
         # --- ---
 
         # Отправляем уведомление в контейнер
