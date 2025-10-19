@@ -41,7 +41,6 @@ from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtWidgets import (
     QApplication, QMenu, QMessageBox, QSystemTrayIcon
 )
-
 # =============================================================================
 # ЛОКАЛЬНЫЕ МОДУЛИ ПРИЛОЖЕНИЯ
 # =============================================================================
@@ -188,6 +187,18 @@ class ApplicationData(QObject):
                         updated_appearance_props = True
                         print(f"Python: Загружен font_style: {self._font_style}")
 
+                    # --- Загрузка use_persistent_reminders и sound_enabled ---
+                    if 'use_persistent_reminders' in settings:
+                        # Преобразуем 1/0 из SQLite в True/False
+                        self._use_persistent_reminders = bool(settings['use_persistent_reminders'])
+                        print(f"Python: Загружено use_persistent_reminders: {self._use_persistent_reminders}")
+
+                    if 'sound_enabled' in settings:
+                        # Преобразуем 1/0 из SQLite в True/False
+                        self._sound_enabled = bool(settings['sound_enabled'])
+                        print(f"Python: Загружен sound_enabled: {self._sound_enabled}")
+                    # --- ---
+
                     if updated_appearance_props:
                         self.fontFamilyChanged.emit()
                         self.fontSizeChanged.emit()
@@ -202,6 +213,7 @@ class ApplicationData(QObject):
             print(f"Python: Ошибка при загрузке начальных настроек (включая время и внешний вид): {e}")
             import traceback
             traceback.print_exc()
+
 
     def __init__(self, app, engine, sqlite_config_manager):
         """
@@ -250,6 +262,13 @@ class ApplicationData(QObject):
         self._font_size = None
         self._font_style = None
 
+        # --- ИНИЦИАЛИЗАЦИЯ СВОЙСТВ УВЕДОМЛЕНИЙ ---
+        # Инициализируем внутренние переменные до загрузки из БД, чтобы избежать AttributeError
+        # Значения по умолчанию - отключено, пока не загружено из БД
+        self._use_persistent_reminders = False 
+        self._sound_enabled = False
+        # --- ---
+
         # Загружаем начальные настройки
         self.load_initial_settings()
         
@@ -268,7 +287,6 @@ class ApplicationData(QObject):
         self._notification_timer: Optional[QTimer] = None
         self._sound_approaching: Optional[QSoundEffect] = None
         self._sound_overdue: Optional[QSoundEffect] = None
-        self._system_tray_icon: Optional[QSystemTrayIcon] = None # Для системных уведомлений
 
 
 
@@ -504,7 +522,8 @@ class ApplicationData(QObject):
                 print(f"Python: Пользователь {user_data['login']} аутентифицирован успешно.")
                 # TODO: Сохранить user_data в self для дальнейшего использования
                 self._current_user = user_data
-                
+                # Запуск таймера уведомлений
+                self._start_notification_timer() 
                 # 4. Переключаемся на основной экран
                 self.requestMainScreen()
                 return True # Успех
@@ -2508,6 +2527,215 @@ class ApplicationData(QObject):
         if self.tray_icon:
             self.tray_icon.hide()
         self.app.quit()
+
+    def _start_notification_timer(self):
+        """Инициализирует и запускает таймер для проверки дедлайнов действий,
+        а также загружает звуковые эффекты.
+        QSystemTrayIcon больше не используется для визуальных уведомлений."""
+        if not self.pg_database_manager:
+            print("Python: Предупреждение - pg_database_manager не инициализирован, уведомления не запускаются.")
+            return
+
+        # Инициализация таймера проверки дедлайнов
+        self._notification_timer = QTimer()
+        self._notification_timer.timeout.connect(self._check_action_deadlines)
+        # Проверяем раз в 30 секунд (30000 миллисекунд)
+        self._notification_timer.start(30000) # 30 секунд
+        print("Python: Таймер проверки дедлайнов действий запущен (30 секунд).")
+
+        # Инициализация QSoundEffect для звуков
+        try:
+            from PySide6.QtCore import QUrl # Импорт внутри блока, если не импортирован глобально
+            self._sound_approaching = QSoundEffect(self)
+            # Укажите путь к вашему WAV файлу для "приближается"
+            # Убедитесь, что файл существует и путь указан правильно
+            sound_path_approaching = "sounds/soon.wav" # <-- Укажите реальный путь
+            if os.path.exists(sound_path_approaching):
+                self._sound_approaching.setSource(QUrl.fromLocalFile(sound_path_approaching))
+                self._sound_approaching.setLoopCount(1)
+                print(f"Python: Звук уведомления 'приближается' загружен из {sound_path_approaching}.")
+            else:
+                print(f"Python: Файл звука 'приближается' не найден: {sound_path_approaching}")
+                self._sound_approaching = None # Отключаем воспроизведение
+        except Exception as e:
+            print(f"Python: Ошибка при загрузке звука 'приближается': {e}")
+            self._sound_approaching = None # Отключаем воспроизведение, если ошибка
+
+        try:
+            self._sound_overdue = QSoundEffect(self)
+            # Укажите путь к вашему WAV файлу для "просрочено"
+            # Убедитесь, что файл существует и путь указан правильно
+            sound_path_overdue = "sounds/time_out.wav" # <-- Укажите реальный путь
+            if os.path.exists(sound_path_overdue):
+                self._sound_overdue.setSource(QUrl.fromLocalFile(sound_path_overdue))
+                self._sound_overdue.setLoopCount(1)
+                print(f"Python: Звук уведомления 'просрочено' загружен из {sound_path_overdue}.")
+            else:
+                print(f"Python: Файл звука 'просрочено' не найден: {sound_path_overdue}")
+                self._sound_overdue = None # Отключаем воспроизведение
+
+        except Exception as e:
+            print(f"Python: Ошибка при загрузке звука 'просрочено': {e}")
+            self._sound_overdue = None # Отключаем воспроизведение, если ошибка
+    # --- Конец метода _start_notification_timer ---
+
+    def _check_action_deadlines(self):
+        """Проверяет дедлайны действий и отправляет уведомления."""
+        if not self.pg_database_manager:
+            print("Python: _check_action_deadlines - pg_database_manager не инициализирован.")
+            return # Нечего проверять без БД
+
+        # Получаем текущее МЕСТНОЕ время из appData (строки)
+        # Нужно преобразовать строку времени и даты в объект datetime
+        current_time_str = self._local_time # "HH:MM:SS"
+        current_date_str = self._local_date # "DD.MM.YYYY"
+        try:
+            # Формат даты "DD.MM.YYYY HH:MM:SS"
+            local_now_str = f"{current_date_str} {current_time_str}"
+            local_now_dt = datetime.datetime.strptime(local_now_str, "%d.%m.%Y %H:%M:%S")
+            print(f"Python: Проверка дедлайнов. Текущее местное время: {local_now_dt}")
+        except ValueError as e:
+            print(f"Python: Ошибка преобразования местного времени: {e}")
+            return # Не удалось получить корректное время, пропускаем проверку
+
+        # Определяем порог для "приближается" (например, 5 минут)
+        reminder_threshold = datetime.timedelta(minutes=5)
+
+        # Загружаем активные action_executions для активных algorithm_executions
+        # Нужен метод в pg_database_manager, возвращающий:
+        # [{'id': ae_id, 'execution_id': exec_id, 'calculated_end_time': cet_str, 'status': st, 'snapshot_description': desc, 'execution_status': exec_st}]
+        # где execution_status - статус связанного algorithm_execution
+        try:
+            # !!! ВАЖНО: Этот метод нужно реализовать в postgresql_manager.py !!!
+            active_actions = self.pg_database_manager.get_active_action_executions_with_details()
+        except Exception as e:
+            print(f"Python: Ошибка при получении активных действий для проверки дедлайнов: {e}")
+            import traceback
+            traceback.print_exc()
+            return
+
+        for action in active_actions:
+            action_exec_id = action.get('id')
+            execution_id = action.get('execution_id')
+            calculated_end_time_value = action.get('calculated_end_time')
+            action_status = action.get('status')
+            execution_status = action.get('execution_status')
+            action_description = action.get('snapshot_description', 'Действие без описания')
+
+            # Пропускаем, если уже уведомляли
+            if action_exec_id in self._notified_action_executions:
+                print(f"Python: Пропуск action_execution ID {action_exec_id} - уже уведомлено.")
+                continue
+
+            # Пропускаем, если статус действия не pending или in_progress
+            if action_status not in ['pending', 'in_progress']:
+                print(f"Python: Пропуск action_execution ID {action_exec_id} - статус '{action_status}', не pending/in_progress.")
+                continue
+
+            # Пропускаем, если статус выполнения алгоритма не active
+            if execution_status != 'active':
+                print(f"Python: Пропуск action_execution ID {action_exec_id} - статус алгоритма '{execution_status}', не active.")
+                continue
+
+            # Преобразуем calculated_end_time в datetime
+            # Предполагаем формат 'YYYY-MM-DD HH:MM:SS' из БД (это местное время)
+            try:
+                if calculated_end_time_value is None: # <-- Проверяем на None, а не на "not calculated_end_time_value"
+                     print(f"Python: Пропуск action_execution ID {action_exec_id} - calculated_end_time отсутствует.")
+                     continue
+
+                # Проверяем тип значения. psycopg2 возвращает datetime.datetime для TIMESTAMP
+                if isinstance(calculated_end_time_value, datetime.datetime):
+                    action_end_dt = calculated_end_time_value
+                elif isinstance(calculated_end_time_value, str):
+                    # Если вдруг строка (маловероятно, но на всякий случай)
+                    action_end_dt = datetime.datetime.strptime(calculated_end_time_value, "%Y-%m-%d %H:%M:%S")
+                else:
+                    # Неизвестный тип
+                    print(f"Python: Неизвестный тип calculated_end_time для action_execution ID {action_exec_id}: {type(calculated_end_time_value)}. Значение: {calculated_end_time_value}")
+                    continue
+            except ValueError as e:
+                print(f"Python: Ошибка преобразования calculated_end_time для action_execution ID {action_exec_id}: {e}. Значение: {calculated_end_time_value}")
+                continue # Пропускаем некорректное время
+
+            print(f"Python: Проверка action_execution ID {action_exec_id} (exec {execution_id}), дедлайн: {action_end_dt}, статус: {action_status}")
+
+            # Проверяем "просрочено"
+            if action_end_dt < local_now_dt:
+                print(f"Python: Обнаружено ПРОСРОЧЕННОЕ действие ID {action_exec_id} (execution {execution_id}).")
+                # Отправляем уведомление
+                self._send_notification(action_exec_id, execution_id, "Просрочено", action_description)
+                # Воспроизводим звук
+                self._play_notification_sound("overdue")
+                # Добавляем в список уведомленных
+                self._notified_action_executions.add(action_exec_id)
+                print(f"Python: Добавлено action_execution ID {action_exec_id} в список уведомлений (просрочено).")
+                continue # Переходим к следующему действию
+
+            # Проверяем "приближается"
+            if local_now_dt <= action_end_dt <= (local_now_dt + reminder_threshold):
+                print(f"Python: Обнаружено ПРИБЛИЖАЮЩЕЕСЯ действие ID {action_exec_id} (execution {execution_id}), дедлайн: {action_end_dt}.")
+                # Отправляем уведомление
+                self._send_notification(action_exec_id, execution_id, "Приближается", action_description)
+                # Воспроизводим звук
+                self._play_notification_sound("approaching")
+                # Добавляем в список уведомленных
+                self._notified_action_executions.add(action_exec_id)
+                print(f"Python: Добавлено action_execution ID {action_exec_id} в список уведомлений (приближается).")
+                continue # Переход к следующему действию
+
+        print("Python: Проверка дедлайнов завершена.")
+    # --- Конец метода _check_action_deadlines ---
+
+    def _send_notification(self, action_exec_id: int, execution_id: int, status_type: str, description: str):
+        """Отправляет визуальное уведомление через NotificationWidget."""
+        # Проверяем внутреннюю переменную настройки '_use_persistent_reminders'
+        # (Опционально: можно оставить проверку, если логика отключения уведомлений общая)
+        use_reminders = getattr(self, '_use_persistent_reminders', False)
+        if not use_reminders:
+            print(f"Python: Уведомление '{status_type}' для action_execution {action_exec_id} подавлено (уведомления отключены).")
+            return # Уведомления отключены
+
+        title = f"Уведомление о действии ({status_type})"
+        message = f"ID выполнения: {execution_id}\nID действия: {action_exec_id}\n{description}"
+
+        # Создаем и показываем новое уведомление
+        try:
+            # Определяем тип иконки/цвета для NotificationWidget (например, строкой)
+            icon_type_for_widget = "Warning" if status_type == "Просрочено" else "Information"
+
+        except Exception as e:
+            print(f"Python: Ошибка при создании уведомления (QWidget): {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _play_notification_sound(self, status_type: str):
+        """Воспроизводит звук уведомления."""
+        # Проверяем внутреннюю переменную настройки '_sound_enabled'
+        # Используем getattr с дефолтным значением False, если атрибут не существует
+        sound_enabled = getattr(self, '_sound_enabled', False)
+        if not sound_enabled:
+            print(f"Python: Звук для '{status_type}' подавлен (звук отключен).")
+            return # Звук отключен
+
+        # Выбираем QSoundEffect в зависимости от типа уведомления
+        sound_effect = None
+        if status_type == "approaching" and self._sound_approaching:
+            sound_effect = self._sound_approaching
+        elif status_type == "overdue" and self._sound_overdue:
+            sound_effect = self._sound_overdue
+
+        if sound_effect:
+            # Проверяем, играет ли уже этот звук, чтобы избежать наложения
+            if sound_effect.isPlaying():
+                 print(f"Python: Звук для '{status_type}' не воспроизводится - предыдущий звук еще играет.")
+                 return # Не запускаем новый, если предыдущий ещё играет
+            # Воспроизводим звук
+            sound_effect.play()
+            print(f"Python: Воспроизведён звук уведомления: {status_type}")
+        else:
+            print(f"Python: Звуковой файл для '{status_type}' не загружен, отключен или не существует.")
+    # --- Конец метода _play_notification_sound ---
 
 
 def on_qml_loaded(obj, url):

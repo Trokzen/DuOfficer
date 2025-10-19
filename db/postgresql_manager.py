@@ -2549,6 +2549,53 @@ class PostgreSQLDatabaseManager:
             logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при получении action_execution ID {action_execution_id}: {e}")
             return None
 
+    def get_active_action_executions_with_details(self) -> list:
+        """
+        Получает список активных action_executions вместе с деталями execution'а.
+
+        Возвращает список словарей:
+        [
+            {
+                'id': int, # ID action_execution
+                'execution_id': int, # ID связанного algorithm_execution
+                'calculated_end_time': datetime.datetime, # Объект datetime
+                'status': str, # Статус action_execution ('pending', 'in_progress', ...) - теперь без алиаса
+                'snapshot_description': str, # Описание действия
+                'execution_status': str # Статус algorithm_execution ('active', 'completed', ...)
+            },
+            ...
+        ]
+        """
+        query = """
+        SELECT
+            ae.id,
+            ae.execution_id,
+            ae.calculated_end_time,
+            ae.status, -- Явно указываем ae.status, он будет 'status' в словаре Python
+            ae.snapshot_description,
+            exec.status AS execution_status
+        FROM app_schema.action_executions ae
+        JOIN app_schema.algorithm_executions exec ON ae.execution_id = exec.id
+        WHERE exec.status = 'active' -- Только активные выполнения алгоритмов
+        AND ae.status IN ('pending', 'in_progress'); -- Только активные действия
+        """
+        try:
+            # Используем _get_connection для получения соединения
+            with self._get_connection() as conn:
+                # Создаем курсор из соединения, используя RealDictCursor
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute(query)
+                    rows = cursor.fetchall()
+                    # rows уже будут списком RealDictRow, который можно напрямую конвертировать в dict
+                    # Преобразуем в список словарей Python
+                    results = [dict(row) for row in rows]
+                    return results
+        except Exception as e:
+            logger.error(f"Ошибка при получении активных действий с деталями: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    # --- Конец метода get_active_action_executions_with_details ---
 
 
 # --- Пример использования (для тестирования модуля отдельно) ---
