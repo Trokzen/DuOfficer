@@ -50,6 +50,8 @@ from notifications.notification_container_widget import NotificationContainerWid
 # Менеджеры базы данных
 from db.postgresql_manager import PostgreSQLDatabaseManager  # Основная БД PostgreSQL
 from db.sqlite_config import SQLiteConfigManager            # Конфигурация в SQLite
+from psycopg2.extras import RealDictCursor
+from werkzeug.security import check_password_hash
 
 
 class ApplicationData(QObject):
@@ -2285,6 +2287,40 @@ class ApplicationData(QObject):
             print(f"Ошибка печати: {e}")
             traceback.print_exc()
 
+    @Slot(str, result=bool)
+    def verifyAdminPassword(self, password: str) -> bool:
+        """
+        Проверяет, совпадает ли переданный пароль с паролем пользователя 'admin'.
+        Использует pg_database_manager для запроса к PostgreSQL.
+        """
+        try:
+            # Проверяем, инициализирован ли менеджер PostgreSQL
+            if self.pg_database_manager is None:
+                print("Ошибка: pg_database_manager не инициализирован.")
+                return False
+
+            # Получаем подключение
+            conn = self.pg_database_manager._get_connection()
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute(
+                "SELECT password_hash FROM app_schema.users WHERE login = %s AND is_active = TRUE;",
+                ("admin",)
+            )
+            row = cursor.fetchone()
+            cursor.close()
+
+            if row:
+                stored_hash = row["password_hash"]
+                return check_password_hash(stored_hash, password)
+            else:
+                print("Пользователь 'admin' не найден или неактивен.")
+                return False
+
+        except Exception as e:
+            print(f"Ошибка при проверке пароля администратора: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
     def _generate_execution_html(self, exec_data, actions) -> str:
         """Генерирует HTML-отчёт по выполнению с учётом настроек печати и корректной подписью."""

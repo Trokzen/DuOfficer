@@ -549,36 +549,35 @@ Item {
                          ListElement { text: "Учет личного состава" }
                          ListElement { text: "Настройки" }
                          ListElement { text: "(По согласованию)" }
-                     }
-                     Button {
-                         width: parent.width * 0.20
-                         anchors.verticalCenter: parent.verticalCenter
-                         height: parent.height * 0.8
-                         text: model.text
-                         font.pixelSize: rootItem.scaleFactor * 10
-                         hoverEnabled: false
-                         // --- Выделяем активную кнопку НАСТРОЕК ---
-                         background: Rectangle {
-                             color: (index === 2 && rootItem.currentRightPanelIndex === 5) ? "#2980b9" : "#7f8c8d"
-                             radius: Math.max(2, Math.floor(4 * scaleFactor))
-                         }
-                         contentItem: Text {
-                             text: parent.text
-                             color: "white"
-                             font.pixelSize: parent.font.pixelSize
-                             horizontalAlignment: Text.AlignHCenter
-                             verticalAlignment: Text.AlignVCenter
-                         }
-                         onClicked: {
-                             if (index === 2) {
-                                 rootItem.currentRightPanelIndex = 5;
-                                 if (settingsView.onOpened) {
-                                     settingsView.onOpened();
-                                 }
-                             } else {
-                                 console.log("Нажата кнопка нижней панели: " + model.text);
-                             }
-                         }
+                    }
+                    Button {
+                        width: parent.width * 0.20
+                        anchors.verticalCenter: parent.verticalCenter
+                        height: parent.height * 0.8
+                        text: model.text
+                        font.pixelSize: rootItem.scaleFactor * 10
+                        hoverEnabled: false
+                        // --- Выделяем активную кнопку НАСТРОЕК ---
+                        background: Rectangle {
+                            color: (index === 2 && rootItem.currentRightPanelIndex === 5) ? "#2980b9" : "#7f8c8d"
+                            radius: Math.max(2, Math.floor(4 * scaleFactor))
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            font.pixelSize: parent.font.pixelSize
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: {
+                            if (index === 2) {
+                                // Вместо прямого перехода — открываем Popup с паролем
+                                passwordProtectionPopup.open();
+                                passwordField.forceActiveFocus(); // Удобно для пользователя
+                            } else {
+                                console.log("Нажата кнопка нижней панели: " + model.text);
+                            }
+                        }
                      }
                  }
             }
@@ -751,4 +750,85 @@ Item {
         }
     }
     // --- ---
+    // --- Popup для ввода пароля перед доступом к настройкам ---
+    Popup {
+        id: passwordProtectionPopup
+        x: (parent.width - width) / 2
+        y: (parent.height - height) / 2
+        width: Math.min(parent.width * 0.8, 700)
+        height: 160
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+
+        background: Rectangle {
+            color: "white"
+            border.color: "#bdc3c7"
+            radius: 8
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 15
+            spacing: 12
+
+            Label {
+                text: "Введите пароль для доступа к настройкам"
+                font.pixelSize: rootItem.scaleFactor * 12
+                wrapMode: Text.Wrap
+                horizontalAlignment: Text.AlignHCenter
+            }
+
+            TextField {
+                id: passwordField
+                Layout.fillWidth: true
+                echoMode: TextInput.Password
+                placeholderText: "Пароль"
+                font.pixelSize: rootItem.scaleFactor * 12
+                selectByMouse: true
+                onAccepted: {
+                    passwordProtectionPopup.checkPassword(); // <-- явно через id
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                Button {
+                    Layout.fillWidth: true
+                    text: "Отмена"
+                    onClicked: {
+                        passwordField.text = "";
+                        passwordProtectionPopup.close();
+                    }
+                }
+
+                Button {
+                    Layout.fillWidth: true
+                    text: "Войти"
+                    onClicked: passwordProtectionPopup.checkPassword() // <-- явно через id
+                }
+            }
+        }
+
+        function checkPassword() {
+            // Убираем статический пароль
+            // const correctPassword = "1234";
+
+            // Вызываем Python-метод для проверки
+            if (appData.verifyAdminPassword(passwordField.text)) {
+                passwordField.text = "";
+                passwordProtectionPopup.close();
+                rootItem.currentRightPanelIndex = 5;
+                if (settingsView.onOpened) {
+                    settingsView.onOpened();
+                }
+            } else {
+                passwordField.text = "";
+                passwordField.placeholderText = "Неверный пароль!";
+                passwordField.forceActiveFocus();
+            }
+        }
+    }
 }

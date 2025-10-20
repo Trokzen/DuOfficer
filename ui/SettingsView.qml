@@ -100,18 +100,6 @@ Item {
                             }
                             // --- ---
 
-                            // --- Поле: Смена пароля ---
-                            Label {
-                                text: "Пароль для доступа к настройкам:"
-                            }
-                            TextField {
-                                id: settingsPasswordField
-                                Layout.fillWidth: true
-                                placeholderText: "Введите новый пароль..."
-                                echoMode: TextInput.Password
-                            }
-                            // --- ---
-
                             // --- Перенесенные настройки из "Дополнительно" ---
 
                             // Настройки напоминаний
