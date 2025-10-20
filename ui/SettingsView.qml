@@ -324,6 +324,7 @@ Item {
                                         color: backgroundColorField.text || "#ecf0f1" // Цвет из поля ввода или по умолчанию
                                         border.color: "black"
                                         radius: 5
+                                        visible: false
                                         
                                         // Отображение hex-кода цвета поверх прямоугольника
                                         Text {
@@ -345,6 +346,7 @@ Item {
                                     }
                                     TextField {
                                         id: backgroundColorField
+                                        visible: false
                                         Layout.fillWidth: true
                                         placeholderText: "Введите HEX-код цвета (например, #ecf0f1)..."
                                         // text будет установлен в loadSettings
