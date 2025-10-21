@@ -132,6 +132,17 @@ Window {
         return timeStr + "\n" + dateStr;
     }
 
+    // --- НОВАЯ ФУНКЦИЯ: Форматирование оперативного времени ---
+    function formatOperationalTime(dateTimeStr, offsetStr) {
+        if (!dateTimeStr) return "";
+        var formattedDateTime = formatDateTime(dateTimeStr);
+        if (offsetStr) {
+            return formattedDateTime + "\n(" + offsetStr + ")";
+        }
+        return formattedDateTime;
+    }
+    // --- ---
+
     // --- Загрузка данных ---
     function loadExecutionData() {
         if (isLoading) return;
@@ -192,12 +203,21 @@ Window {
                         });
                     }
 
+                    var isOperationalTime = executionData && executionData.snapshot_time_type === 'оперативное';
+
                     jsRows.push({
                         "Статус": status,
-                        "Номер": i + 1,               // ← изменено
+                        "Номер": i + 1,
                         "Описание": desc,
-                        "Начало": formatDateTime(start),
-                        "Окончание": formatDateTime(String(a.calculated_end_time || "")),
+                        // --- ИЗМЕНЕНО: Условное форматирование для "Начало" ---
+                        "Начало": isOperationalTime ?
+                            formatOperationalTime(start, a.operational_start_offset) :
+                            formatDateTime(start),
+                        // --- ИЗМЕНЕНО: Условное форматирование для "Окончание" ---
+                        "Окончание": isOperationalTime ?
+                            formatOperationalTime(String(a.calculated_end_time || ""), a.operational_end_offset) :
+                            formatDateTime(String(a.calculated_end_time || "")),
+                        // ... остальные поля без изменений
                         "Телефоны": phones,
                         "Отчётные материалы": htmlMaterials,
                         "Кому доложено": reported,

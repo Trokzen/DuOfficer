@@ -1910,20 +1910,94 @@ class ApplicationData(QObject):
     def getActionExecutionsByExecutionId(self, execution_id: int):
         """
         QML Slot для получения списка action_execution'ов по ID execution'а.
-        Вызывает метод из PostgreSQLDatabaseManager.
+        Вызывает метод из PostgreSQLDatabaseManager и ДОБАВЛЯЕТ оперативные смещения.
         :param execution_id: ID execution'а.
         :return: Список словарей с данными action_execution'ов или None.
         """
         print(f"Python ApplicationData: Запрос списка action_execution'ов для execution ID {execution_id}")
-        # --- ИСПРАВЛЕНО: Используем правильное имя атрибута ---
-        if self.pg_database_manager: # <-- Было: self.pg_db_manager
+        if self.pg_database_manager: 
             action_executions_list = self.pg_database_manager.get_action_executions_by_execution_id(execution_id)
-            print(f"Python ApplicationData: Получен список из {len(action_executions_list) if action_executions_list is not None else 0} action_execution'ов из БД для execution ID {execution_id}.")
-            return action_executions_list # Возвращаем список или None
+            if not action_executions_list:
+                print(f"Python ApplicationData: Список action_execution'ов пуст для execution ID {execution_id}.")
+                return action_executions_list
+
+            # --- НОВОЕ: Получаем данные execution'а, чтобы узнать его тип времени и время запуска ---
+            execution_data = self.pg_database_manager.get_algorithm_execution_by_id(execution_id)
+            if not execution_data:
+                print(f"Python ApplicationData: Не удалось получить данные execution ID {execution_id} для расчета смещений.")
+                return action_executions_list
+
+            execution_time_type = execution_data.get('snapshot_time_type', 'оперативное') # По умолчанию 'оперативное'
+            execution_started_at_str = execution_data.get('started_at')
+            if not execution_started_at_str:
+                print(f"Python ApplicationData: В execution ID {execution_id} отсутствует started_at.")
+                return action_executions_list
+
+            # Преобразуем started_at в datetime
+            try:
+                from datetime import datetime
+                execution_started_at = datetime.fromisoformat(execution_started_at_str.replace('Z', '+00:00'))
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка парсинга started_at '{execution_started_at_str}': {e}")
+                return action_executions_list
+            # --- ---
+
+            # --- НОВОЕ: Обработка списка, если тип времени 'оперативное' ---
+            if execution_time_type == 'оперативное':
+                print(f"Python ApplicationData: Execution ID {execution_id} имеет тип времени 'оперативное'. Рассчитываем смещения...")
+                for action in action_executions_list:
+                    op_start_offset = ""
+                    op_end_offset = ""
+
+                    calculated_start_str = action.get('calculated_start_time')
+                    calculated_end_str = action.get('calculated_end_time')
+
+                    if calculated_start_str:
+                        try:
+                            calc_start_dt = datetime.fromisoformat(calculated_start_str.replace('Z', '+00:00'))
+                            delta_start = calc_start_dt - execution_started_at
+                            # Форматируем timedelta в dd:hh:mm:ss
+                            total_seconds_start = int(delta_start.total_seconds())
+                            is_negative_start = total_seconds_start < 0
+                            total_seconds_start = abs(total_seconds_start)
+                            days_start = total_seconds_start // 86400
+                            hours_start = (total_seconds_start % 86400) // 3600
+                            minutes_start = (total_seconds_start % 3600) // 60
+                            seconds_start = total_seconds_start % 60
+                            op_start_offset = f"Ч+{days_start:02d}:{hours_start:02d}:{minutes_start:02d}:{seconds_start:02d}"
+                            if is_negative_start:
+                                op_start_offset = op_start_offset.replace("Ч+", "Ч-")
+                        except Exception as e:
+                            print(f"Python ApplicationData: Ошибка расчета смещения начала для действия: {e}")
+
+                    if calculated_end_str:
+                        try:
+                            calc_end_dt = datetime.fromisoformat(calculated_end_str.replace('Z', '+00:00'))
+                            delta_end = calc_end_dt - execution_started_at
+                            total_seconds_end = int(delta_end.total_seconds())
+                            is_negative_end = total_seconds_end < 0
+                            total_seconds_end = abs(total_seconds_end)
+                            days_end = total_seconds_end // 86400
+                            hours_end = (total_seconds_end % 86400) // 3600
+                            minutes_end = (total_seconds_end % 3600) // 60
+                            seconds_end = total_seconds_end % 60
+                            op_end_offset = f"Ч+{days_end:02d}:{hours_end:02d}:{minutes_end:02d}:{seconds_end:02d}"
+                            if is_negative_end:
+                                op_end_offset = op_end_offset.replace("Ч+", "Ч-")
+                        except Exception as e:
+                            print(f"Python ApplicationData: Ошибка расчета смещения окончания для действия: {e}")
+
+                    # Добавляем новые поля в словарь действия
+                    action['operational_start_offset'] = op_start_offset
+                    action['operational_end_offset'] = op_end_offset
+                    print(f"Python ApplicationData: Действию добавлены смещения: start='{op_start_offset}', end='{op_end_offset}'")
+            # --- ---
+
+            print(f"Python ApplicationData: Обработан список из {len(action_executions_list)} action_execution'ов для execution ID {execution_id}.")
+            return action_executions_list # Возвращаем обновленный список
         else:
             print("Python ApplicationData: Менеджер PostgreSQL недоступен.")
             return None
-        # --- ---
 
     # --- НОВЫЙ СЛОТ ДЛЯ ДОБАВЛЕНИЯ ACTION_EXECUTION ---
     @Slot(int, 'QVariant', result=bool) # <-- ВАЖНО: сигнатура
