@@ -46,7 +46,7 @@ Popup {
                         newText += "\n" // Разделяем пути новой строкой
                     }
                 }
-                
+
                 if (currentText.length > 0 && !currentText.endsWith("\n")) {
                     currentText += "\n"
                 }
@@ -80,7 +80,7 @@ Popup {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            
+
             GridLayout {
                 columns: 2
                 columnSpacing: 10
@@ -204,15 +204,6 @@ Popup {
                                     color: "white"
                                 }
                                 // --- ---
-                                onTextChanged: {
-                                    // Обеспечиваем форматирование с ведущим нулем
-                                    if (text.length === 1 && text !== "") {
-                                        var num = parseInt(text);
-                                        if (!isNaN(num) && num >= 0 && num <= 23) {
-                                            text = num.toString().padStart(2, '0');
-                                        }
-                                    }
-                                }
                             }
                             RowLayout {
                                 Layout.alignment: Qt.AlignHCenter
@@ -268,15 +259,6 @@ Popup {
                                     color: "white"
                                 }
                                 // --- ---
-                                onTextChanged: {
-                                    // Обеспечиваем форматирование с ведущим нулем
-                                    if (text.length === 1 && text !== "") {
-                                        var num = parseInt(text);
-                                        if (!isNaN(num) && num >= 0 && num <= 59) {
-                                            text = num.toString().padStart(2, '0');
-                                        }
-                                    }
-                                }
                             }
                             RowLayout {
                                 Layout.alignment: Qt.AlignHCenter
@@ -332,15 +314,6 @@ Popup {
                                     color: "white"
                                 }
                                 // --- ---
-                                onTextChanged: {
-                                    // Обеспечиваем форматирование с ведущим нулем
-                                    if (text.length === 1 && text !== "") {
-                                        var num = parseInt(text);
-                                        if (!isNaN(num) && num >= 0 && num <= 59) {
-                                            text = num.toString().padStart(2, '0');
-                                        }
-                                    }
-                                }
                             }
                             RowLayout {
                                 Layout.alignment: Qt.AlignHCenter
@@ -371,7 +344,7 @@ Popup {
                         }
                     }
 
-                    // Поле для отображения форматаированного времени
+                    // Поле для отображения форматированного времени
                     TextField {
                         id: startOffsetPreviewField
                         Layout.fillWidth: true
@@ -485,15 +458,6 @@ Popup {
                                     color: "white"
                                 }
                                 // --- ---
-                                onTextChanged: {
-                                    // Обеспечиваем форматирование с ведущим нулем
-                                    if (text.length === 1 && text !== "") {
-                                        var num = parseInt(text);
-                                        if (!isNaN(num) && num >= 0 && num <= 23) {
-                                            text = num.toString().padStart(2, '0');
-                                        }
-                                    }
-                                }
                             }
                             RowLayout {
                                 Layout.alignment: Qt.AlignHCenter
@@ -549,15 +513,6 @@ Popup {
                                     color: "white"
                                 }
                                 // --- ---
-                                onTextChanged: {
-                                    // Обеспечиваем форматирование с ведущим нулем
-                                    if (text.length === 1 && text !== "") {
-                                        var num = parseInt(text);
-                                        if (!isNaN(num) && num >= 0 && num <= 59) {
-                                            text = num.toString().padStart(2, '0');
-                                        }
-                                    }
-                                }
                             }
                             RowLayout {
                                 Layout.alignment: Qt.AlignHCenter
@@ -613,15 +568,6 @@ Popup {
                                     color: "white"
                                 }
                                 // --- ---
-                                onTextChanged: {
-                                    // Обеспечиваем форматирование с ведущим нулем
-                                    if (text.length === 1 && text !== "") {
-                                        var num = parseInt(text);
-                                        if (!isNaN(num) && num >= 0 && num <= 59) {
-                                            text = num.toString().padStart(2, '0');
-                                        }
-                                    }
-                                }
                             }
                             RowLayout {
                                 Layout.alignment: Qt.AlignHCenter
@@ -701,7 +647,7 @@ Popup {
                     Layout.fillWidth: true
                     Layout.minimumHeight: 100
                     spacing: 5
-                    
+
                     TextArea {
                         id: reportMaterialsArea
                         Layout.fillWidth: true
@@ -717,7 +663,7 @@ Popup {
                         }
                         // --- ---
                     }
-                    
+
                     Button {
                         text: "Добавить файл..."
                         onClicked: {
@@ -765,10 +711,10 @@ Popup {
                         return;
                     }
 
-                    // Подготавливаем данные с правильным форматированием
+                    // Подготавливаем данные
                     var startOffset = `${startDaysField.text}:${startHoursField.text.padStart(2, '0')}:${startMinutesField.text.padStart(2, '0')}:${startSecondsField.text.padStart(2, '0')}`;
                     var endOffset = `${endDaysField.text}:${endHoursField.text.padStart(2, '0')}:${endMinutesField.text.padStart(2, '0')}:${endSecondsField.text.padStart(2, '0')}`;
-                    
+
                     var actionData = {
                         "algorithm_id": currentAlgorithmId, // Всегда передаем, даже при редактировании
                         "description": descriptionArea.text.trim(),
@@ -817,21 +763,21 @@ Popup {
         currentActionId = -1;
         currentAlgorithmId = algorithmId; // Запоминаем ID алгоритма
         descriptionArea.text = "";
-        
+
         // Сброс времени начала
         startDaysField.text = "0";
         startHoursField.text = "00";
         startMinutesField.text = "00";
         startSecondsField.text = "00";
         updateStartOffsetPreview();
-        
+
         // Сброс времени окончания
         endDaysField.text = "0";
         endHoursField.text = "00";
         endMinutesField.text = "00";
         endSecondsField.text = "00";
         updateEndOffsetPreview();
-        
+
         contactPhonesArea.text = "";
         reportMaterialsArea.text = "";
         errorMessageLabel.text = "";
@@ -846,104 +792,16 @@ Popup {
         currentActionId = actionData.id;
         currentAlgorithmId = actionData.algorithm_id; // Запоминаем ID алгоритма
         descriptionArea.text = actionData.description || "";
-        
+
         // Загрузка времени начала
         loadStartOffsetFromString(actionData.start_offset || "");
-        
+
         // Загрузка времени окончания
         loadEndOffsetFromString(actionData.end_offset || "");
-        
+
         contactPhonesArea.text = actionData.contact_phones || "";
         reportMaterialsArea.text = actionData.report_materials || "";
         errorMessageLabel.text = "";
-    }
-
-    /**
-     * Вспомогательная функция для инкремента/декремента компонентов времени
-     * @param {TextField} textField - Поле ввода времени
-     * @param {string} component - Компонент: "days", "hours", "minutes", "seconds"
-     * @param {number} delta - Шаг изменения (+1 или -1)
-     */
-    function incrementTimeComponent(textField, component, delta) {
-        console.log("QML ActionEditorDialog: incrementTimeComponent called with", textField, component, delta);
-        var text = textField.text || "00:00:00";
-        console.log("QML ActionEditorDialog: Current text:", text);
-        
-        // Попробуем разобрать формат HH:MM:SS
-        var parts = text.split(":");
-        if (parts.length === 3) {
-            var hours = parseInt(parts[0], 10) || 0;
-            var minutes = parseInt(parts[1], 10) || 0;
-            var seconds = parseInt(parts[2], 10) || 0;
-            
-            console.log("QML ActionEditorDialog: Parsed H:M:S:", hours, minutes, seconds);
-            
-            switch(component) {
-                case "days":
-                    // Дни в формате HH:MM:SS не поддерживаются напрямую,
-                    // но можно добавить логику для преобразования, если нужно
-                    // Пока просто игнорируем
-                    break;
-                case "hours":
-                    hours += delta;
-                    // Ограничиваем диапазон 0-23 или можно сделать без ограничений
-                    // hours = Math.max(0, Math.min(23, hours));
-                    hours = Math.max(0, hours); // Без ограничения сверху
-                    break;
-                case "minutes":
-                    minutes += delta;
-                    // Обработка переполнения минут
-                    while (minutes >= 60) {
-                        minutes -= 60;
-                        hours += 1;
-                    }
-                    while (minutes < 0) {
-                        minutes += 60;
-                        hours -= 1;
-                    }
-                    minutes = Math.max(0, minutes);
-                    break;
-                case "seconds":
-                    seconds += delta;
-                    // Обработка переполнения секунд
-                    while (seconds >= 60) {
-                        seconds -= 60;
-                        minutes += 1;
-                        if (minutes >= 60) {
-                            minutes -= 60;
-                            hours += 1;
-                        }
-                    }
-                    while (seconds < 0) {
-                        seconds += 60;
-                        minutes -= 1;
-                        if (minutes < 0) {
-                            minutes += 60;
-                            hours -= 1;
-                        }
-                    }
-                    seconds = Math.max(0, seconds);
-                    break;
-            }
-            
-            // Форматируем обратно в строку HH:MM:SS
-            var newHours = hours.toString().padStart(2, '0');
-            var newMinutes = minutes.toString().padStart(2, '0');
-            var newSeconds = seconds.toString().padStart(2, '0');
-            var newText = newHours + ":" + newMinutes + ":" + newSeconds;
-            
-            console.log("QML ActionEditorDialog: New text:", newText);
-            textField.text = newText;
-        } else {
-            // Если формат не HH:MM:SS, можно попробовать другие форматы
-            // или просто добавить/убрать секунду/минуту/час в конец как строку
-            // Пока просто выводим предупреждение
-            console.warn("QML ActionEditorDialog: incrementTimeComponent: Unsupported time format:", text);
-            // Можно добавить простую логику для добавления/удаления времени
-            // Например, если текст заканчивается на "s", "m", "h", "d"
-            // Но это сложнее и требует более точного парсинга.
-            // Для простоты, если формат не HH:MM:SS, ничего не делаем.
-        }
     }
 
     function updateStartOffsetPreview() {
@@ -979,48 +837,25 @@ Popup {
             return;
         }
 
-        // Проверяем формат с пробелом между днями и временем (например, "0 02:00:00")
-        var spaceSplit = timeString.trim().split(/\s+/);
-        if (spaceSplit.length === 2) {
-            // Формат "dd hh:mm:ss"
-            var daysPart = spaceSplit[0];
-            var timePart = spaceSplit[1];
-            var timeParts = timePart.split(":");
-
-            if (timeParts.length === 3) {
-                startDaysField.text = (parseInt(daysPart) || 0).toString();
-                startHoursField.text = (parseInt(timeParts[0] || "0")).toString().padStart(2, '0');
-                startMinutesField.text = (parseInt(timeParts[1] || "0")).toString().padStart(2, '0');
-                startSecondsField.text = (parseInt(timeParts[2] || "0")).toString().padStart(2, '0');
-            } else {
-                // Неизвестный формат, устанавливаем значения по умолчанию
-                startDaysField.text = "0";
-                startHoursField.text = "00";
-                startMinutesField.text = "00";
-                startSecondsField.text = "00";
-            }
+        var parts = timeString.split(":");
+        if (parts.length === 4) {
+            // Формат dd:hh:mm:ss
+            startDaysField.text = parts[0] || "0";
+            startHoursField.text = (parts[1] || "00").padStart(2, '0');
+            startMinutesField.text = (parts[2] || "00").padStart(2, '0');
+            startSecondsField.text = (parts[3] || "00").padStart(2, '0');
+        } else if (parts.length === 3) {
+            // Формат hh:mm:ss
+            startDaysField.text = "0";
+            startHoursField.text = (parts[0] || "00").padStart(2, '0');
+            startMinutesField.text = (parts[1] || "00").padStart(2, '0');
+            startSecondsField.text = (parts[2] || "00").padStart(2, '0');
         } else {
-            // Обрабатываем формат с двоеточиями
-            var parts = timeString.split(":");
-            if (parts.length === 4) {
-                // Формат dd:hh:mm:ss
-                startDaysField.text = (parseInt(parts[0] || "0")).toString();
-                startHoursField.text = (parseInt(parts[1] || "0")).toString().padStart(2, '0');
-                startMinutesField.text = (parseInt(parts[2] || "0")).toString().padStart(2, '0');
-                startSecondsField.text = (parseInt(parts[3] || "0")).toString().padStart(2, '0');
-            } else if (parts.length === 3) {
-                // Формат hh:mm:ss
-                startDaysField.text = "0";
-                startHoursField.text = (parseInt(parts[0] || "0")).toString().padStart(2, '0');
-                startMinutesField.text = (parseInt(parts[1] || "0")).toString().padStart(2, '0');
-                startSecondsField.text = (parseInt(parts[2] || "0")).toString().padStart(2, '0');
-            } else {
-                // Неизвестный формат, устанавливаем значения по умолчанию
-                startDaysField.text = "0";
-                startHoursField.text = "00";
-                startMinutesField.text = "00";
-                startSecondsField.text = "00";
-            }
+            // Неизвестный формат, устанавливаем значения по умолчанию
+            startDaysField.text = "0";
+            startHoursField.text = "00";
+            startMinutesField.text = "00";
+            startSecondsField.text = "00";
         }
         updateStartOffsetPreview();
     }
@@ -1039,48 +874,25 @@ Popup {
             return;
         }
 
-        // Проверяем формат с пробелом между днями и временем (например, "0 02:00:00")
-        var spaceSplit = timeString.trim().split(/\s+/);
-        if (spaceSplit.length === 2) {
-            // Формат "dd hh:mm:ss"
-            var daysPart = spaceSplit[0];
-            var timePart = spaceSplit[1];
-            var timeParts = timePart.split(":");
-
-            if (timeParts.length === 3) {
-                endDaysField.text = (parseInt(daysPart) || 0).toString();
-                endHoursField.text = (parseInt(timeParts[0] || "0")).toString().padStart(2, '0');
-                endMinutesField.text = (parseInt(timeParts[1] || "0")).toString().padStart(2, '0');
-                endSecondsField.text = (parseInt(timeParts[2] || "0")).toString().padStart(2, '0');
-            } else {
-                // Неизвестный формат, устанавливаем значения по умолчанию
-                endDaysField.text = "0";
-                endHoursField.text = "00";
-                endMinutesField.text = "00";
-                endSecondsField.text = "00";
-            }
+        var parts = timeString.split(":");
+        if (parts.length === 4) {
+            // Формат dd:hh:mm:ss
+            endDaysField.text = parts[0] || "0";
+            endHoursField.text = (parts[1] || "00").padStart(2, '0');
+            endMinutesField.text = (parts[2] || "00").padStart(2, '0');
+            endSecondsField.text = (parts[3] || "00").padStart(2, '0');
+        } else if (parts.length === 3) {
+            // Формат hh:mm:ss
+            endDaysField.text = "0";
+            endHoursField.text = (parts[0] || "00").padStart(2, '0');
+            endMinutesField.text = (parts[1] || "00").padStart(2, '0');
+            endSecondsField.text = (parts[2] || "00").padStart(2, '0');
         } else {
-            // Обрабатываем формат с двоеточиями
-            var parts = timeString.split(":");
-            if (parts.length === 4) {
-                // Формат dd:hh:mm:ss
-                endDaysField.text = (parseInt(parts[0] || "0")).toString();
-                endHoursField.text = (parseInt(parts[1] || "0")).toString().padStart(2, '0');
-                endMinutesField.text = (parseInt(parts[2] || "0")).toString().padStart(2, '0');
-                endSecondsField.text = (parseInt(parts[3] || "0")).toString().padStart(2, '0');
-            } else if (parts.length === 3) {
-                // Формат hh:mm:ss
-                endDaysField.text = "0";
-                endHoursField.text = (parseInt(parts[0] || "0")).toString().padStart(2, '0');
-                endMinutesField.text = (parseInt(parts[1] || "0")).toString().padStart(2, '0');
-                endSecondsField.text = (parseInt(parts[2] || "0")).toString().padStart(2, '0');
-            } else {
-                // Неизвестный формат, устанавливаем значения по умолчанию
-                endDaysField.text = "0";
-                endHoursField.text = "00";
-                endMinutesField.text = "00";
-                endSecondsField.text = "00";
-            }
+            // Неизвестный формат, устанавливаем значения по умолчанию
+            endDaysField.text = "0";
+            endHoursField.text = "00";
+            endMinutesField.text = "00";
+            endSecondsField.text = "00";
         }
         updateEndOffsetPreview();
     }
