@@ -784,6 +784,52 @@ Window {
             Layout.preferredHeight: 40
             color: "#ecf0f1"
             border.color: "#bdc3c7"
+            // Делаем всю область кликабельной
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {
+                    console.log("QML ExecutionDetailsWindow: Клик по области ответственного пользователя для execution ID:", executionId);
+
+                    // Загружаем список всех пользователей
+                    var allUsers = appData.getAllDutyOfficersList();
+                    if (!allUsers || allUsers.length === 0) {
+                        console.warn("QML ExecutionDetailsWindow: Не удалось получить список пользователей.");
+                        return;
+                    }
+
+                    // Создаем диалог выбора пользователя
+                    var component = Qt.createComponent("UserSelectionDialog.qml");
+                    if (component.status === Component.Ready) {
+                        var dialog = component.createObject(executionDetailsWindow, {
+                            "usersList": allUsers,
+                            "currentUserId": executionData ? executionData.created_by_user_id : null,
+                            "executionId": executionId
+                        });
+                        if (dialog) {
+                            executionDetailsWindow.isDialogOpen = true; // Отслеживаем открытость диалога
+                            dialog.closed.connect(() => { executionDetailsWindow.isDialogOpen = false; });
+                            dialog.userSelected.connect(function(userId) {
+                                console.log("QML ExecutionDetailsWindow: Выбран пользователь ID:", userId, "для execution ID:", executionId);
+                                // Вызываем метод Python для обновления ответственного пользователя
+                                var result = appData.updateExecutionResponsibleUser(executionId, userId);
+                                if (result) {
+                                    console.log("QML ExecutionDetailsWindow: Ответственный пользователь успешно обновлен для execution ID:", executionId);
+                                    // Перезагружаем данные
+                                    executionDetailsWindow.loadExecutionData();
+                                    executionUpdated(executionId);
+                                } else {
+                                    console.error("QML ExecutionDetailsWindow: Не удалось обновить ответственного пользователя для execution ID:", executionId);
+                                }
+                            });
+                            dialog.open();
+                        } else {
+                            console.error("QML ExecutionDetailsWindow: Не удалось создать UserSelectionDialog.");
+                        }
+                    } else {
+                        console.error("QML ExecutionDetailsWindow: Ошибка загрузки UserSelectionDialog.qml:", component.errorString());
+                    }
+                }
+            }
             Text {
                 anchors.centerIn: parent
                 text: (appData.postName || "Пост") + ": " + (executionData ? executionData.created_by_user_display_name : "—")

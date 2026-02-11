@@ -48,9 +48,8 @@ from notifications.notification_container_widget import NotificationContainerWid
 # =============================================================================
 
 # Менеджеры базы данных
-from db.postgresql_manager import PostgreSQLDatabaseManager  # Основная БД PostgreSQL
+from db.sqlite_database_manager import SQLiteDatabaseManager  # Основная БД SQLite
 from db.sqlite_config import SQLiteConfigManager            # Конфигурация в SQLite
-from psycopg2.extras import RealDictCursor
 from werkzeug.security import check_password_hash
 
 
@@ -231,7 +230,9 @@ class ApplicationData(QObject):
         self.engine = engine
         # --- Менеджеры БД ---
         self.sqlite_config_manager = sqlite_config_manager
-        self.pg_database_manager = None  # Будет создан после успешного входа
+        # Инициализируем database_manager сразу, чтобы он был доступен для всех операций
+        from db.sqlite_database_manager import SQLiteDatabaseManager
+        self.database_manager = SQLiteDatabaseManager('duty_app.db')
         # --- ---
         self.window = None # Ссылка на ApplicationWindow из QML
         self._current_user = None # Данные вошедшего пользователя
@@ -511,19 +512,17 @@ class ApplicationData(QObject):
         if not pg_config.get('password'):
              return "Пароль подключения к БД не задан. Перейдите в 'Настройки'."
 
-        # 2. Если pg_database_manager еще не создан или конфиг изменился, создаем новый
-        # (Для простоты будем создавать всегда, если конфиг есть)
+        # 2. Проверяем подключение к базе данных
         try:
-            self.pg_database_manager = PostgreSQLDatabaseManager(pg_config)
-            if not self.pg_database_manager.test_connection():
-                 return "Не удалось подключиться к базе данных PostgreSQL. Проверьте настройки."
+            if not self.database_manager.test_connection():
+                 return "Не удалось подключиться к базе данных SQLite. Проверьте настройки."
         except Exception as e:
-             print(f"Python: Ошибка создания/тестирования подключения к PG: {e}")
+             print(f"Python: Ошибка подключения к SQLite: {e}")
              return f"Ошибка подключения к БД: {e}"
 
         # 3. Пытаемся аутентифицировать пользователя
         try:
-            user_data = self.pg_database_manager.authenticate_user(login, password)
+            user_data = self.database_manager.authenticate_user(login, password)
             if user_data:
                 print(f"Python: Пользователь {user_data['login']} аутентифицирован успешно.")
                 # TODO: Сохранить user_data в self для дальнейшего использования
@@ -873,8 +872,8 @@ class ApplicationData(QObject):
     def getDutyOfficersList(self):
         """Возвращает список всех активных должностных лиц для QML."""
         try:
-            if self.pg_database_manager:
-                officers = self.pg_database_manager.get_all_users()
+            if self.database_manager:
+                officers = self.database_manager.get_all_users()
             else:
                 # Заглушка, если нет подключения
                 officers = [
@@ -927,7 +926,7 @@ class ApplicationData(QObject):
              return -1 # Возвращаем -1 в случае пустых данных
         # --- ---
 
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
                 # --- Подготовка данных для передачи в менеджер БД ---
                 # Убедимся, что все ключи присутствуют и имеют правильный тип/значение по умолчанию
@@ -952,8 +951,8 @@ class ApplicationData(QObject):
                 print(f"Python: Подготовленные данные для добавления: {prepared_data}")
 
                 # --- Вызов метода менеджера БД ---
-                # Убедитесь, что метод в вашем PostgreSQLDatabaseManager называется create_user
-                new_id = self.pg_database_manager.create_user(prepared_data) # Используем create_user
+                # Убедитесь, что метод в вашем SQLiteDatabaseManager называется create_user
+                new_id = self.database_manager.create_user(prepared_data) # Используем create_user
                 # --- ---
 
                 if isinstance(new_id, int) and new_id > 0:
@@ -971,7 +970,7 @@ class ApplicationData(QObject):
                 return -1 # Возвращаем -1 в случае любого исключения
                 # --- ---
         else:
-             print("Python: Ошибка - Нет подключения к БД PostgreSQL (pg_database_manager не инициализирован).")
+             print("Python: Ошибка - Нет подключения к БД SQLite (database_manager не инициализирован).")
              return -1 # Возвращаем -1, если нет подключения к БД
 
     @Slot(int, 'QVariant', result=bool) # Принимает int (ID) и QVariantMap (dict), возвращает bool
@@ -1001,7 +1000,7 @@ class ApplicationData(QObject):
              return False
         # --- ---
 
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
                 # --- Подготовка данных для передачи в менеджер БД ---
                 # Фильтруем и готовим только разрешенные поля
@@ -1027,7 +1026,7 @@ class ApplicationData(QObject):
 
                 # --- Вызов метода менеджера БД ---
                 # Убедитесь, что метод в вашем PostgreSQLDatabaseManager называется update_user
-                success = self.pg_database_manager.update_user(officer_id, prepared_data) # Используем update_user
+                success = self.database_manager.update_user(officer_id, prepared_data) # Используем update_user
                 # --- ---
 
                 if success:
@@ -1043,7 +1042,7 @@ class ApplicationData(QObject):
                 traceback.print_exc()
                 return False
         else:
-             print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+             print("Python: Ошибка - Нет подключения к БД SQLite.")
              return False
 
     @Slot(int, result=bool) # Принимает int (ID), возвращает bool
@@ -1059,11 +1058,11 @@ class ApplicationData(QObject):
              print(f"Python: Ошибка - Некорректный ID пользователя: {officer_id}")
              return False
 
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
                 # --- Вызов обновленного метода менеджера БД ---
-                # Ранее: success = self.pg_database_manager.deactivate_user(officer_id)
-                success = self.pg_database_manager.delete_user(officer_id) # <-- Используем delete_user
+                # Ранее: success = self.database_manager.deactivate_user(officer_id)
+                success = self.database_manager.delete_user(officer_id) # <-- Используем delete_user
                 # --- ---
 
                 if success:
@@ -1079,7 +1078,7 @@ class ApplicationData(QObject):
                 traceback.print_exc()
                 return False
         else:
-             print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+             print("Python: Ошибка - Нет ����дк��ючения к ������Д PostgreSQL.")
              return False
     
     
@@ -1091,9 +1090,9 @@ class ApplicationData(QObject):
         Используется, например, для выбора дежурного из полного списка.
         """
         try:
-            if self.pg_database_manager:
+            if self.database_manager:
                 # Вызываем метод, который теперь возвращает всех пользователей
-                officers = self.pg_database_manager.get_all_users()  # <-- Изменено на get_all_users
+                officers = self.database_manager.get_all_users()  # <-- Изменено на get_all_users
             else:
                 # Заглушка, если нет подключения
                 officers = [
@@ -1128,22 +1127,22 @@ class ApplicationData(QObject):
         """
         print(f"Python: QML установил текущего дежурного: ID {officer_id}")
         try:
-            # --- Отладка: Проверка pg_database_manager ---
-            if not hasattr(self, 'pg_database_manager') or self.pg_database_manager is None:
-                 print("Python: Ошибка - Менеджер БД PostgreSQL (pg_database_manager) не инициализирован.")
+            # --- Отладка: Проверка database_manager ---
+            if not hasattr(self, 'database_manager') or self.database_manager is None:
+                 print("Python: Ошибка - Менеджер БД SQLite (database_manager) не инициализирован.")
                  return
-            print("Python: Менеджер БД PostgreSQL (pg_database_manager) инициализирован.")
+            print("Python: Менеджер БД SQLite (database_manager) инициализирован.")
             # --- ---
 
             # --- Отладка: Вызов метода менеджера БД ---
-            print(f"Python: Вызов self.pg_database_manager.set_current_duty_officer({officer_id})...")
-            self.pg_database_manager.set_current_duty_officer(officer_id) # <-- Вызываем метод менеджера БД
+            print(f"Python: Вызов self.database_manager.set_current_duty_officer({officer_id})...")
+            self.database_manager.set_current_duty_officer(officer_id) # <-- Вызываем метод менеджера БД
             print("Python: Метод set_current_duty_officer успешно выполнен.")
             # --- ---
             
             # --- Отладка: Получение данных о новом дежурном ---
-            print(f"Python: Вызов self.pg_database_manager.get_duty_officer_by_id({officer_id})...")
-            officer = self.pg_database_manager.get_duty_officer_by_id(officer_id) # <-- Вызываем метод менеджера БД
+            print(f"Python: Вызов self.database_manager.get_duty_officer_by_id({officer_id})...")
+            officer = self.database_manager.get_duty_officer_by_id(officer_id) # <-- Вызываем метод менеджера БД
             print(f"Python: Получены данные дежурного: {officer}")
             # --- ---
             
@@ -1211,8 +1210,8 @@ class ApplicationData(QObject):
     def getAllAlgorithmsList(self) -> list:
         """Возвращает список всех алгоритмов для QML."""
         try:
-            if self.pg_database_manager:
-                algorithms = self.pg_database_manager.get_all_algorithms()
+            if self.database_manager:
+                algorithms = self.database_manager.get_all_algorithms()
             else:
                 # Заглушка, если нет подключения
                 algorithms = [
@@ -1241,8 +1240,8 @@ class ApplicationData(QObject):
                 print(f"Python: Ошибка - Некорректный ID алгоритма: {algorithm_id}")
                 return None
 
-            if self.pg_database_manager:
-                algorithm = self.pg_database_manager.get_algorithm_by_id(algorithm_id)
+            if self.database_manager:
+                algorithm = self.database_manager.get_algorithm_by_id(algorithm_id)
                 if algorithm:
                     print(f"Python: QML запросил алгоритм ID {algorithm_id}. Найден: {algorithm['name']}")
                     return algorithm
@@ -1250,7 +1249,7 @@ class ApplicationData(QObject):
                     print(f"Python: Алгоритм ID {algorithm_id} не найден.")
                     return None
             else:
-                print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+                print("Python: Ошибка - Нет подключения к БД SQLite.")
                 return None
         except Exception as e:
             print(f"Python: Ошибка при получении алгоритма ID {algorithm_id}: {e}")
@@ -1274,7 +1273,7 @@ class ApplicationData(QObject):
             print("Python: Ошибка - algorithm_data пуст.")
             return -1
 
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
                 # Подготовка данных
                 required_fields = ['name', 'category', 'time_type']
@@ -1294,7 +1293,7 @@ class ApplicationData(QObject):
                     print("Python: Ошибка - Название, категория и тип времени не могут быть пустыми.")
                     return -1
 
-                new_id = self.pg_database_manager.create_algorithm(prepared_data)
+                new_id = self.database_manager.create_algorithm(prepared_data)
                 if isinstance(new_id, int) and new_id > 0:
                     print(f"Python: Новый алгоритм успешно добавлен с ID: {new_id}")
                     return new_id
@@ -1307,7 +1306,7 @@ class ApplicationData(QObject):
                 traceback.print_exc()
                 return -1
         else:
-            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            print("Python: Ошибка - Нет подключения к БД SQLite.")
             return -1
 
     @Slot(int, 'QVariant', result=bool)
@@ -1329,7 +1328,7 @@ class ApplicationData(QObject):
             print(f"Python: Ошибка - Некорректный ID алгоритма: {algorithm_id}")
             return False
 
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
                 # Подготовка данных (фильтрация разрешенных полей)
                 allowed_fields = ['name', 'category', 'time_type', 'description']
@@ -1345,7 +1344,7 @@ class ApplicationData(QObject):
                     print("Python: Ошибка - Нет данных для обновления.")
                     return False
 
-                success = self.pg_database_manager.update_algorithm(algorithm_id, prepared_data)
+                success = self.database_manager.update_algorithm(algorithm_id, prepared_data)
                 if success:
                     print(f"Python: Алгоритм ID {algorithm_id} успешно обновлен.")
                     return True
@@ -1358,7 +1357,7 @@ class ApplicationData(QObject):
                 traceback.print_exc()
                 return False
         else:
-            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            print("Python: Ошибка - Нет подключения к БД SQLite.")
             return False
 
     @Slot(int, result=bool)
@@ -1370,9 +1369,9 @@ class ApplicationData(QObject):
             print(f"Python: Ошибка - Некорректный ID алгоритма: {algorithm_id}")
             return False
 
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
-                success = self.pg_database_manager.delete_algorithm(algorithm_id)
+                success = self.database_manager.delete_algorithm(algorithm_id)
                 if success:
                     print(f"Python: Алгоритм ID {algorithm_id} успешно удален.")
                     return True
@@ -1385,7 +1384,7 @@ class ApplicationData(QObject):
                 traceback.print_exc()
                 return False
         else:
-            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            print("Python: Ошибка - Нет подключения к БД SQLite.")
             return False
 
     @Slot(int, result=int)
@@ -1397,9 +1396,9 @@ class ApplicationData(QObject):
             print(f"Python: Ошибка - Некорректный ID оригинального алгоритма: {original_algorithm_id}")
             return -1
 
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
-                new_algorithm_id = self.pg_database_manager.duplicate_algorithm(original_algorithm_id)
+                new_algorithm_id = self.database_manager.duplicate_algorithm(original_algorithm_id)
                 if new_algorithm_id != -1:
                     print(f"Python: Алгоритм ID {original_algorithm_id} успешно дублирован. Новый ID: {new_algorithm_id}")
                     return new_algorithm_id
@@ -1412,7 +1411,7 @@ class ApplicationData(QObject):
                 traceback.print_exc()
                 return -1
         else:
-            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            print("Python: Ошибка - Нет подключения к БД SQLite.")
             return -1
 
     # --- СЛОТЫ ДЛЯ РАБОТЫ С ACTIONS ---
@@ -1425,8 +1424,8 @@ class ApplicationData(QObject):
                 print(f"Python: Ошибка - Некорректный ID алгоритма: {algorithm_id}")
                 return []
 
-            if self.pg_database_manager:
-                actions = self.pg_database_manager.get_actions_by_algorithm_id(algorithm_id)
+            if self.database_manager:
+                actions = self.database_manager.get_actions_by_algorithm_id(algorithm_id)
                 print(f"Python: QML запросил действия для алгоритма ID {algorithm_id}. Найдено: {len(actions)}")
                 result = []
                 for action in actions:
@@ -1436,7 +1435,7 @@ class ApplicationData(QObject):
                         result.append(dict(action))
                 return result
             else:
-                print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+                print("Python: Ошибка - Нет подключения к БД SQLite.")
                 return []
         except Exception as e:
             print(f"Python: Ошибка при получении действий для алгоритма ID {algorithm_id}: {e}")
@@ -1452,8 +1451,8 @@ class ApplicationData(QObject):
                 print(f"Python: Ошибка - Некорректный ID действия: {action_id}")
                 return None
 
-            if self.pg_database_manager:
-                action = self.pg_database_manager.get_action_by_id(action_id)
+            if self.database_manager:
+                action = self.database_manager.get_action_by_id(action_id)
                 if action:
                     print(f"Python: QML запросил действие ID {action_id}.")
                     return action
@@ -1461,7 +1460,7 @@ class ApplicationData(QObject):
                     print(f"Python: Действие ID {action_id} не найдено.")
                     return None
             else:
-                print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+                print("Python: Ошибка - Нет подключения к БД SQLite.")
                 return None
         except Exception as e:
             print(f"Python: Ошибка при получении действия ID {action_id}: {e}")
@@ -1485,7 +1484,7 @@ class ApplicationData(QObject):
             print("Python: Ошибка - action_data пуст.")
             return -1
 
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
                 required_fields = ['algorithm_id', 'description']
                 missing_fields = [field for field in required_fields if field not in action_data or not action_data[field]]
@@ -1511,7 +1510,7 @@ class ApplicationData(QObject):
                     print("Python: Ошибка - algorithm_id должен быть целым числом.")
                     return -1
 
-                new_id = self.pg_database_manager.create_action(prepared_data)
+                new_id = self.database_manager.create_action(prepared_data)
                 if isinstance(new_id, int) and new_id > 0:
                     print(f"Python: Новое действие успешно добавлено с ID: {new_id}")
                     return new_id
@@ -1524,7 +1523,7 @@ class ApplicationData(QObject):
                 traceback.print_exc()
                 return -1
         else:
-            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            print("Python: Ошибка - Нет подключения к БД SQLite.")
             return -1
 
     @Slot(int, 'QVariant', result=bool)
@@ -1546,7 +1545,7 @@ class ApplicationData(QObject):
             print(f"Python: Ошибка - Некорректный ID действия: {action_id}")
             return False
 
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
                 # Подготовка данных (фильтрация разрешенных полей)
                 allowed_fields = ['description', 'start_offset', 'end_offset', 'contact_phones', 'report_materials']
@@ -1563,7 +1562,7 @@ class ApplicationData(QObject):
                     print("Python: Ошибка - Нет данных для обновления.")
                     return False
 
-                success = self.pg_database_manager.update_action(action_id, prepared_data)
+                success = self.database_manager.update_action(action_id, prepared_data)
                 if success:
                     print(f"Python: Действие ID {action_id} успешно обновлено.")
                     return True
@@ -1576,7 +1575,7 @@ class ApplicationData(QObject):
                 traceback.print_exc()
                 return False
         else:
-            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            print("Python: Ошибка - Нет подключения к БД SQLite.")
             return False
 
     @Slot(int, result=bool)
@@ -1588,9 +1587,9 @@ class ApplicationData(QObject):
             print(f"Python: Ошибка - Некорректный ID действия: {action_id}")
             return False
 
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
-                success = self.pg_database_manager.delete_action(action_id)
+                success = self.database_manager.delete_action(action_id)
                 if success:
                     print(f"Python: Действие ID {action_id} успешно удалено.")
                     return True
@@ -1603,7 +1602,7 @@ class ApplicationData(QObject):
                 traceback.print_exc()
                 return False
         else:
-            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            print("Python: Ошибка - Нет подключения к БД SQLite.")
             return False
 
     @Slot(int, result=int) # Для дублирования в том же алгоритме
@@ -1616,11 +1615,11 @@ class ApplicationData(QObject):
             print(f"Python: Ошибка - Некорректный ID оригинального действия: {original_action_id}")
             return -1
 
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
                 # Передаем None как есть, если new_algorithm_id не передан или равен 0
                 final_new_alg_id = new_algorithm_id if new_algorithm_id is not None and new_algorithm_id > 0 else None
-                new_action_id = self.pg_database_manager.duplicate_action(original_action_id, final_new_alg_id)
+                new_action_id = self.database_manager.duplicate_action(original_action_id, final_new_alg_id)
                 if new_action_id != -1:
                     print(f"Python: Действие ID {original_action_id} успешно дублировано. Новый ID: {new_action_id}")
                     return new_action_id
@@ -1633,7 +1632,7 @@ class ApplicationData(QObject):
                 traceback.print_exc()
                 return -1
         else:
-            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            print("Python: Ошибка - Нет подключения к БД SQLite.")
             return -1
 
 
@@ -1649,9 +1648,9 @@ class ApplicationData(QObject):
             print(f"Python: Ошибка - Некорректный ID алгоритма: {algorithm_id}")
             return False
 
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
-                success = self.pg_database_manager.move_algorithm_up(algorithm_id)
+                success = self.database_manager.move_algorithm_up(algorithm_id)
                 if success:
                     print(f"Python: Алгоритм ID {algorithm_id} успешно перемещен вверх.")
                     # Перезагружаем список алгоритмов в QML
@@ -1666,7 +1665,7 @@ class ApplicationData(QObject):
                 traceback.print_exc()
                 return False
         else:
-            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            print("Python: Ошибка - Нет подключения к БД SQLite.")
             return False
 
     @Slot(int, result=bool)
@@ -1681,9 +1680,9 @@ class ApplicationData(QObject):
             print(f"Python: Ошибка - Некорректный ID алгоритма: {algorithm_id}")
             return False
 
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
-                success = self.pg_database_manager.move_algorithm_down(algorithm_id)
+                success = self.database_manager.move_algorithm_down(algorithm_id)
                 if success:
                     print(f"Python: Алгоритм ID {algorithm_id} успешно перемещен вниз.")
                     # Перезагружаем список алгоритмов в QML
@@ -1698,7 +1697,7 @@ class ApplicationData(QObject):
                 traceback.print_exc()
                 return False
         else:
-            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            print("Python: Ошибка - Нет подключения к БД SQLite.")
             return False
 
     @Slot(str, result='QVariant') # Принимает строку даты, возвращает список
@@ -1714,10 +1713,10 @@ class ApplicationData(QObject):
             print("Python: Ошибка - date_string пуста.")
             return []
             
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
                 # Вызываем метод из менеджера БД
-                executions = self.pg_database_manager.get_executions_by_date(date_string)
+                executions = self.database_manager.get_executions_by_date(date_string)
                 if executions and isinstance(executions, list):
                     print(f"Python: Получен список {len(executions)} execution'ов за дату '{date_string}' из БД.")
                     # Возвращаем как есть, QML сам преобразует QVariantList в JS Array
@@ -1731,7 +1730,7 @@ class ApplicationData(QObject):
                 traceback.print_exc()
                 return []
         else:
-            print("Python: Ошибка - Нет подключения к БД PostgreSQL.")
+            print("Python: Ошибка - Нет подключения к БД SQLite.")
             return []
 
     # --- СЛОТЫ ДЛЯ РАБОТЫ С ЗАПУЩЕННЫМИ АЛГОРИТМАМИ (EXECUTIONS) ---
@@ -1742,9 +1741,9 @@ class ApplicationData(QObject):
         Слот для получения списка активных executions по категории из QML.
         """
         print(f"Python: QML запросил активные executions для категории '{category}'.")
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
-                executions = self.pg_database_manager.get_active_executions_by_category(category)
+                executions = self.database_manager.get_active_executions_by_category(category)
                 # print(f"DEBUG: Executions from DB: {executions}")
                 # QML ожидает список словарей (QVariantList of QVariantMap)
                 return executions
@@ -1754,7 +1753,7 @@ class ApplicationData(QObject):
                 traceback.print_exc()
                 return [] # Возвращаем пустой список в случае ошибки
         else:
-            print("Python: Ошибка - pg_database_manager не инициализирован.")
+            print("Python: Ошибка - database_manager не инициализирован.")
             return []
 
     @Slot(int, result=bool)
@@ -1764,7 +1763,7 @@ class ApplicationData(QObject):
         Использует УЖЕ ВЫЧИСЛЕННОЕ местное время из ApplicationData.
         """
         print(f"Python: QML запросил остановку execution ID {execution_id}.")
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
                 # --- ИЗМЕНЕНО: Используем УЖЕ ВЫЧИСЛЕННОЕ местное время ---
                 # Получаем местную дату и время напрямую из свойств ApplicationData
@@ -1798,7 +1797,7 @@ class ApplicationData(QObject):
                 print(f"Python: Местное время для завершения execution ID {execution_id}: {local_now_dt}")
                 
                 # Вызываем метод менеджера БД, передавая местное время
-                success = self.pg_database_manager.stop_algorithm(execution_id, local_now_dt)
+                success = self.database_manager.stop_algorithm(execution_id, local_now_dt)
                 return success
             except Exception as e:
                 print(f"Python: Ошибка в слоте stopAlgorithm: {e}")
@@ -1806,7 +1805,7 @@ class ApplicationData(QObject):
                 traceback.print_exc()
                 return False
         else:
-            print("Python: Ошибка - pg_database_manager не инициализирован.")
+            print("Python: Ошибка - database_manager не инициализирован.")
             return False
 
     @Slot('QVariant', result=bool) # Или result=int, если возвращаете ID
@@ -1827,7 +1826,7 @@ class ApplicationData(QObject):
             print("Python: Ошибка - execution_data пуст.")
             return False # Или -1
 
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
                 # Подготовка данных
                 algorithm_id = execution_data.get('algorithm_id')
@@ -1848,7 +1847,7 @@ class ApplicationData(QObject):
                 print(f"Python: Подготовленные данные для запуска: algorithm_id={algorithm_id}, started_at={started_at_iso}, user_id={created_by_user_id}")
 
                 # Вызов метода менеджера БД
-                result = self.pg_database_manager.start_algorithm_execution(algorithm_id, started_at_iso, created_by_user_id, notes)
+                result = self.database_manager.start_algorithm_execution(algorithm_id, started_at_iso, created_by_user_id, notes)
                 if isinstance(result, int) and result > 0:
                     print(f"Python: Execution успешно запущен с ID: {result}")
                     return True # или return result, если result=int
@@ -1861,7 +1860,7 @@ class ApplicationData(QObject):
                 traceback.print_exc()
                 return False # или -1
         else:
-            print("Python: Ошибка - pg_database_manager не инициализирован.")
+            print("Python: Ошибка - database_manager не инициализирован.")
             return False # или -1
 
     @Slot(str, str, result='QVariant') # Принимает строку категории и строку даты
@@ -1873,10 +1872,10 @@ class ApplicationData(QObject):
         :return: Список словарей с данными execution'ов или пустой список.
         """
         print(f"Python: QML запросил завершённые executions для категории '{category}' и даты '{date_string}'.")
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
                 # Вызов метода из PostgreSQLDatabaseManager
-                executions_list = self.pg_database_manager.get_completed_executions_by_category_and_date(category, date_string)
+                executions_list = self.database_manager.get_completed_executions_by_category_and_date(category, date_string)
                 print(f"Python: Найдено {len(executions_list) if isinstance(executions_list, list) else 'N/A'} завершённых executions.")
                 # QML ожидает список словарей (QVariantList of QVariantMap)
                 return executions_list if isinstance(executions_list, list) else []
@@ -1886,7 +1885,7 @@ class ApplicationData(QObject):
                 traceback.print_exc()
                 return []
         else:
-            print("Python: Ошибка - pg_database_manager не инициализирован.")
+            print("Python: Ошибка - database_manager не инициализирован.")
             return []
 
     @Slot(int, result='QVariant') # Указываем QVariant для QML
@@ -1898,8 +1897,8 @@ class ApplicationData(QObject):
         :return: Словарь с данными или None.
         """
         print(f"Python ApplicationData: Запрос данных execution ID {execution_id}")
-        if self.pg_database_manager: 
-            execution_data = self.pg_database_manager.get_algorithm_execution_by_id(execution_id)
+        if self.database_manager: 
+            execution_data = self.database_manager.get_algorithm_execution_by_id(execution_id)
             print(f"Python ApplicationData: Получены данные из БД для execution ID {execution_id}: {execution_data}")
             return execution_data # Возвращаем словарь или None
         else:
@@ -1915,14 +1914,14 @@ class ApplicationData(QObject):
         :return: Список словарей с данными action_execution'ов или None.
         """
         print(f"Python ApplicationData: Запрос списка action_execution'ов для execution ID {execution_id}")
-        if self.pg_database_manager: 
-            action_executions_list = self.pg_database_manager.get_action_executions_by_execution_id(execution_id)
+        if self.database_manager: 
+            action_executions_list = self.database_manager.get_action_executions_by_execution_id(execution_id)
             if not action_executions_list:
                 print(f"Python ApplicationData: Список action_execution'ов пуст для execution ID {execution_id}.")
                 return action_executions_list
 
             # --- НОВОЕ: Получаем данные execution'а, чтобы узнать его тип времени и время запуска ---
-            execution_data = self.pg_database_manager.get_algorithm_execution_by_id(execution_id)
+            execution_data = self.database_manager.get_algorithm_execution_by_id(execution_id)
             if not execution_data:
                 print(f"Python ApplicationData: Не удалось получить данные execution ID {execution_id} для расчета смещений.")
                 return action_executions_list
@@ -1959,11 +1958,13 @@ class ApplicationData(QObject):
                             # Форматируем timedelta в dd:hh:mm:ss
                             total_seconds_start = int(delta_start.total_seconds())
                             is_negative_start = total_seconds_start < 0
-                            total_seconds_start = abs(total_seconds_start)
-                            days_start = total_seconds_start // 86400
-                            hours_start = (total_seconds_start % 86400) // 3600
-                            minutes_start = (total_seconds_start % 3600) // 60
-                            seconds_start = total_seconds_start % 60
+                            abs_total_seconds_start = abs(total_seconds_start)
+                            days_start = abs_total_seconds_start // 86400
+                            remaining_seconds_start = abs_total_seconds_start % 86400
+                            hours_start = remaining_seconds_start // 3600
+                            remaining_seconds_start %= 3600
+                            minutes_start = remaining_seconds_start // 60
+                            seconds_start = remaining_seconds_start % 60
                             op_start_offset = f"Ч+{days_start:02d}:{hours_start:02d}:{minutes_start:02d}:{seconds_start:02d}"
                             if is_negative_start:
                                 op_start_offset = op_start_offset.replace("Ч+", "Ч-")
@@ -1976,11 +1977,13 @@ class ApplicationData(QObject):
                             delta_end = calc_end_dt - execution_started_at
                             total_seconds_end = int(delta_end.total_seconds())
                             is_negative_end = total_seconds_end < 0
-                            total_seconds_end = abs(total_seconds_end)
-                            days_end = total_seconds_end // 86400
-                            hours_end = (total_seconds_end % 86400) // 3600
-                            minutes_end = (total_seconds_end % 3600) // 60
-                            seconds_end = total_seconds_end % 60
+                            abs_total_seconds_end = abs(total_seconds_end)
+                            days_end = abs_total_seconds_end // 86400
+                            remaining_seconds_end = abs_total_seconds_end % 86400
+                            hours_end = remaining_seconds_end // 3600
+                            remaining_seconds_end %= 3600
+                            minutes_end = remaining_seconds_end // 60
+                            seconds_end = remaining_seconds_end % 60
                             op_end_offset = f"Ч+{days_end:02d}:{hours_end:02d}:{minutes_end:02d}:{seconds_end:02d}"
                             if is_negative_end:
                                 op_end_offset = op_end_offset.replace("Ч+", "Ч-")
@@ -2026,10 +2029,10 @@ class ApplicationData(QObject):
 
         # 2. Вызвать метод менеджера БД
         # Предполагается, что у вас есть это свойство, созданное после входа в систему
-        if self.pg_database_manager: 
+        if self.database_manager: 
             try:
                 # Передаем ИМЕННО преобразованный словарь
-                success = self.pg_database_manager.create_action_execution(execution_id, py_action_data) # <-- Используем py_action_data
+                success = self.database_manager.create_action_execution(execution_id, py_action_data) # <-- Используем py_action_data
                 if success:
                     print(f"Python ApplicationData: Новое action_execution успешно добавлено к execution ID {execution_id}.")
                     return True
@@ -2042,7 +2045,7 @@ class ApplicationData(QObject):
                 traceback.print_exc() # Для вывода полной трассировки
                 return False # Или возвращать строку с ошибкой
         else:
-            print("Python ApplicationData: Ошибка - Нет подключения к БД PostgreSQL.")
+            print("Python ApplicationData: Ошибка - Нет подключения к БД SQLite.")
             return False
     # --- КОНЕЦ СЛОТА ---
 
@@ -2061,11 +2064,11 @@ class ApplicationData(QObject):
             logger.error(f"Python ApplicationData: Некорректный execution_id: {execution_id}")
             return ""
 
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
                 # Предполагается, что у PostgreSQLDatabaseManager есть метод get_execution_by_id
                 # который возвращает словарь с данными execution'а, включая started_at как datetime.datetime
-                execution_data = self.pg_database_manager.get_execution_by_id(execution_id)
+                execution_data = self.database_manager.get_execution_by_id(execution_id)
                 if execution_data and 'started_at' in execution_data and execution_data['started_at']:
                     started_at_dt = execution_data['started_at']
                     # Форматируем datetime в строку, понятную для UI
@@ -2080,9 +2083,47 @@ class ApplicationData(QObject):
                 logger.exception(f"Python ApplicationData: Исключение при получении started_at для execution ID {execution_id}: {e}")
                 return ""
         else:
-            logger.error("Python ApplicationData: Нет подключения к БД PostgreSQL.")
+            logger.error("Python ApplicationData: Нет подключения к БД SQLite.")
             return ""
     # --- КОНЕЦ СЛОТА ---
+
+    @Slot(int, int, result=bool)
+    def updateExecutionResponsibleUser(self, execution_id: int, new_responsible_user_id: int) -> bool:
+        """
+        Обновляет ответственного пользователя для запущенного алгоритма (execution).
+        Вызывается из QML.
+        :param execution_id: ID execution'а.
+        :param new_responsible_user_id: ID нового ответственного пользователя.
+        :return: True, если успешно, иначе False.
+        """
+        print(f"Python ApplicationData: QML запросил обновление ответственного пользователя для execution ID {execution_id} на пользователя ID {new_responsible_user_id}.")
+
+        if not isinstance(execution_id, int) or execution_id <= 0:
+            print(f"Python ApplicationData: Некорректный execution_id: {execution_id}")
+            return False
+
+        if not isinstance(new_responsible_user_id, int) or new_responsible_user_id <= 0:
+            print(f"Python ApplicationData: Некорректный ID нового ответственного пользователя: {new_responsible_user_id}")
+            return False
+
+        if self.database_manager:
+            try:
+                success = self.database_manager.update_execution_responsible_user(execution_id, new_responsible_user_id)
+                if success:
+                    print(f"Python ApplicationData: Ответственный пользователь для execution ID {execution_id} успешно обновлен на ID {new_responsible_user_id}.")
+                    # Возможно, нужно обновить какие-то данные в интерфейсе
+                    return True
+                else:
+                    print(f"Python ApplicationData: Не удалось обновить ответственного пользователя для execution ID {execution_id}.")
+                    return False
+            except Exception as e:
+                print(f"Python ApplicationData: Исключение при обновлении ответственного пользователя для execution ID {execution_id}: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+        else:
+            print("Python ApplicationData: Менеджер БД не инициализирован.")
+            return False
 
     @Slot(int, 'QVariant', result=bool)
     def updateActionExecution(self, action_execution_id: int, action_execution_data: 'QVariant') -> bool:
@@ -2116,9 +2157,18 @@ class ApplicationData(QObject):
             print(f"Python ApplicationData: Ошибка - некорректный action_execution_id: {action_execution_id}")
             return False
 
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
-                success = self.pg_database_manager.update_action_execution(action_execution_id, python_data)
+                # Если обновляется только поле notes, используем специализированный метод
+                if len(python_data) == 1 and 'notes' in python_data:
+                    success = self.database_manager.update_action_execution_notes(
+                        action_execution_id,
+                        python_data['notes'] if python_data['notes'] and python_data['notes'].strip() else None
+                    )
+                else:
+                    # Используем общий метод для других случаев
+                    success = self.database_manager.update_action_execution(action_execution_id, python_data)
+                
                 if success:
                     print(f"Python ApplicationData: Action execution ID {action_execution_id} успешно обновлён в БД.")
                     # Возможно, стоит эмитить сигнал для обновления UI, если это не делает QML самостоятельно
@@ -2149,10 +2199,10 @@ class ApplicationData(QObject):
             print(f"Python ApplicationData: Ошибка - некорректный action_execution_id: {action_execution_id}")
             return None
 
-        if self.pg_database_manager:
-            action_execution_data = self.pg_database_manager.get_action_execution_by_id(action_execution_id)
-            print(f"Python ApplicationData: Получены данные из БД для action_execution ID {action_execution_id}: {action_execution_data}")
-            return action_execution_data # Возвращаем словарь или None
+        if self.database_manager:
+            action_execution_data = self.database_manager.get_action_execution_by_id(action_execution_id)
+            print(f"Python ApplicationData: Получены данные из БД дл�� action_execution ID {action_execution_id}: {action_execution_data}")
+            return action_execution_data # Возвращаем словарь ил������ None
         else:
             print("Python ApplicationData: Менеджер PostgreSQL недоступен.")
             return None
@@ -2170,12 +2220,12 @@ class ApplicationData(QObject):
             print("Python: Ошибка — некорректный execution_id")
             return False
 
-        if not self.pg_database_manager:
+        if not self.database_manager:
             print("Python: Ошибка — нет подключения к PostgreSQL")
             return False
 
         try:
-            actions = self.pg_database_manager.get_action_executions_by_execution_id(execution_id)
+            actions = self.database_manager.get_action_executions_by_execution_id(execution_id)
             if not actions:
                 print("Python: Нет действий для завершения")
                 return True
@@ -2209,7 +2259,7 @@ class ApplicationData(QObject):
                         'notes': new_notes
                     }
 
-                    success = self.pg_database_manager.update_action_execution(action['id'], update_data)
+                    success = self.database_manager.update_action_execution(action['id'], update_data)
                     if success:
                         updated_count += 1
                     else:
@@ -2238,11 +2288,11 @@ class ApplicationData(QObject):
         if not isinstance(execution_id, int) or execution_id <= 0:
             return {"on_time": 0, "late": 0, "not_done": 0, "total": 0}
 
-        if not self.pg_database_manager:
+        if not self.database_manager:
             return {"on_time": 0, "late": 0, "not_done": 0, "total": 0}
 
         try:
-            actions = self.pg_database_manager.get_action_executions_by_execution_id(execution_id)
+            actions = self.database_manager.get_action_executions_by_execution_id(execution_id)
             if not actions:
                 return {"on_time": 0, "late": 0, "not_done": 0, "total": 0}
 
@@ -2295,13 +2345,17 @@ class ApplicationData(QObject):
         if not isinstance(action_execution_id, int) or action_execution_id <= 0:
             print("Python: Некорректный action_execution_id")
             return False
-        if self.pg_database_manager:
+        if self.database_manager:
             try:
-                # Обновляем только поле notes
-                success = self.pg_database_manager.update_action_execution(
+                # Используем специализированный метод для обновления только примечаний
+                success = self.database_manager.update_action_execution_notes(
                     action_execution_id,
-                    {"notes": notes if notes.strip() else None}
+                    notes if notes.strip() else None
                 )
+                if success:
+                    print(f"Python ApplicationData: Примечание для action_execution ID {action_execution_id} успешно обновлено в БД.")
+                else:
+                    print(f"Python ApplicationData: Не удалось обновить примечание для action_execution ID {action_execution_id} в БД.")
                 return success
             except Exception as e:
                 print(f"Python: Ошибка обновления примечаний: {e}")
@@ -2312,8 +2366,8 @@ class ApplicationData(QObject):
     def previewExecutionDetails(self, execution_id: int):
         """Открывает окно предпросмотра печати."""
         try:
-            exec_data = self.pg_database_manager.get_algorithm_execution_by_id(execution_id)
-            actions = self.pg_database_manager.get_action_executions_by_execution_id(execution_id)
+            exec_data = self.database_manager.get_algorithm_execution_by_id(execution_id)
+            actions = self.database_manager.get_action_executions_by_execution_id(execution_id)
             if not exec_data or not actions:
                 print("Нет данных для предпросмотра")
                 return
@@ -2343,8 +2397,8 @@ class ApplicationData(QObject):
     def printExecutionDetails(self, execution_id: int):
         """Печатает напрямую (без предпросмотра)."""
         try:
-            exec_data = self.pg_database_manager.get_algorithm_execution_by_id(execution_id)
-            actions = self.pg_database_manager.get_action_executions_by_execution_id(execution_id)
+            exec_data = self.database_manager.get_algorithm_execution_by_id(execution_id)
+            actions = self.database_manager.get_action_executions_by_execution_id(execution_id)
             if not exec_data or not actions:
                 print("Нет данных для печати")
                 return
@@ -2365,19 +2419,19 @@ class ApplicationData(QObject):
     def verifyAdminPassword(self, password: str) -> bool:
         """
         Проверяет, совпадает ли переданный пароль с паролем пользователя 'admin'.
-        Использует pg_database_manager для запроса к PostgreSQL.
+        Использует database_manager для запроса к SQLite.
         """
         try:
-            # Проверяем, инициализирован ли менеджер PostgreSQL
-            if self.pg_database_manager is None:
-                print("Ошибка: pg_database_manager не инициализирован.")
+            # Проверяем, инициализирован ли менеджер SQLite
+            if self.database_manager is None:
+                print("Ошибка: database_manager не инициализирован.")
                 return False
 
             # Получаем подключение
-            conn = self.pg_database_manager._get_connection()
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            conn = self.database_manager._get_connection()
+            cursor = conn.cursor()
             cursor.execute(
-                "SELECT password_hash FROM app_schema.users WHERE login = %s AND is_active = TRUE;",
+                "SELECT password_hash FROM users WHERE login = ? AND is_active = 1;",
                 ("admin",)
             )
             row = cursor.fetchone()
@@ -2658,8 +2712,8 @@ class ApplicationData(QObject):
         """Инициализирует и запускает таймер для проверки дедлайнов действий,
         а также загружает звуковые эффекты.
         QSystemTrayIcon больше не используется для визуальных уведомлений."""
-        if not self.pg_database_manager:
-            print("Python: Предупреждение - pg_database_manager не инициализирован, уведомления не запускаются.")
+        if not self.database_manager:
+            print("Python: Предупреждение - database_manager не инициализирован, уведомления не запускаются.")
             return
 
         # Инициализация таймера проверки дедлайнов
@@ -2707,8 +2761,8 @@ class ApplicationData(QObject):
 
     def _check_action_deadlines(self):
         """Проверяет дедлайны действий и отправляет уведомления."""
-        if not self.pg_database_manager:
-            print("Python: _check_action_deadlines - pg_database_manager не инициализирован.")
+        if not self.database_manager:
+            print("Python: _check_action_deadlines - database_manager не инициализирован.")
             return # Нечего проверять без БД
 
         # Получаем текущее МЕСТНОЕ время из appData (строки)
@@ -2728,12 +2782,12 @@ class ApplicationData(QObject):
         reminder_threshold = datetime.timedelta(minutes=5)
 
         # Загружаем активные action_executions для активных algorithm_executions
-        # Нужен метод в pg_database_manager, возвращающий:
+        # Нужен метод в database_manager, возвращающий:
         # [{'id': ae_id, 'execution_id': exec_id, 'calculated_end_time': cet_str, 'status': st, 'snapshot_description': desc, 'execution_status': exec_st}]
         # где execution_status - статус связанного algorithm_execution
         try:
             # !!! ВАЖНО: Этот метод нужно реализовать в postgresql_manager.py !!!
-            active_actions = self.pg_database_manager.get_active_action_executions_with_details()
+            active_actions = self.database_manager.get_active_action_executions_with_details()
         except Exception as e:
             print(f"Python: Ошибка при получении активных действий для проверки дедлайнов: {e}")
             import traceback
@@ -2775,8 +2829,18 @@ class ApplicationData(QObject):
                 if isinstance(calculated_end_time_value, datetime.datetime):
                     action_end_dt = calculated_end_time_value
                 elif isinstance(calculated_end_time_value, str):
-                    # Если вдруг строка (маловероятно, но на всякий случай)
-                    action_end_dt = datetime.datetime.strptime(calculated_end_time_value, "%Y-%m-%d %H:%M:%S")
+                    # Если строка, проверяем оба формата: с пробелом и с буквой T
+                    try:
+                        # Пробуем формат с пробелом: YYYY-MM-DD HH:MM:SS
+                        action_end_dt = datetime.datetime.strptime(calculated_end_time_value, "%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        try:
+                            # Пробуем формат ISO с буквой T: YYYY-MM-DDTHH:MM:SS
+                            action_end_dt = datetime.datetime.fromisoformat(calculated_end_time_value.replace('Z', '+00:00'))
+                        except ValueError:
+                            # Если ни один формат не подходит, логируем ошибку
+                            print(f"Python: Не удается распознать формат calculated_end_time для action_execution ID {action_exec_id}: {calculated_end_time_value}")
+                            continue
                 else:
                     # Неизвестный тип
                     print(f"Python: Неизвестный тип calculated_end_time для action_execution ID {action_exec_id}: {type(calculated_end_time_value)}. Значение: {calculated_end_time_value}")
@@ -2881,6 +2945,39 @@ class ApplicationData(QObject):
             print(f"Python: Звуковой файл для '{status_type}' не загружен, отключен или не существует.")
     # --- Конец метода _play_notification_sound ---
 
+    @Slot()
+    def quitApp(self):
+        """
+        Завершает работу приложения.
+        """
+        print("Python ApplicationData: Запрошено завершение приложения.")
+        try:
+            # Закрываем соединение с БД, если оно открыто
+            if hasattr(self, 'database_manager') and self.database_manager:
+                # Закрываем соединение, если оно реализовано в менеджере
+                if hasattr(self.database_manager, 'close_connection'):
+                    self.database_manager.close_connection()
+                print("Python ApplicationData: Соединение с БД закрыто.")
+            
+            # Закрываем иконку в трее, если она есть
+            if hasattr(self, 'tray_icon') and self.tray_icon:
+                self.tray_icon.hide()
+                print("Python ApplicationData: Иконка в трее скрыта.")
+            
+            # Завершаем приложение
+            if hasattr(self, 'app') and self.app:
+                self.app.quit()
+                print("Python ApplicationData: Приложение завершено через app.quit().")
+            else:
+                import sys
+                print("Python ApplicationData: Приложение завершено через sys.exit().")
+                sys.exit(0)
+        except Exception as e:
+            print(f"Python ApplicationData: Ошибка при завершении приложения: {e}")
+            import sys
+            sys.exit(1)
+
+
 
 def on_qml_loaded(obj, url):
     if obj and url.fileName() == "main.qml":
@@ -2900,6 +2997,8 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     # ВАЖНО: Не завершать приложение при закрытии последнего окна
     app.setQuitOnLastWindowClosed(False)
+
+    app.setWindowIcon(QIcon('emblem.ico'))
 
     # --- СОЗДАЕМ экземпляр менеджера ЛОКАЛЬНОЙ КОНФИГУРАЦИИ (SQLite) ---
     sqlite_config_manager = SQLiteConfigManager()

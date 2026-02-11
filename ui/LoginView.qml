@@ -109,25 +109,15 @@ Item {
                 }
             }
 
-            // --- Кнопка для вызова настроек подключения к БД ---
+            // --- Кнопка для выхода из приложения ---
             Button {
-                id: dbSettingsButton
-                text: "⚙ Настройки БД"
+                id: exitAppButton
+                text: "Выход из приложения"
                 Layout.fillWidth: true
                 onClicked: {
-                    console.log("QML LoginView: Кнопка 'Настройки БД' нажата.");
-                    // Создаем и открываем диалог настроек подключения
-                    var component = Qt.createComponent("ConnectionSettingsDialog.qml");
-                    if (component.status === Component.Ready) {
-                        var dialog = component.createObject(loginViewRoot); // Создаем в контексте LoginView
-                        if (dialog) {
-                            dialog.open();
-                        } else {
-                            console.error("QML LoginView: Не удалось создать объект ConnectionSettingsDialog.");
-                        }
-                    } else {
-                         console.error("QML LoginView: Ошибка загрузки компонента ConnectionSettingsDialog.qml:", component.errorString());
-                    }
+                    console.log("QML LoginView: Кнопка 'Выход из приложения' нажата.");
+                    // Вызываем метод из Python для выхода из приложения
+                    appData.quitApp();
                 }
             }
             // --- ---
