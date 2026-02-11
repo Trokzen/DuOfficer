@@ -325,6 +325,7 @@ Popup {
 
                                             var match1 = calcEndTimeStr.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
                                             var match2 = calcEndTimeStr.match(/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
+                                            var match3 = calcEndTimeStr.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/); // ISO формат с T
 
                                             if (match1) {
                                                 actualEndDateField.text = match1[3] + "." + match1[2] + "." + match1[1];
@@ -336,6 +337,11 @@ Popup {
                                                 actualEndTimeHoursField.text = calcEndTimeStr.substring(11, 13);
                                                 actualEndTimeMinutesField.text = calcEndTimeStr.substring(14, 16);
                                                 actualEndTimeSecondsField.text = calcEndTimeStr.substring(17, 19);
+                                            } else if (match3) {
+                                                actualEndDateField.text = match3[3] + "." + match3[2] + "." + match3[1];
+                                                actualEndTimeHoursField.text = match3[4];
+                                                actualEndTimeMinutesField.text = match3[5];
+                                                actualEndTimeSecondsField.text = match3[6];
                                             } else {
                                                 console.warn("QML ActionExecutionCompletionDialog: Неизвестный формат calculated_end_time:", calcEndTimeStr);
                                                 errorMessageLabel.text = "Неизвестный формат времени 'предельного' выполнения.";

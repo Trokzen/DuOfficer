@@ -541,17 +541,15 @@ Item {
                 id: footerRow
                 anchors.fill: parent
                 anchors.margins: Math.max(3, Math.floor(5 * scaleFactor))
-                spacing: (width - 4 * (width * 0.20)) / 3
+                spacing: (width - 2 * (width * 0.40)) / 1
 
                 Repeater {
                      model: ListModel {
                          ListElement { text: "О программе" }
-                         ListElement { text: "Учет личного состава" }
                          ListElement { text: "Настройки" }
-                         ListElement { text: "(По согласованию)" }
                     }
                     Button {
-                        width: parent.width * 0.20
+                        width: parent.width * 0.40
                         anchors.verticalCenter: parent.verticalCenter
                         height: parent.height * 0.8
                         text: model.text
@@ -559,7 +557,7 @@ Item {
                         hoverEnabled: false
                         // --- Выделяем активную кнопку НАСТРОЕК ---
                         background: Rectangle {
-                            color: (index === 2 && rootItem.currentRightPanelIndex === 5) ? "#2980b9" : "#7f8c8d"
+                            color: (index === 1 && rootItem.currentRightPanelIndex === 5) ? "#2980b9" : "#7f8c8d"
                             radius: Math.max(2, Math.floor(4 * scaleFactor))
                         }
                         contentItem: Text {
@@ -570,7 +568,7 @@ Item {
                             verticalAlignment: Text.AlignVCenter
                         }
                         onClicked: {
-                            if (index === 2) {
+                            if (index === 1) {
                                 // Вместо прямого перехода — открываем Popup с паролем
                                 passwordProtectionPopup.open();
                                 passwordField.forceActiveFocus(); // Удобно для пользователя

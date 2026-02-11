@@ -937,7 +937,8 @@ class SQLiteDatabaseManager:
 
     def get_actions_by_algorithm_id(self, algorithm_id: int) -> List[Dict[str, Any]]:
         """
-        Получает список всех действий для заданного алгоритма, отсортированных по start_offset.
+        Получает список всех действий для заданного алгоритма, отсортированных по времени начала (start_offset).
+        Поддерживает сортировку как по числовым значениям (секунды), так и по формату времени (HH:MM:SS).
         :param algorithm_id: ID алгоритма.
         :return: Список словарей с данными действий.
         """
@@ -952,7 +953,22 @@ class SQLiteDatabaseManager:
                 "SELECT id, algorithm_id, description, start_offset, end_offset, contact_phones, report_materials, created_at, updated_at "
                 "FROM actions "
                 "WHERE algorithm_id = ? "
-                "ORDER BY start_offset ASC, end_offset ASC, id ASC;",
+                "ORDER BY "
+                "CASE "
+                "WHEN start_offset LIKE '% %:__:__' THEN "
+                "  CASE "
+                "    WHEN start_offset LIKE '____-__-__T__:__:__%' THEN "
+                "      substr(start_offset, 1, 4) * 31536000 + substr(start_offset, 6, 2) * 2678400 + substr(start_offset, 9, 2) * 86400 + substr(start_offset, 12, 2) * 3600 + substr(start_offset, 15, 2) * 60 + substr(start_offset, 18, 2) "
+                "    ELSE "
+                "      CAST(substr(start_offset, 1, instr(start_offset, ' ') - 1) AS INTEGER) * 86400 + "
+                "      substr(substr(start_offset, instr(start_offset, ' ') + 1), 1, 2) * 3600 + "
+                "      substr(substr(start_offset, instr(start_offset, ' ') + 1), 4, 2) * 60 + "
+                "      substr(substr(start_offset, instr(start_offset, ' ') + 1), 7, 2) "
+                "  END "
+                "WHEN start_offset LIKE '__:__:__' THEN substr(start_offset, 1, 2) * 3600 + substr(start_offset, 4, 2) * 60 + substr(start_offset, 7, 2) "
+                "ELSE CAST(COALESCE(start_offset, '0') AS INTEGER) "
+                "END ASC, "
+                "id ASC;",
                 (algorithm_id,)
             )
             rows = cursor.fetchall()
@@ -1128,7 +1144,7 @@ class SQLiteDatabaseManager:
             return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
 
         # Если формат не распознан, возвращаем исходную строку
-        logger.warning(f"Нераспознанный формат времени '{time_str}'. Передаю как есть.")
+        logger.warning(f"Нер��спознанный формат времени '{time_str}'. Передаю как есть.")
         return time_str
 
     def create_action(self, action_data: Dict[str, Any]) -> int:
@@ -1141,7 +1157,7 @@ class SQLiteDatabaseManager:
         """
         # ... (проверки на существование action_data и обязательных полей) ...
         if not action_data:
-            logger.warning("Попытка создания действия с пустыми данными.")
+            logger.warning("П��������пытка создания действия с пустыми данными.")
             return -1
 
         required_fields = ['algorithm_id', 'description']
@@ -2216,7 +2232,7 @@ class SQLiteDatabaseManager:
         prepared_data['execution_id'] = execution_id
         # --- ---
 
-        # --- 2. Обработка абсолютных дат/времени ---
+        # --- 2. Обработка абсолю��ных дат/времени ---
         # Обрабатываем все возможные поля времени, включая calculated_*, actual_*, и другие
         # Предполагаем, что они могут содержать строки в формате 'dd.MM.yyyy HH:mm:ss' или пустые/None.
         # Нужно преобразовать их в формат, подходящий для SQLite.
@@ -2459,11 +2475,11 @@ class SQLiteDatabaseManager:
 
                 # --- Подготовка SQL-запроса ---
                 if not prepared_data:
-                    logger.warning("SQLiteDatabaseManager: Нет данных для обновления (после фильтрации и преобразований).")
-                    # Возможно, нужно вернуть True, если обновление без изменений считается успешным
-                    # Но обычно возвращают True, только если что-то реально изменилось.
-                    # В данном случае, если actual_end_time был None или невалиден, и других полей нет, возвращаем False
-                    return False
+                    logger.info("SQLiteDatabaseManager: Нет данных для обновления (после фильтрации и преобразований).")
+                    # Если нет данных для обновления, возвращаем True (ничего обновлять не нужно)
+                    cursor.close()
+                    conn.close()
+                    return True
 
                 # Подготавливаем SET часть запроса
                 set_clauses = []
@@ -2474,6 +2490,13 @@ class SQLiteDatabaseManager:
                     if value is not None or key in ['actual_end_time', 'reported_to', 'notes']:  # Уточните, какие поля могут быть NULL
                         set_clauses.append(f"{key} = ?")
                         values.append(value) # Добавляем значение (datetime, строка, None и т.д.)
+
+                # Если нет полей для обновления, возвращаем True (ничего обновлять не нужно)
+                if not set_clauses:
+                    logger.info("SQLiteDatabaseManager: Нет полей для обновления.")
+                    cursor.close()
+                    conn.close()
+                    return True
 
                 # Добавляем action_execution_id в конец списка значений для WHERE
                 values.append(action_execution_id)
@@ -2488,15 +2511,14 @@ class SQLiteDatabaseManager:
 
                 logger.debug(f"SQLiteDatabaseManager: Выполняем SQL UPDATE: {sql_query} с параметрами {values}")
                 cursor.execute(sql_query, values)
-                affected_rows = cursor.rowcount
                 conn.commit()
-                logger.info(f"SQLiteDatabaseManager: Обновлено {affected_rows} записей action_execution с ID {action_execution_id}.")
+                logger.info(f"SQLiteDatabaseManager: Запрос UPDATE выполнен для action_execution с ID {action_execution_id}.")
 
                 cursor.close()
                 conn.close()
 
-                # Возвращаем True, если одна строка была затронута
-                return affected_rows == 1
+                # Возвращаем True, если запрос выполнился успешно (независимо от количества затронутых строк)
+                return True
 
         except sqlite3.IntegrityError as e:
             logger.error(f"SQLiteDatabaseManager: Ошибка целостности БД при обновлении action_execution ID {action_execution_id}: {e}")
@@ -2582,6 +2604,74 @@ class SQLiteDatabaseManager:
             logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при получении action_execution ID {action_execution_id}: {e}")
             return None
 
+    def update_execution_responsible_user(self, execution_id: int, new_responsible_user_id: int) -> bool:
+        """
+        Обновляет ответственного пользователя для запущенного алгоритма (execution).
+        :param execution_id: ID execution'а.
+        :param new_responsible_user_id: ID нового ответственного пользователя.
+        :return: True, если успешно, иначе False.
+        """
+        if not isinstance(execution_id, int) or execution_id <= 0:
+            logger.error(f"SQLiteDatabaseManager: Некорректный execution_id: {execution_id}")
+            return False
+
+        if not isinstance(new_responsible_user_id, int) or new_responsible_user_id <= 0:
+            logger.error(f"SQLiteDatabaseManager: Некорректный ID нового ответственного пользователя: {new_responsible_user_id}")
+            return False
+
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # Проверим, существует ли пользователь с указанным ID
+            cursor.execute("SELECT id, rank, last_name, first_name, middle_name FROM users WHERE id = ? AND is_active = 1;", (new_responsible_user_id,))
+            user_row = cursor.fetchone()
+            if not user_row:
+                logger.error(f"SQLiteDatabaseManager: Пользователь с ID {new_responsible_user_id} не найден или неактивен.")
+                cursor.close()
+                conn.close()
+                return False
+
+            # Формируем отображаемое имя пользователя
+            _, rank, last_name, first_name, middle_name = user_row
+            display_name = f"{rank} {last_name} {first_name[0]}."
+            if middle_name:
+                display_name += f"{middle_name[0]}."
+
+            # Обновляем execution: ID пользователя и его отображаемое имя
+            update_query = """
+                UPDATE algorithm_executions
+                SET created_by_user_id = ?, created_by_user_display_name = ?, updated_at = datetime('now', 'localtime')
+                WHERE id = ?;
+            """
+            cursor.execute(update_query, (new_responsible_user_id, display_name, execution_id))
+            rows_affected = cursor.rowcount
+
+            if rows_affected > 0:
+                conn.commit()
+                logger.info(f"SQLiteDatabaseManager: Ответственный пользователь для execution ID {execution_id} успешно обновлен на ID {new_responsible_user_id} ({display_name}).")
+                cursor.close()
+                conn.close()
+                return True
+            else:
+                logger.warning(f"SQLiteDatabaseManager: Execution ID {execution_id} не найден для обновления ответственного пользователя.")
+                cursor.close()
+                conn.close()
+                return False
+
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка БД при обновлении ответственного пользователя для execution ID {execution_id}: {e}")
+            if 'conn' in locals():
+                conn.rollback()
+                conn.close()
+            return False
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при обновлении ответственного пользователя для execution ID {execution_id}: {e}")
+            if 'conn' in locals():
+                conn.rollback()
+                conn.close()
+            return False
+
     def get_active_action_executions_with_details(self) -> list:
         """
         Получает список активных action_executions вместе с деталями execution'а.
@@ -2641,3 +2731,63 @@ class SQLiteDatabaseManager:
             traceback.print_exc()
             return []
     # --- Конец метода get_active_action_executions_with_details ---
+
+    def update_action_execution_notes(self, action_execution_id: int, notes: str) -> bool:
+        """
+        Обновляет только поле 'notes' у action_execution.
+        :param action_execution_id: ID action_execution'а.
+        :param notes: Новое значение примечания.
+        :return: True, если успешно, иначе False.
+        """
+        if not isinstance(action_execution_id, int) or action_execution_id <= 0:
+            logger.error(f"SQLiteDatabaseManager: Некорректный action_execution_id: {action_execution_id}")
+            return False
+
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # Проверяем, существует ли action_execution_id
+            cursor.execute(
+                "SELECT id FROM action_executions WHERE id = ?;",
+                (action_execution_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                logger.error(f"SQLiteDatabaseManager: Action_execution ID {action_execution_id} не существует.")
+                cursor.close()
+                conn.close()
+                return False
+
+            # Обновляем только поле notes
+            notes_value = notes if notes and notes.strip() else None
+            cursor.execute(
+                "UPDATE action_executions SET notes = ?, updated_at = datetime('now', 'localtime') WHERE id = ?;",
+                (notes_value, action_execution_id)
+            )
+
+            conn.commit()
+            affected_rows = cursor.rowcount
+            logger.info(f"SQLiteDatabaseManager: Обновлено {affected_rows} записей action_execution с ID {action_execution_id} (только поле notes).")
+
+            cursor.close()
+            conn.close()
+
+            # Возвращаем True, если обновление прошло успешно (независимо от количества затронутых строк)
+            return True
+
+        except sqlite3.IntegrityError as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка целостности БД при обновлении примечания для action_execution ID {action_execution_id}: {e}")
+            if 'conn' in locals():
+                conn.close()
+            return False
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка БД sqlite3 при обновлении примечания для action_execution ID {action_execution_id}: {e}")
+            if 'conn' in locals():
+                conn.close()
+            return False
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при обновлении примечания для action_execution ID {action_execution_id}: {e}")
+            if 'conn' in locals():
+                conn.close()
+            return False

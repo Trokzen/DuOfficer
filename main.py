@@ -2087,6 +2087,44 @@ class ApplicationData(QObject):
             return ""
     # --- КОНЕЦ СЛОТА ---
 
+    @Slot(int, int, result=bool)
+    def updateExecutionResponsibleUser(self, execution_id: int, new_responsible_user_id: int) -> bool:
+        """
+        Обновляет ответственного пользователя для запущенного алгоритма (execution).
+        Вызывается из QML.
+        :param execution_id: ID execution'а.
+        :param new_responsible_user_id: ID нового ответственного пользователя.
+        :return: True, если успешно, иначе False.
+        """
+        print(f"Python ApplicationData: QML запросил обновление ответственного пользователя для execution ID {execution_id} на пользователя ID {new_responsible_user_id}.")
+
+        if not isinstance(execution_id, int) or execution_id <= 0:
+            print(f"Python ApplicationData: Некорректный execution_id: {execution_id}")
+            return False
+
+        if not isinstance(new_responsible_user_id, int) or new_responsible_user_id <= 0:
+            print(f"Python ApplicationData: Некорректный ID нового ответственного пользователя: {new_responsible_user_id}")
+            return False
+
+        if self.database_manager:
+            try:
+                success = self.database_manager.update_execution_responsible_user(execution_id, new_responsible_user_id)
+                if success:
+                    print(f"Python ApplicationData: Ответственный пользователь для execution ID {execution_id} успешно обновлен на ID {new_responsible_user_id}.")
+                    # Возможно, нужно обновить какие-то данные в интерфейсе
+                    return True
+                else:
+                    print(f"Python ApplicationData: Не удалось обновить ответственного пользователя для execution ID {execution_id}.")
+                    return False
+            except Exception as e:
+                print(f"Python ApplicationData: Исключение при обновлении ответственного пользователя для execution ID {execution_id}: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+        else:
+            print("Python ApplicationData: Менеджер БД не инициализирован.")
+            return False
+
     @Slot(int, 'QVariant', result=bool)
     def updateActionExecution(self, action_execution_id: int, action_execution_data: 'QVariant') -> bool:
         """
@@ -2121,7 +2159,16 @@ class ApplicationData(QObject):
 
         if self.database_manager:
             try:
-                success = self.database_manager.update_action_execution(action_execution_id, python_data)
+                # Если обновляется только поле notes, используем специализированный метод
+                if len(python_data) == 1 and 'notes' in python_data:
+                    success = self.database_manager.update_action_execution_notes(
+                        action_execution_id,
+                        python_data['notes'] if python_data['notes'] and python_data['notes'].strip() else None
+                    )
+                else:
+                    # Используем общий метод для других случаев
+                    success = self.database_manager.update_action_execution(action_execution_id, python_data)
+                
                 if success:
                     print(f"Python ApplicationData: Action execution ID {action_execution_id} успешно обновлён в БД.")
                     # Возможно, стоит эмитить сигнал для обновления UI, если это не делает QML самостоятельно
@@ -2300,11 +2347,15 @@ class ApplicationData(QObject):
             return False
         if self.database_manager:
             try:
-                # Обновляем только поле notes
-                success = self.database_manager.update_action_execution(
+                # Используем специализированный метод для обновления только примечаний
+                success = self.database_manager.update_action_execution_notes(
                     action_execution_id,
-                    {"notes": notes if notes.strip() else None}
+                    notes if notes.strip() else None
                 )
+                if success:
+                    print(f"Python ApplicationData: Примечание для action_execution ID {action_execution_id} успешно обновлено в БД.")
+                else:
+                    print(f"Python ApplicationData: Не удалось обновить примечание для action_execution ID {action_execution_id} в БД.")
                 return success
             except Exception as e:
                 print(f"Python: Ошибка обновления примечаний: {e}")
@@ -2894,6 +2945,39 @@ class ApplicationData(QObject):
             print(f"Python: Звуковой файл для '{status_type}' не загружен, отключен или не существует.")
     # --- Конец метода _play_notification_sound ---
 
+    @Slot()
+    def quitApp(self):
+        """
+        Завершает работу приложения.
+        """
+        print("Python ApplicationData: Запрошено завершение приложения.")
+        try:
+            # Закрываем соединение с БД, если оно открыто
+            if hasattr(self, 'database_manager') and self.database_manager:
+                # Закрываем соединение, если оно реализовано в менеджере
+                if hasattr(self.database_manager, 'close_connection'):
+                    self.database_manager.close_connection()
+                print("Python ApplicationData: Соединение с БД закрыто.")
+            
+            # Закрываем иконку в трее, если она есть
+            if hasattr(self, 'tray_icon') and self.tray_icon:
+                self.tray_icon.hide()
+                print("Python ApplicationData: Иконка в трее скрыта.")
+            
+            # Завершаем приложение
+            if hasattr(self, 'app') and self.app:
+                self.app.quit()
+                print("Python ApplicationData: Приложение завершено через app.quit().")
+            else:
+                import sys
+                print("Python ApplicationData: Приложение завершено через sys.exit().")
+                sys.exit(0)
+        except Exception as e:
+            print(f"Python ApplicationData: Ошибка при завершении приложения: {e}")
+            import sys
+            sys.exit(1)
+
+
 
 def on_qml_loaded(obj, url):
     if obj and url.fileName() == "main.qml":
@@ -2913,6 +2997,8 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     # ВАЖНО: Не завершать приложение при закрытии последнего окна
     app.setQuitOnLastWindowClosed(False)
+
+    app.setWindowIcon(QIcon('emblem.ico'))
 
     # --- СОЗДАЕМ экземпляр менеджера ЛОКАЛЬНОЙ КОНФИГУРАЦИИ (SQLite) ---
     sqlite_config_manager = SQLiteConfigManager()
