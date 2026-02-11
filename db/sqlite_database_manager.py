@@ -955,6 +955,16 @@ class SQLiteDatabaseManager:
                 "WHERE algorithm_id = ? "
                 "ORDER BY "
                 "CASE "
+                "WHEN start_offset LIKE '% %:__:__' THEN "
+                "  CASE "
+                "    WHEN start_offset LIKE '____-__-__T__:__:__%' THEN "
+                "      substr(start_offset, 1, 4) * 31536000 + substr(start_offset, 6, 2) * 2678400 + substr(start_offset, 9, 2) * 86400 + substr(start_offset, 12, 2) * 3600 + substr(start_offset, 15, 2) * 60 + substr(start_offset, 18, 2) "
+                "    ELSE "
+                "      CAST(substr(start_offset, 1, instr(start_offset, ' ') - 1) AS INTEGER) * 86400 + "
+                "      substr(substr(start_offset, instr(start_offset, ' ') + 1), 1, 2) * 3600 + "
+                "      substr(substr(start_offset, instr(start_offset, ' ') + 1), 4, 2) * 60 + "
+                "      substr(substr(start_offset, instr(start_offset, ' ') + 1), 7, 2) "
+                "  END "
                 "WHEN start_offset LIKE '__:__:__' THEN substr(start_offset, 1, 2) * 3600 + substr(start_offset, 4, 2) * 60 + substr(start_offset, 7, 2) "
                 "ELSE CAST(COALESCE(start_offset, '0') AS INTEGER) "
                 "END ASC, "
@@ -1134,7 +1144,7 @@ class SQLiteDatabaseManager:
             return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
 
         # Если формат не распознан, возвращаем исходную строку
-        logger.warning(f"Нераспознанный формат времени '{time_str}'. Передаю как есть.")
+        logger.warning(f"Нер��спознанный формат времени '{time_str}'. Передаю как есть.")
         return time_str
 
     def create_action(self, action_data: Dict[str, Any]) -> int:
@@ -2222,7 +2232,7 @@ class SQLiteDatabaseManager:
         prepared_data['execution_id'] = execution_id
         # --- ---
 
-        # --- 2. Обработка абсолютных дат/времени ---
+        # --- 2. Обработка абсолю��ных дат/времени ---
         # Обрабатываем все возможные поля времени, включая calculated_*, actual_*, и другие
         # Предполагаем, что они могут содержать строки в формате 'dd.MM.yyyy HH:mm:ss' или пустые/None.
         # Нужно преобразовать их в формат, подходящий для SQLite.
