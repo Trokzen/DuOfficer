@@ -1086,7 +1086,7 @@ class ApplicationData(QObject):
     @Slot(result=list)
     def getAllDutyOfficersList(self):
         """
-        Возвращает список ВСЕХ должностных лиц (активных и неактивных) для QML.
+        Возвращает список ВСЕХ д��лжностных лиц (активных и неактивных) для QML.
         Используется, например, для выбора дежурного из полного списка.
         """
         try:
@@ -2977,6 +2977,232 @@ class ApplicationData(QObject):
             import sys
             sys.exit(1)
 
+    # --- НОВЫЕ МЕТОДЫ ДЛЯ РАБОТЫ С ОТНОСИТЕЛЬНЫМ ВРЕМЕНЕМ ---
+    
+    @Slot(int, 'QVariant', result=bool)
+    def addRelativeTimeActionExecution(self, execution_id: int, action_execution_data: 'QVariant') -> bool:
+        """
+        Добавляет новое action_execution с относительным временем к существующему execution.
+        Вычисляет абсолютное время на основе времени запуска алгоритма и относительных сдвигов.
+        Вызывается из QML.
+        :param execution_id: ID execution'а.
+        :param action_execution_data: Данные нового action_execution'а (QVariantMap из QML).
+        :return: True, если успешно, иначе False.
+        """
+        # Преобразуем QVariant в словарь Python
+        py_action_data = action_execution_data.toVariant()
+        
+        print(f"Python ApplicationData: QML запросил добавление action_execution с относительным временем к execution ID {execution_id}. Данные: {py_action_data}")
+
+        # Проверки
+        if not isinstance(py_action_data, dict):
+            print("Python ApplicationData: ОШИБКА - action_execution_data не является словарем.")
+            return False
+
+        if not isinstance(execution_id, int) or execution_id <= 0:
+            print(f"Python ApplicationData: Некорректный execution_id: {execution_id}")
+            return False
+
+        # Получаем время запуска алгоритма
+        if not self.database_manager:
+            print("Python ApplicationData: Ошибка - Нет подключения к БД.")
+            return False
+
+        try:
+            # Используем правильный метод для получения информации о выполнении алгоритма
+            execution_info = self.database_manager.get_algorithm_execution_by_id(execution_id)
+            if not execution_info or 'started_at' not in execution_info:
+                print(f"Python ApplicationData: Не найдено время запуска для execution ID {execution_id}")
+                return False
+            
+            start_time = execution_info['started_at']
+            if isinstance(start_time, str):
+                # Преобразуем строку в datetime объект
+                start_time = datetime.datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+            
+            # Вычисляем абсолютное время начала и окончания на основе относительных сдвигов
+            # Получаем относительные значения из данных
+            start_days = int(py_action_data.get('relative_start_days', 0))
+            start_hours = int(py_action_data.get('relative_start_hours', 0))
+            start_minutes = int(py_action_data.get('relative_start_minutes', 0))
+            start_seconds = int(py_action_data.get('relative_start_seconds', 0))
+            
+            end_days = int(py_action_data.get('relative_end_days', 0))
+            end_hours = int(py_action_data.get('relative_end_hours', 0))
+            end_minutes = int(py_action_data.get('relative_end_minutes', 0))
+            end_seconds = int(py_action_data.get('relative_end_seconds', 0))
+
+            # Вычисляем абсолютные даты
+            calculated_start_time = start_time + datetime.timedelta(
+                days=start_days,
+                hours=start_hours,
+                minutes=start_minutes,
+                seconds=start_seconds
+            )
+            
+            calculated_end_time = start_time + datetime.timedelta(
+                days=end_days,
+                hours=end_hours,
+                minutes=end_minutes,
+                seconds=end_seconds
+            )
+
+            # Подготовим данные для сохранения в БД
+            # Заменяем относительные значения на абсолютные
+            db_action_data = py_action_data.copy()
+            db_action_data['calculated_start_time'] = calculated_start_time.strftime('%Y-%m-%dT%H:%M:%S')
+            db_action_data['calculated_end_time'] = calculated_end_time.strftime('%Y-%m-%dT%H:%M:%S')
+            
+            # Удаляем относительные поля, так как они не хранятся в БД
+            relative_fields = [
+                'relative_start_days', 'relative_start_hours', 'relative_start_minutes', 'relative_start_seconds',
+                'relative_end_days', 'relative_end_hours', 'relative_end_minutes', 'relative_end_seconds'
+            ]
+            for field in relative_fields:
+                if field in db_action_data:
+                    del db_action_data[field]
+
+            # Вызываем метод напрямую из database_manager, передавая ему подготовленные данные
+            if self.database_manager:
+                try:
+                    success = self.database_manager.create_action_execution(execution_id, db_action_data)
+                    if success:
+                        print(f"Python ApplicationData: Новое action_execution с относительным временем успешно добавлено к execution ID {execution_id}.")
+                        return True
+                    else:
+                        print(f"Python ApplicationData: Менеджер БД не смог добавить action_execution к execution ID {execution_id}.")
+                        return False
+                except Exception as e:
+                    print(f"Python ApplicationData: Исключение при добавлении action_execution к execution ID {execution_id} через database_manager: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return False
+            else:
+                print("Python ApplicationData: Ошибка - Нет подключения к БД SQLite.")
+                return False
+            
+        except Exception as e:
+            print(f"Python ApplicationData: Исключение при добавлении action_execution с относительным временем: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    @Slot(int, 'QVariant', result=bool)
+    def updateRelativeTimeActionExecution(self, action_execution_id: int, action_execution_data: 'QVariant') -> bool:
+        """
+        Обновляет action_execution с относительным временем.
+        Вычисляет абсолютное время на основе времени запуска алгоритма и относительных сдвигов.
+        :param action_execution_id: ID action_execution для обновления.
+        :param action_execution_data: QVariantMap (словарь) с новыми данными.
+        :return: True, если успешно, иначе False.
+        """
+        print(f"Python ApplicationData: Запрос на обновление action_execution с относительным временем ID {action_execution_id} с данными: {action_execution_data}")
+
+        # Преобразование QVariantMap в обычный словарь Python
+        if hasattr(action_execution_data, 'toVariant'):
+            python_data = action_execution_data.toVariant()
+        else:
+            python_data = action_execution_data
+
+        if not isinstance(python_data, dict):
+            print(f"Python ApplicationData: Ошибка - action_execution_data не является словарем. Тип: {type(python_data)}")
+            return False
+
+        if not isinstance(action_execution_id, int) or action_execution_id <= 0:
+            print(f"Python ApplicationData: Ошибка - некорректный action_execution_id: {action_execution_id}")
+            return False
+
+        # Получаем информацию о текущем action_execution и связанном execution
+        if not self.database_manager:
+            print("Python ApplicationData: Менеджер БД не инициализирован.")
+            return False
+
+        try:
+            # Получаем информацию о текущем action_execution
+            current_action = self.database_manager.get_action_execution_by_id(action_execution_id)
+            if not current_action:
+                print(f"Python ApplicationData: Action execution ID {action_execution_id} не найден.")
+                return False
+
+            # Получаем execution_id из текущего action_execution
+            execution_id = current_action['execution_id']
+
+            # Получаем время запуска алгоритма
+            execution_info = self.database_manager.get_algorithm_execution_by_id(execution_id)
+            if not execution_info or 'started_at' not in execution_info:
+                print(f"Python ApplicationData: Не найдено время запуска для execution ID {execution_id}")
+                return False
+
+            start_time = execution_info['started_at']
+            if isinstance(start_time, str):
+                # Преобразуем строку в datetime объект
+                start_time = datetime.datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+
+            # Вычисляем абсолютное время начала и окончания на основе относительных сдвигов
+            start_days = int(python_data.get('relative_start_days', 0))
+            start_hours = int(python_data.get('relative_start_hours', 0))
+            start_minutes = int(python_data.get('relative_start_minutes', 0))
+            start_seconds = int(python_data.get('relative_start_seconds', 0))
+
+            end_days = int(python_data.get('relative_end_days', 0))
+            end_hours = int(python_data.get('relative_end_hours', 0))
+            end_minutes = int(python_data.get('relative_end_minutes', 0))
+            end_seconds = int(python_data.get('relative_end_seconds', 0))
+
+            # Вычисляем абсолютные даты
+            calculated_start_time = start_time + datetime.timedelta(
+                days=start_days,
+                hours=start_hours,
+                minutes=start_minutes,
+                seconds=start_seconds
+            )
+
+            calculated_end_time = start_time + datetime.timedelta(
+                days=end_days,
+                hours=end_hours,
+                minutes=end_minutes,
+                seconds=end_seconds
+            )
+
+            # Подготовим данные для обновления в БД
+            # Заменяем относительные значения на абсолютные
+            db_action_data = python_data.copy()
+            db_action_data['calculated_start_time'] = calculated_start_time.strftime('%Y-%m-%dT%H:%M:%S')
+            db_action_data['calculated_end_time'] = calculated_end_time.strftime('%Y-%m-%dT%H:%M:%S')
+
+            # Удаляем относительные поля, так как они не хранятся в БД
+            relative_fields = [
+                'relative_start_days', 'relative_start_hours', 'relative_start_minutes', 'relative_start_seconds',
+                'relative_end_days', 'relative_end_hours', 'relative_end_minutes', 'relative_end_seconds'
+            ]
+            for field in relative_fields:
+                if field in db_action_data:
+                    del db_action_data[field]
+
+            # Вызываем метод напрямую из database_manager, передавая ему подготовленные данные
+            if self.database_manager:
+                try:
+                    success = self.database_manager.update_action_execution(action_execution_id, db_action_data)
+                    if success:
+                        print(f"Python ApplicationData: Action_execution с относительным временем ID {action_execution_id} успешно обновлено.")
+                        return True
+                    else:
+                        print(f"Python ApplicationData: Менеджер БД не смог обновить action_execution ID {action_execution_id}.")
+                        return False
+                except Exception as e:
+                    print(f"Python ApplicationData: Исключение при обновлении action_execution ID {action_execution_id} через database_manager: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return False
+            else:
+                print("Python ApplicationData: Ошибка - Нет подключения к БД SQLite.")
+                return False
+
+        except Exception as e:
+            print(f"Python ApplicationData: Исключение при обновлении action_execution с относительным временем ID {action_execution_id}: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
 
 def on_qml_loaded(obj, url):

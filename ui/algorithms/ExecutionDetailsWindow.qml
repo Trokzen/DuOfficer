@@ -348,6 +348,36 @@ Window {
             }
 
             Button {
+                text: "Добавить (относительное время)"
+                font.family: appData.fontFamily
+                font.pixelSize: appData.fontSize
+                font.bold: executionDetailsWindow.isFontBold(appData.fontStyle)
+                font.italic: executionDetailsWindow.isFontItalic(appData.fontStyle)
+                onClicked: {
+                    var component = Qt.createComponent("RelativeTimeActionExecutionEditorDialog.qml");
+                    if (component.status === Component.Ready) {
+                        var dialog = component.createObject(executionDetailsWindow, {
+                            "executionId": executionId,
+                            "isEditMode": false
+                        });
+                        if (dialog) {
+                            executionDetailsWindow.isDialogOpen = true;
+                            dialog.closed.connect(() => { executionDetailsWindow.isDialogOpen = false; });
+                            dialog.actionExecutionSaved.connect(function() {
+                                executionDetailsWindow.loadExecutionData();
+                                executionUpdated(executionId);
+                            });
+                            dialog.open();
+                        } else {
+                            showInfoMessage("Ошибка: Не удалось открыть диалог добавления действия с относительным временем.");
+                        }
+                    } else {
+                        showInfoMessage("Ошибка загрузки диалога добавления действия с относительным временем: " + component.errorString());
+                    }
+                }
+            }
+
+            Button {
                 text: "Авто"
                 font.family: appData.fontFamily
                 font.pixelSize: appData.fontSize

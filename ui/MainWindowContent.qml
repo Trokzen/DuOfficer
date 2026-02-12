@@ -572,6 +572,9 @@ Item {
                                 // Вместо прямого перехода — открываем Popup с паролем
                                 passwordProtectionPopup.open();
                                 passwordField.forceActiveFocus(); // Удобно для пользователя
+                            } else if (index === 0) {
+                                // Открываем диалог "О программе"
+                                aboutDialog.open();
                             } else {
                                 console.log("Нажата кнопка нижней панели: " + model.text);
                             }
@@ -829,4 +832,11 @@ Item {
             }
         }
     }
+
+    // --- Диалог "О программе" ---
+    AboutDialog {
+        id: aboutDialog
+        parent: rootItem
+    }
+    // --- ---
 }

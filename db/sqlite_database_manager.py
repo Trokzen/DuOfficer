@@ -61,7 +61,21 @@ class SQLiteDatabaseManager:
         logger.debug("Поддержка внешних ключей включена при инициализации БД.")
 
         # Читаем SQL-скрипт из файла и выполняем его
-        with open('db/init_sqlite_schema.sql', 'r', encoding='utf-8') as f:
+        import os
+        import sys
+
+        # Определяем путь к файлу в зависимости от того, запущено ли приложение как скрипт или exe
+        if getattr(sys, 'frozen', False):
+            # Приложение запущено как exe
+            script_dir = os.path.dirname(sys.executable)
+            # В собранном приложении файлы данных находятся в папке _internal
+            schema_path = os.path.join(script_dir, '_internal', 'db', 'init_sqlite_schema.sql')
+        else:
+            # Приложение запущено как скрипт
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            schema_path = os.path.join(script_dir, 'init_sqlite_schema.sql')
+
+        with open(schema_path, 'r', encoding='utf-8') as f:
             sql_script = f.read()
 
         # Выполняем скрипт
