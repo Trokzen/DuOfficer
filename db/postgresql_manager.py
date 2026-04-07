@@ -1101,7 +1101,7 @@ class PostgreSQLDatabaseManager:
         """
         Преобразует строку времени формата 'dd:hh:mm:ss' или 'hh:mm:ss' 
         в формат INTERVAL PostgreSQL, например '1 day 02:30:45' или '02:30:45'.
-        Также поддерживает 'dd:h:m:s' (без ведущих нулей).
+        Также поддерж��вает 'dd:h:m:s' (без ведущих нулей).
         :param time_str: Строка времени.
         :return: Форматированная строка INTERVAL для PostgreSQL или исходная строка, если формат не распознан.
         """
@@ -2558,7 +2558,8 @@ class PostgreSQLDatabaseManager:
             {
                 'id': int, # ID action_execution
                 'execution_id': int, # ID связанного algorithm_execution
-                'calculated_end_time': datetime.datetime, # Объект datetime
+                'calculated_start_time': datetime.datetime, # Объект datetime времени начала
+                'calculated_end_time': datetime.datetime, # Объект datetime времени окончания
                 'status': str, # Статус action_execution ('pending', 'in_progress', ...) - теперь без алиаса
                 'snapshot_description': str, # Описание действия
                 'execution_status': str # Статус algorithm_execution ('active', 'completed', ...)
@@ -2570,6 +2571,7 @@ class PostgreSQLDatabaseManager:
         SELECT
             ae.id,
             ae.execution_id,
+            ae.calculated_start_time,
             ae.calculated_end_time,
             ae.status, -- Явно указываем ae.status, он будет 'status' в словаре Python
             ae.snapshot_description,

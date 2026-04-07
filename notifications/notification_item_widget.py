@@ -1,8 +1,8 @@
 # notifications/notification_item_widget.py
 import sys
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit # <-- Добавлен QTextEdit для альтернативы
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QPalette, QFont
+from PySide6.QtGui import QPalette, QFont, QColor
 
 class NotificationItemWidget(QWidget):
     def __init__(self, title, message, icon_type, duration_ms, container_widget, parent=None):
@@ -23,9 +23,17 @@ class NotificationItemWidget(QWidget):
 
         # --- Настройка фона в зависимости от типа ---
         palette = self.palette()
-        if icon_type == "Warning":
-            palette.setColor(QPalette.Window, Qt.red)
+        if icon_type == "Error":
+            # Красный фон для ошибок (время истекло)
+            palette.setColor(QPalette.Window, QColor(244, 67, 54))  # Material Red 500
+        elif icon_type == "Warning":
+            # Желтый фон для предупреждений (осталось 5 минут)
+            palette.setColor(QPalette.Window, QColor(255, 193, 7))  # Material Amber 500
+        elif icon_type == "Success":
+            # Зеленый фон для успеха (начало действия)
+            palette.setColor(QPalette.Window, QColor(76, 175, 80))  # Material Green 500
         elif icon_type == "Information":
+            # Светло-серый фон для информационных уведомлений
             palette.setColor(QPalette.Window, Qt.lightGray)
         else:
             palette.setColor(QPalette.Window, Qt.white)

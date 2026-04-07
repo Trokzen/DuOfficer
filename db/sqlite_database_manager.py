@@ -61,7 +61,21 @@ class SQLiteDatabaseManager:
         logger.debug("Поддержка внешних ключей включена при инициализации БД.")
 
         # Читаем SQL-скрипт из файла и выполняем его
-        with open('db/init_sqlite_schema.sql', 'r', encoding='utf-8') as f:
+        import os
+        import sys
+
+        # Определяем путь к файлу в зависимости от того, запущено ли приложение как скрипт или exe
+        if getattr(sys, 'frozen', False):
+            # Приложение запущено как exe
+            script_dir = os.path.dirname(sys.executable)
+            # В собранном приложении файлы данных находятся в папке _internal
+            schema_path = os.path.join(script_dir, '_internal', 'db', 'init_sqlite_schema.sql')
+        else:
+            # Приложение запущено как скрипт
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            schema_path = os.path.join(script_dir, 'init_sqlite_schema.sql')
+
+        with open(schema_path, 'r', encoding='utf-8') as f:
             sql_script = f.read()
 
         # Выполняем скрипт
@@ -2681,8 +2695,9 @@ class SQLiteDatabaseManager:
             {
                 'id': int, # ID action_execution
                 'execution_id': int, # ID связанного algorithm_execution
-                'calculated_end_time': str, # Время в формате строки
-                'status': str, # Статус action_execution ('pending', 'in_progress', ...) 
+                'calculated_start_time': str, # Время начала в формате строки
+                'calculated_end_time': str, # Время окончания в формате строки
+                'status': str, # Статус action_execution ('pending', 'in_progress', ...)
                 'snapshot_description': str, # Описание действия
                 'execution_status': str # Статус algorithm_execution ('active', 'completed', ...)
             },
@@ -2693,6 +2708,7 @@ class SQLiteDatabaseManager:
         SELECT
             ae.id,
             ae.execution_id,
+            ae.calculated_start_time,
             ae.calculated_end_time,
             ae.status,
             ae.snapshot_description,
@@ -2715,11 +2731,12 @@ class SQLiteDatabaseManager:
                 result_dict = {
                     'id': row[0],
                     'execution_id': row[1],
-                    'calculated_end_time': row[2],
-                    'status': row[3],
-                    'snapshot_description': row[4],
-                    'execution_status': row[5],
-                    'snapshot_name': row[6]
+                    'calculated_start_time': row[2],
+                    'calculated_end_time': row[3],
+                    'status': row[4],
+                    'snapshot_description': row[5],
+                    'execution_status': row[6],
+                    'snapshot_name': row[7]
                 }
                 results.append(result_dict)
             cursor.close()
