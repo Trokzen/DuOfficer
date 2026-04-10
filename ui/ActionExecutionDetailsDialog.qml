@@ -18,8 +18,9 @@ Popup {
     property int executionId: -1
     property int currentActionIndex: -1
     property int totalActions: 0
-    property bool autoSwitch: true
+    property bool autoSwitch: false
     property bool isOverdue: false
+    property string currentStatus: "pending"
 
     // --- Таймеры ---
     Timer {
@@ -49,8 +50,31 @@ Popup {
     // --- ---
 
     // --- Функции ---
+    
+    // Получаем текущее местное время из appData
+    function getLocalNow() {
+        var dateStr = appData.localDate || ""
+        var timeStr = appData.localTime || ""
+        
+        if (!dateStr || !timeStr) return new Date() // Фоллбэк на системное, если данных нет
+
+        var dateParts = dateStr.split('.')
+        var timeParts = timeStr.split(':')
+        
+        if (dateParts.length === 3 && timeParts.length === 3) {
+            var day = parseInt(dateParts[0], 10)
+            var month = parseInt(dateParts[1], 10) - 1
+            var year = parseInt(dateParts[2], 10)
+            var hours = parseInt(timeParts[0], 10)
+            var minutes = parseInt(timeParts[1], 10)
+            var seconds = parseInt(timeParts[2], 10)
+            return new Date(year, month, day, hours, minutes, seconds)
+        }
+        return new Date()
+    }
+
     function updateCountdown() {
-        var now = new Date()
+        var now = getLocalNow()
         var endTimeText = calculatedEndTimeLabel.text
         if (!endTimeText || endTimeText === "Не задано") {
             remainingTimeLabel.text = "—"
@@ -83,7 +107,7 @@ Popup {
     }
 
     function checkOverdue() {
-        var now = new Date()
+        var now = getLocalNow()
         var endTimeText = calculatedEndTimeLabel.text
         if (!endTimeText || endTimeText === "Не задано") return
 
@@ -124,7 +148,8 @@ Popup {
         actionDetailsDialog.totalActions = actions.length
 
         // Название
-        actionNameLabel.text = "Мероприятие №" + action.number + ": " + (action.snapshot_description || "Без названия")
+        var actionNum = actionDetailsDialog.currentActionIndex + 1
+        actionNameLabel.text = "Мероприятие №" + actionNum + ": " + (action.snapshot_description || "Без названия")
 
         // Время начала
         calculatedStartTimeLabel.text = action.calculated_start_time ? formatDateTime(action.calculated_start_time) : "Не задано"
@@ -142,6 +167,8 @@ Popup {
         // Статус
         var statusText = ""
         var statusColor = "#95a5a6"
+        actionDetailsDialog.currentStatus = action.status || "pending"
+        
         if (action.status === "completed") {
             statusText = "✅ Выполнено"
             statusColor = "#27ae60"
@@ -170,7 +197,7 @@ Popup {
         }
 
         // Кому доложено
-        reportedToLabel.text = action.reported_to || "—"
+        reportedToHidden.text = action.reported_to || "—"
 
         // Справочные материалы организаций
         loadOrganizationsForAction()
@@ -234,6 +261,21 @@ Popup {
         var month = String(dt.getMonth() + 1).padStart(2, '0')
         var year = dt.getFullYear()
         return day + "." + month + "." + year + " " + h + ":" + m + ":" + s
+    }
+    
+    function getCurrentActionId() {
+        if (actionDetailsDialog.executionId <= 0 || actionDetailsDialog.currentActionIndex < 0) return -1
+        var actions = appData.getActionExecutionsByExecutionId(actionDetailsDialog.executionId)
+        if (actions && actionDetailsDialog.currentActionIndex < actions.length) {
+            return actions[actionDetailsDialog.currentActionIndex].id || -1
+        }
+        return -1
+    }
+    
+    function showMessageDialog(title, message) {
+        infoDialogTitle.text = title
+        infoDialogText.text = message
+        infoDialog.open()
     }
 
     // Фон
@@ -350,11 +392,15 @@ Popup {
                         readOnly: true
                         wrapMode: TextArea.Wrap
                         font.pixelSize: 13
-                        background: Rectangle { color: "#f8f9fa"; radius: 6; border.color: "#dee2e6"; border.width: 1 }
+                        background: Rectangle { 
+                            color: actionDetailsDialog.isOverdue ? "#f8d7da" : "#f8f9fa"
+                            Behavior on color { ColorAnimation { duration: 400 } }
+                            radius: 6; border.color: "#dee2e6"; border.width: 1 
+                        }
                     }
                 }
 
-                // --- Статус ---
+                // --- Статус (теперь кнопка) ---
                 Rectangle {
                     id: statusRectangle
                     Layout.fillWidth: true
@@ -371,22 +417,81 @@ Popup {
                         font.pixelSize: 16
                         font.bold: true
                     }
+
+                    // Делаем статус кликабельным
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onClicked: {
+                            var component = Qt.createComponent("algorithms/StatusChangeDialog.qml")
+                            if (component.status === Component.Ready) {
+                                var dialog = component.createObject(Overlay.overlay, {
+                                    "actionExecutionId": getCurrentActionId(),
+                                    "currentStatus": currentStatus
+                                })
+                                if (dialog) {
+                                    dialog.statusChanged.connect(function(actionId, newStatus) {
+                                        // Обновляем статус в БД
+                                        var success = appData.updateActionExecutionStatus(actionId, newStatus)
+                                        if (success) {
+                                            console.log("QML: Статус успешно обновлен на", newStatus)
+                                            // Перезагружаем данные действия
+                                            loadActionData()
+                                        } else {
+                                            console.error("QML: Ошибка обновления статуса")
+                                            showMessageDialog("Ошибка", "Не удалось обновить статус. Проверьте логи.")
+                                        }
+                                    })
+                                    dialog.open()
+                                }
+                            } else {
+                                console.error("QML: Ошибка создания StatusChangeDialog:", component.errorString())
+                            }
+                        }
+                    }
                 }
 
                 // --- Отчётные материалы и Кому доложено ---
                 RowLayout {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 120
-                    spacing: 15
+                    Layout.fillHeight: true
                     Layout.topMargin: 10
+                    spacing: 15
 
-                    // Отчётные материалы
+                    // Отчётные материалы (60% ширины)
                     ColumnLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
+                        Layout.preferredWidth: parent.width * 0.6
                         spacing: 5
 
-                        Label { text: "Отчётные материалы:"; font.pixelSize: 13; color: "#666" }
+                        // Кнопка-заголовок Отчетные материалы
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 30
+                            radius: 6
+                            color: "#e9ecef"
+                            border.color: "#ced4da"
+                            border.width: 1
+                            
+                            Text {
+                                anchors.centerIn: parent
+                                text: "📂 Отчётные материалы"
+                                font.pixelSize: 13
+                                font.bold: true
+                                color: "#495057"
+                            }
+                            
+                            MouseArea {
+                                id: mouseReportMaterials
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                hoverEnabled: true
+                                onClicked: showMessageDialog("Отчётные материалы", "Функция добавления материалов будет реализована в будущем.")
+                            }
+                        }
+
                         ScrollView {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
@@ -397,7 +502,10 @@ Popup {
                                 delegate: Rectangle {
                                     width: ListView.view.width
                                     height: 28
-                                    color: index % 2 ? "#f9f9f9" : "#ffffff"
+                                    color: actionDetailsDialog.isOverdue ? 
+                                        (index % 2 ? "#f5b7b1" : "#f8d7da") : 
+                                        (index % 2 ? "#f9f9f9" : "#ffffff")
+                                    Behavior on color { ColorAnimation { duration: 400 } }
                                     Text {
                                         anchors.fill: parent
                                         anchors.margins: 5
@@ -429,23 +537,64 @@ Popup {
                         }
                     }
 
-                    // Кому доложено
+                    // Кому доложено (40% ширины)
                     ColumnLayout {
-                        Layout.preferredWidth: 200
+                        Layout.fillWidth: true
                         Layout.fillHeight: true
+                        Layout.preferredWidth: parent.width * 0.4
                         spacing: 5
 
-                        Label { text: "Кому доложено:"; font.pixelSize: 13; color: "#666" }
-                        Label {
-                            id: reportedToLabel
-                            text: "—"
-                            font.pixelSize: 14
-                            wrapMode: Text.Wrap
+                        // Кнопка-заголовок Кому доложено
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 30
+                            radius: 6
+                            color: "#e9ecef"
+                            border.color: "#ced4da"
+                            border.width: 1
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "📢 Кому доложено"
+                                font.pixelSize: 13
+                                font.bold: true
+                                color: "#495057"
+                            }
+
+                            MouseArea {
+                                id: mouseReportedTo
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                hoverEnabled: true
+                                onClicked: showMessageDialog("Кому доложено", "Функция ввода информации о докладе будет реализована в будущем.")
+                            }
+                        }
+
+                        // Поле текста "Кому доложено"
+                        Rectangle {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
+                            radius: 4
+                            color: "#ffffff"
+                            border.color: "#dee2e6"
+                            border.width: 1
+
+                            TextArea {
+                                id: reportedToArea
+                                anchors.fill: parent
+                                anchors.margins: 5
+                                readOnly: true
+                                wrapMode: TextArea.Wrap
+                                font.pixelSize: 14
+                                text: reportedToHidden.text
+                                background: Rectangle { color: "transparent" }
+                            }
                         }
                     }
                 }
+                
+                // Скрытый элемент для хранения данных "Кому доложено" (для совместимости с логикой обновления)
+                Label { id: reportedToHidden; visible: false; text: "—" }
 
                 // --- Кнопки навигации ---
                 RowLayout {
@@ -595,7 +744,10 @@ Popup {
                         delegate: Rectangle {
                             width: ListView.view.width
                             height: 45
-                            color: index % 2 ? "#f9f9f9" : "#ffffff"
+                            color: actionDetailsDialog.isOverdue ? 
+                                (index % 2 ? "#f5b7b1" : "#f8d7da") : 
+                                (index % 2 ? "#f9f9f9" : "#ffffff")
+                            Behavior on color { ColorAnimation { duration: 400 } }
                             border.color: "#eee"
                             border.width: 1
 
@@ -748,6 +900,40 @@ Popup {
                         }
                     }
                 }
+            }
+        }
+    }
+    
+    // --- Информационный диалог ---
+    Dialog {
+        id: infoDialog
+        title: "Информация"
+        standardButtons: Dialog.Close
+        modal: true
+        x: (parent.width - width) / 2
+        y: (parent.height - height) / 2
+        width: 400
+        height: 200
+        
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+            
+            Label {
+                id: infoDialogTitle
+                text: "Заголовок"
+                font.bold: true
+                font.pixelSize: 16
+                Layout.fillWidth: true
+            }
+            
+            Label {
+                id: infoDialogText
+                text: "Сообщение"
+                font.pixelSize: 14
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+                Layout.fillHeight: true
             }
         }
     }

@@ -3425,6 +3425,18 @@ class ApplicationData(QObject):
         return []
 
 
+    @Slot(int, str, result=bool)
+    def updateActionExecutionStatus(self, action_execution_id: int, new_status: str) -> bool:
+        """Обновить статус выполнения действия."""
+        if self.database_manager:
+            try:
+                return self.database_manager.update_action_execution_status(action_execution_id, new_status)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при обновлении статуса: {e}")
+                return False
+        return False
+
+
 def on_qml_loaded(obj, url):
     if obj and url.fileName() == "main.qml":
         print("QML main.qml загружен. Устанавливаем соединения сигналов...")

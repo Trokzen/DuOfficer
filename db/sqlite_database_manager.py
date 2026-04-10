@@ -2573,6 +2573,37 @@ class SQLiteDatabaseManager:
 
 
 
+    def update_action_execution_status(self, action_execution_id: int, new_status: str) -> bool:
+        """Обновляет только статус action_execution."""
+        if not isinstance(action_execution_id, int) or action_execution_id <= 0:
+            logger.error("Некорректный ID action_execution для обновления статуса.")
+            return False
+        
+        valid_statuses = ['pending', 'in_progress', 'completed', 'skipped']
+        if new_status not in valid_statuses:
+            logger.error(f"Недопустимый статус: {new_status}. Допустимые: {valid_statuses}")
+            return False
+
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE action_executions SET status = ?, updated_at = datetime('now', 'localtime') WHERE id = ?;",
+                (new_status, action_execution_id)
+            )
+            conn.commit()
+            affected = cursor.rowcount
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Статус action_execution ID {action_execution_id} обновлен на '{new_status}'. Затронуто строк: {affected}")
+            return affected > 0
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка БД при обновлении статуса action_execution ID {action_execution_id}: {e}")
+            return False
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при обновлении статуса action_execution ID {action_execution_id}: {e}")
+            return False
+
     def get_action_execution_by_id(self, action_execution_id: int) -> Optional[Dict[str, Any]]:
         """
         Получает данные конкретного выполнения действия (action_execution) по его ID.
