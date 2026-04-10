@@ -222,3 +222,48 @@ CREATE INDEX IF NOT EXISTS idx_events_responsible_user_id ON events(responsible_
 CREATE INDEX IF NOT EXISTS idx_event_occurrences_event_id ON event_occurrences(event_id);
 CREATE INDEX IF NOT EXISTS idx_event_occurrences_calculated_start_datetime ON event_occurrences(calculated_start_datetime);
 CREATE INDEX IF NOT EXISTS idx_event_occurrences_status ON event_occurrences(status);
+
+-- === НОВЫЕ ТАБЛИЦЫ ДЛЯ ОРГАНИЗАЦИЙ И СПРАВОЧНЫХ МАТЕРИАЛОВ ===
+
+-- Таблица для хранения справочника организаций
+CREATE TABLE IF NOT EXISTS organizations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,              -- Уникальный идентификатор организации
+    name TEXT NOT NULL,                                -- Наименование организации
+    phone TEXT,                                        -- Номер телефона организации
+    contact_person TEXT,                               -- Контактное лицо
+    notes TEXT,                                        -- Дополнительные заметки
+    created_at TEXT DEFAULT (datetime('now', 'localtime')), -- Дата и время создания записи
+    updated_at TEXT DEFAULT (datetime('now', 'localtime'))  -- Дата и время последнего обновления записи
+);
+
+-- Таблица для связи организаций с действиями (многие-ко-многим)
+CREATE TABLE IF NOT EXISTS action_execution_organizations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,              -- Уникальный идентификатор связи
+    action_execution_id INTEGER NOT NULL,              -- Ссылка на выполнение действия
+    organization_id INTEGER NOT NULL,                  -- Ссылка на организацию
+    created_at TEXT DEFAULT (datetime('now', 'localtime')), -- Дата и время создания связи
+    FOREIGN KEY (action_execution_id) REFERENCES action_executions(id) ON DELETE CASCADE,
+    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
+
+-- Таблица для хранения справочных материалов организаций
+CREATE TABLE IF NOT EXISTS organization_reference_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,              -- Уникальный идентификатор файла
+    organization_id INTEGER NOT NULL,                  -- Ссылка на организацию
+    file_path TEXT NOT NULL,                           -- Путь к файлу на диске
+    file_type TEXT DEFAULT 'other',                    -- Тип файла: word, excel, pdf, other
+    created_at TEXT DEFAULT (datetime('now', 'localtime')), -- Дата и время добавления файла
+    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CHECK (file_type IN ('word', 'excel', 'pdf', 'other'))
+);
+
+-- === ИНДЕКСЫ ДЛЯ ОРГАНИЗАЦИЙ ===
+
+-- Индекс для ускорения поиска связей по action_execution
+CREATE INDEX IF NOT EXISTS idx_ae_orgs_action_execution_id ON action_execution_organizations(action_execution_id);
+
+-- Индекс для ускорения поиска связей по organization
+CREATE INDEX IF NOT EXISTS idx_ae_orgs_organization_id ON action_execution_organizations(organization_id);
+
+-- Индекс для ускорения поиска файлов по организации
+CREATE INDEX IF NOT EXISTS idx_org_ref_files_organization_id ON organization_reference_files(organization_id);

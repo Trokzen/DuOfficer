@@ -2600,6 +2600,280 @@ class PostgreSQLDatabaseManager:
             return []
     # --- Конец метода get_active_action_executions_with_details ---
 
+    # ========================================================================
+    # МЕТОДЫ ДЛЯ РАБОТЫ С ОРГАНИЗАЦИЯМИ
+    # ========================================================================
+
+    def get_all_organizations(self) -> list:
+        """Получить все организации из справочника."""
+        try:
+            conn = self._get_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT * FROM app_schema.organizations ORDER BY name;")
+                    rows = cursor.fetchall()
+                    organizations = [dict(row) for row in rows]
+                    logger.info(f"PostgreSQLDatabaseManager: Получено {len(organizations)} организаций.")
+                    return organizations
+        except Exception as e:
+            logger.error(f"PostgreSQLDatabaseManager: Ошибка при получении организаций: {e}")
+            return []
+        except Exception as e:
+            logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при получении организаций: {e}")
+            return []
+
+    def create_organization(self, org_data: dict) -> int:
+        """Создать новую организацию. Возвращает ID или 0 при ошибке."""
+        try:
+            conn = self._get_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "INSERT INTO app_schema.organizations (name, phone, contact_person, notes) VALUES (%s, %s, %s, %s) RETURNING id;",
+                        (
+                            org_data.get('name', ''),
+                            org_data.get('phone', None),
+                            org_data.get('contact_person', None),
+                            org_data.get('notes', None)
+                        )
+                    )
+                    result = cursor.fetchone()
+                    conn.commit()
+                    new_id = result['id'] if result else 0
+                    logger.info(f"PostgreSQLDatabaseManager: Создана организация с ID {new_id}.")
+                    return new_id
+        except Exception as e:
+            logger.error(f"PostgreSQLDatabaseManager: Ошибка при создании организации: {e}")
+            if conn:
+                conn.rollback()
+            return 0
+        except Exception as e:
+            logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при создании организации: {e}")
+            if conn:
+                conn.rollback()
+            return 0
+
+    def update_organization(self, org_id: int, org_data: dict) -> bool:
+        """Обновить данные организации."""
+        try:
+            conn = self._get_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "UPDATE app_schema.organizations SET name = %s, phone = %s, contact_person = %s, notes = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s;",
+                        (
+                            org_data.get('name', ''),
+                            org_data.get('phone', None),
+                            org_data.get('contact_person', None),
+                            org_data.get('notes', None),
+                            org_id
+                        )
+                    )
+                    conn.commit()
+                    affected_rows = cursor.rowcount
+                    logger.info(f"PostgreSQLDatabaseManager: Обновлено {affected_rows} записей организации с ID {org_id}.")
+                    return affected_rows > 0
+        except Exception as e:
+            logger.error(f"PostgreSQLDatabaseManager: Ошибка при обновлении организации: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        except Exception as e:
+            logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при обновлении организации: {e}")
+            if conn:
+                conn.rollback()
+            return False
+
+    def delete_organization(self, org_id: int) -> bool:
+        """Удалить организацию."""
+        try:
+            conn = self._get_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("DELETE FROM app_schema.organizations WHERE id = %s;", (org_id,))
+                    conn.commit()
+                    affected_rows = cursor.rowcount
+                    logger.info(f"PostgreSQLDatabaseManager: Удалено {affected_rows} организаций с ID {org_id}.")
+                    return affected_rows > 0
+        except Exception as e:
+            logger.error(f"PostgreSQLDatabaseManager: Ошибка при удалении организации: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        except Exception as e:
+            logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при удалении организации: {e}")
+            if conn:
+                conn.rollback()
+            return False
+
+    def get_organization_by_id(self, org_id: int) -> dict | None:
+        """Получить организацию по ID."""
+        try:
+            conn = self._get_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT * FROM app_schema.organizations WHERE id = %s;", (org_id,))
+                    row = cursor.fetchone()
+                    return dict(row) if row else None
+        except Exception as e:
+            logger.error(f"PostgreSQLDatabaseManager: Ошибка при получении организации по ID {org_id}: {e}")
+            return None
+        except Exception as e:
+            logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при получении организации по ID {org_id}: {e}")
+            return None
+
+    # ========================================================================
+    # МЕТОДЫ ДЛЯ РАБОТЫ С СПРАВОЧНЫМИ ФАЙЛАМИ ОРГАНИЗАЦИЙ
+    # ========================================================================
+
+    def get_organization_reference_files(self, org_id: int) -> list:
+        """Получить все справочные файлы организации."""
+        try:
+            conn = self._get_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT * FROM app_schema.organization_reference_files WHERE organization_id = %s ORDER BY file_type, file_path;",
+                        (org_id,)
+                    )
+                    rows = cursor.fetchall()
+                    files = [dict(row) for row in rows]
+                    logger.info(f"PostgreSQLDatabaseManager: Получено {len(files)} файлов для организации ID {org_id}.")
+                    return files
+        except Exception as e:
+            logger.error(f"PostgreSQLDatabaseManager: Ошибка при получении файлов для организации ID {org_id}: {e}")
+            return []
+        except Exception as e:
+            logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при получении файлов для организации ID {org_id}: {e}")
+            return []
+
+    def add_organization_reference_file(self, org_id: int, file_path: str, file_type: str = 'other') -> int:
+        """Добавить справочный файл к организации. Возвращает ID или 0 при ошибке."""
+        try:
+            conn = self._get_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "INSERT INTO app_schema.organization_reference_files (organization_id, file_path, file_type) VALUES (%s, %s, %s) RETURNING id;",
+                        (org_id, file_path, file_type)
+                    )
+                    result = cursor.fetchone()
+                    conn.commit()
+                    new_id = result['id'] if result else 0
+                    logger.info(f"PostgreSQLDatabaseManager: Добавлен файл с ID {new_id} для организации ID {org_id}.")
+                    return new_id
+        except Exception as e:
+            logger.error(f"PostgreSQLDatabaseManager: Ошибка при добавлении файла для организации ID {org_id}: {e}")
+            if conn:
+                conn.rollback()
+            return 0
+        except Exception as e:
+            logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при добавлении файла для организации ID {org_id}: {e}")
+            if conn:
+                conn.rollback()
+            return 0
+
+    def delete_organization_reference_file(self, file_id: int) -> bool:
+        """Удалить справочный файл организации."""
+        try:
+            conn = self._get_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("DELETE FROM app_schema.organization_reference_files WHERE id = %s;", (file_id,))
+                    conn.commit()
+                    affected_rows = cursor.rowcount
+                    logger.info(f"PostgreSQLDatabaseManager: Удалено {affected_rows} файлов с ID {file_id}.")
+                    return affected_rows > 0
+        except Exception as e:
+            logger.error(f"PostgreSQLDatabaseManager: Ошибка при удалении файла ID {file_id}: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        except Exception as e:
+            logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при удалении файла ID {file_id}: {e}")
+            if conn:
+                conn.rollback()
+            return False
+
+    # ========================================================================
+    # МЕТОДЫ ДЛЯ СВЯЗИ ОРГАНИЗАЦИЙ С ДЕЙСТВИЯМИ
+    # ========================================================================
+
+    def get_organizations_for_action_execution(self, action_execution_id: int) -> list:
+        """Получить все организации, привязанные к действию."""
+        try:
+            conn = self._get_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        SELECT o.*
+                        FROM app_schema.organizations o
+                        INNER JOIN app_schema.action_execution_organizations aeo ON o.id = aeo.organization_id
+                        WHERE aeo.action_execution_id = %s
+                        ORDER BY o.name;
+                    """, (action_execution_id,))
+                    rows = cursor.fetchall()
+                    organizations = [dict(row) for row in rows]
+                    logger.info(f"PostgreSQLDatabaseManager: Получено {len(organizations)} организаций для действия ID {action_execution_id}.")
+                    return organizations
+        except Exception as e:
+            logger.error(f"PostgreSQLDatabaseManager: Ошибка при получении организаций для действия ID {action_execution_id}: {e}")
+            return []
+        except Exception as e:
+            logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при получении организаций для действия ID {action_execution_id}: {e}")
+            return []
+
+    def add_organization_to_action_execution(self, action_execution_id: int, organization_id: int) -> int:
+        """Привязать организацию к действию. Возвращает ID связи или 0 при ошибке."""
+        try:
+            conn = self._get_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "INSERT INTO app_schema.action_execution_organizations (action_execution_id, organization_id) VALUES (%s, %s) RETURNING id;",
+                        (action_execution_id, organization_id)
+                    )
+                    result = cursor.fetchone()
+                    conn.commit()
+                    new_id = result['id'] if result else 0
+                    logger.info(f"PostgreSQLDatabaseManager: Организация ID {organization_id} привязана к действию ID {action_execution_id}.")
+                    return new_id
+        except Exception as e:
+            logger.error(f"PostgreSQLDatabaseManager: Ошибка при привязке организации к действию: {e}")
+            if conn:
+                conn.rollback()
+            return 0
+        except Exception as e:
+            logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при привязке организации к действию: {e}")
+            if conn:
+                conn.rollback()
+            return 0
+
+    def remove_organization_from_action_execution(self, action_execution_id: int, organization_id: int) -> bool:
+        """Отвязать организацию от действия."""
+        try:
+            conn = self._get_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "DELETE FROM app_schema.action_execution_organizations WHERE action_execution_id = %s AND organization_id = %s;",
+                        (action_execution_id, organization_id)
+                    )
+                    conn.commit()
+                    affected_rows = cursor.rowcount
+                    logger.info(f"PostgreSQLDatabaseManager: Отвязано {affected_rows} организаций от действия ID {action_execution_id}.")
+                    return affected_rows > 0
+        except Exception as e:
+            logger.error(f"PostgreSQLDatabaseManager: Ошибка при отвязке организации от действия: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        except Exception as e:
+            logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при отвязке организации от действия: {e}")
+            if conn:
+                conn.rollback()
+            return False
+
 
 # --- Пример использования (для тестирования модуля отдельно) ---
 if __name__ == "__main__":

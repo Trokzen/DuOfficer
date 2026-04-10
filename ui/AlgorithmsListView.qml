@@ -135,144 +135,271 @@ Item {
 
             // Надпись "Управление алгоритмами" УДАЛЕНА
 
-            Button {
-                text: "Добавить"
-                Layout.fillWidth: true
-                onClicked: algorithmsListViewRoot.addAlgorithmRequested()
-            }
-
-            Button {
-                text: "Редактировать"
-                Layout.fillWidth: true
-                enabled: listView.currentIndex !== -1
-                onClicked: {
-                    var index = listView.currentIndex
-                    if (index !== -1) {
-                        var algData = algorithmsModel.get(index)
-                        algorithmsListViewRoot.editAlgorithmRequested(algData)
-                    }
+            Rectangle {
+                Layout.preferredWidth: parent.width
+                Layout.preferredHeight: 36
+                radius: 8
+                color: {
+                    if (addAlgBtn.pressed) return "#218c3d"
+                    if (addAlgBtn.hovered) return "#2ecc71"
+                    return "#27ae60"
+                }
+                Behavior on color { ColorAnimation { duration: 150 } }
+                MouseArea {
+                    id: addAlgBtn
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: algorithmsListViewRoot.addAlgorithmRequested()
+                }
+                Text {
+                    anchors.centerIn: parent
+                    text: "➕ Добавить"
+                    color: "#ffffff"
+                    font.pixelSize: 13
+                    font.bold: true
                 }
             }
 
-            Button {
-                text: "Удалить"
-                Layout.fillWidth: true
-                enabled: listView.currentIndex !== -1
-                onClicked: {
-                    var index = listView.currentIndex
-                    if (index !== -1) {
-                        var algId = algorithmsModel.get(index).id
-                        algorithmsListViewRoot.deleteAlgorithmRequested(algId)
+            Rectangle {
+                Layout.preferredWidth: parent.width
+                Layout.preferredHeight: 36
+                radius: 8
+                color: {
+                    if (editAlgBtn.pressed) return "#c9951d"
+                    if (editAlgBtn.hovered) return "#f39c12"
+                    return "#f1c40f"
+                }
+                Behavior on color { ColorAnimation { duration: 150 } }
+                opacity: listView.currentIndex !== -1 ? 1.0 : 0.5
+                MouseArea {
+                    id: editAlgBtn
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    enabled: listView.currentIndex !== -1
+                    onClicked: {
+                        var index = listView.currentIndex
+                        if (index !== -1) {
+                            var algData = algorithmsModel.get(index)
+                            algorithmsListViewRoot.editAlgorithmRequested(algData)
+                        }
                     }
+                }
+                Text {
+                    anchors.centerIn: parent
+                    text: "✏️ Редактировать"
+                    color: "#2c3e50"
+                    font.pixelSize: 13
+                    font.bold: true
                 }
             }
 
-            Button {
-                text: "Дублировать"
-                Layout.fillWidth: true
-                enabled: listView.currentIndex !== -1
-                onClicked: {
-                    var index = listView.currentIndex
-                    if (index !== -1) {
-                        var algId = algorithmsModel.get(index).id
-                        algorithmsListViewRoot.duplicateAlgorithmRequested(algId)
+            Rectangle {
+                Layout.preferredWidth: parent.width
+                Layout.preferredHeight: 36
+                radius: 8
+                color: {
+                    if (delAlgBtn.pressed) return "#c0392b"
+                    if (delAlgBtn.hovered) return "#e74c3c"
+                    return "#e8453c"
+                }
+                Behavior on color { ColorAnimation { duration: 150 } }
+                opacity: listView.currentIndex !== -1 ? 1.0 : 0.5
+                MouseArea {
+                    id: delAlgBtn
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    enabled: listView.currentIndex !== -1
+                    onClicked: {
+                        var index = listView.currentIndex
+                        if (index !== -1) {
+                            var algId = algorithmsModel.get(index).id
+                            algorithmsListViewRoot.deleteAlgorithmRequested(algId)
+                        }
                     }
+                }
+                Text {
+                    anchors.centerIn: parent
+                    text: "🗑️ Удалить"
+                    color: "#ffffff"
+                    font.pixelSize: 13
+                    font.bold: true
+                }
+            }
+
+            Rectangle {
+                Layout.preferredWidth: parent.width
+                Layout.preferredHeight: 36
+                radius: 8
+                color: {
+                    if (dupAlgBtn.pressed) return "#8e44ad"
+                    if (dupAlgBtn.hovered) return "#9b59b6"
+                    return "#a569bd"
+                }
+                Behavior on color { ColorAnimation { duration: 150 } }
+                opacity: listView.currentIndex !== -1 ? 1.0 : 0.5
+                MouseArea {
+                    id: dupAlgBtn
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    enabled: listView.currentIndex !== -1
+                    onClicked: {
+                        var index = listView.currentIndex
+                        if (index !== -1) {
+                            var algId = algorithmsModel.get(index).id
+                            algorithmsListViewRoot.duplicateAlgorithmRequested(algId)
+                        }
+                    }
+                }
+                Text {
+                    anchors.centerIn: parent
+                    text: "📋 Дублировать"
+                    color: "#ffffff"
+                    font.pixelSize: 13
+                    font.bold: true
                 }
             }
             
             // --- Кнопка для редактирования действий ---
-            Button {
-                text: "Редактировать действия"
-                Layout.fillWidth: true
-                enabled: listView.currentIndex !== -1
-                onClicked: {
-                    var index = listView.currentIndex
-                    if (index !== -1) {
-                        var algData = algorithmsModel.get(index)
-                        // Передаем полные данные алгоритма
-                        algorithmsListViewRoot.editActionsRequested(algData)
+            Rectangle {
+                Layout.preferredWidth: parent.width
+                Layout.preferredHeight: 36
+                radius: 8
+                color: {
+                    if (editActBtn.pressed) return "#1a6e8e"
+                    if (editActBtn.hovered) return "#2980b9"
+                    return "#3498db"
+                }
+                Behavior on color { ColorAnimation { duration: 150 } }
+                opacity: listView.currentIndex !== -1 ? 1.0 : 0.5
+                MouseArea {
+                    id: editActBtn
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    enabled: listView.currentIndex !== -1
+                    onClicked: {
+                        var index = listView.currentIndex
+                        if (index !== -1) {
+                            var algData = algorithmsModel.get(index)
+                            algorithmsListViewRoot.editActionsRequested(algData)
+                        }
                     }
+                }
+                Text {
+                    anchors.centerIn: parent
+                    text: "📝 Действия"
+                    color: "#ffffff"
+                    font.pixelSize: 13
+                    font.bold: true
                 }
             }
             // --- ---
             
             // --- НОВОЕ: Кнопки ранжирования ---
-            Button {
-                text: "▲ Вверх"
-                // --- ИЗМЕНЕНО: Заполняем ширину, как другие кнопки ---
-                Layout.fillWidth: true // <-- НОВОЕ
-                // --- ---
-                // Включена, если выбран не первый элемент
-                enabled: listView.currentIndex !== -1 && listView.currentIndex > 0 
-                onClicked: {
-                    var index = listView.currentIndex;
-                    if (index > 0) { // Дополнительная проверка
-                        var algId = algorithmsModel.get(index).id;
-                        console.log("QML AlgorithmsListView: Запрошено перемещение алгоритма ID", algId, "вверх.");
-                        var result = appData.moveAlgorithmUp(algId);
-                        if (result === true) {
-                            console.log("QML AlgorithmsListView: Алгоритм ID", algId, "перемещен вверх успешно.");
-                            // --- ИЗМЕНЕНО: Перезагружаем список и сохраняем/восстанавливаем выделение ---
-                            // Сохраняем ID перемещенного алгоритма
-                            var movedAlgorithmId = algId;
-                            // Перезагружаем список
-                            algorithmsListViewRoot.loadAlgorithms();
-                            // После перезагрузки пытаемся восстановить выделение
-                            // Ищем новый индекс алгоритма по его ID
-                            for (var i = 0; i < algorithmsModel.count; i++) {
-                                if (algorithmsModel.get(i).id === movedAlgorithmId) {
-                                    listView.currentIndex = i;
-                                    console.log("QML AlgorithmsListView: Выделение восстановлено на алгоритме ID", movedAlgorithmId, "на новой позиции", i);
-                                    break;
+            Rectangle {
+                Layout.preferredWidth: parent.width
+                Layout.preferredHeight: 36
+                radius: 8
+                color: {
+                    if (upAlgBtn.pressed) return "#5d6d7e"
+                    if (upAlgBtn.hovered) return "#85929e"
+                    return "#95a5a6"
+                }
+                Behavior on color { ColorAnimation { duration: 150 } }
+                enabled: listView.currentIndex !== -1 && listView.currentIndex > 0
+                opacity: (listView.currentIndex !== -1 && listView.currentIndex > 0) ? 1.0 : 0.5
+                MouseArea {
+                    id: upAlgBtn
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    enabled: parent.enabled
+                    onClicked: {
+                        var index = listView.currentIndex;
+                        if (index > 0) {
+                            var algId = algorithmsModel.get(index).id;
+                            console.log("QML AlgorithmsListView: Запрошено перемещение алгоритма ID", algId, "вверх.");
+                            var result = appData.moveAlgorithmUp(algId);
+                            if (result === true) {
+                                console.log("QML AlgorithmsListView: Алгоритм ID", algId, "перемещен вверх успешно.");
+                                var movedAlgorithmId = algId;
+                                algorithmsListViewRoot.loadAlgorithms();
+                                for (var i = 0; i < algorithmsModel.count; i++) {
+                                    if (algorithmsModel.get(i).id === movedAlgorithmId) {
+                                        listView.currentIndex = i;
+                                        console.log("QML AlgorithmsListView: Выделение восстановлено на алгоритме ID", movedAlgorithmId, "на новой позиции", i);
+                                        break;
+                                    }
                                 }
+                            } else {
+                                console.warn("QML AlgorithmsListView: Ошибка перемещения алгоритма ID", algId, "вверх. Результат:", result);
                             }
-                            // --- ---
                         } else {
-                            console.warn("QML AlgorithmsListView: Ошибка перемещения алгоритма ID", algId, "вверх. Результат:", result);
-                            // TODO: Отобразить ошибку пользователю
+                            console.log("QML AlgorithmsListView: Перемещение вверх невозможно.");
                         }
-                    } else {
-                        console.log("QML AlgorithmsListView: Перемещение вверх невозможно: выбран первый элемент или элемент не выбран.");
                     }
                 }
+                Text {
+                    anchors.centerIn: parent
+                    text: "⬆️ Вверх"
+                    color: "#ffffff"
+                    font.pixelSize: 13
+                    font.bold: true
+                }
             }
-            Button {
-                text: "▼ Вниз"
-                // --- ИЗМЕНЕНО: Заполняем ширину, как другие кнопки ---
-                Layout.fillWidth: true // <-- НОВОЕ
-                // --- ---
-                // Включена, если выбран не последний элемент
-                enabled: listView.currentIndex !== -1 && listView.currentIndex < (algorithmsModel.count - 1) 
-                onClicked: {
-                    var index = listView.currentIndex;
-                    if (index !== -1 && index < (algorithmsModel.count - 1)) { // Дополнительная проверка
-                        var algId = algorithmsModel.get(index).id;
-                        console.log("QML AlgorithmsListView: Запрошено перемещение алгоритма ID", algId, "вниз.");
-                        var result = appData.moveAlgorithmDown(algId);
-                        if (result === true) {
-                            console.log("QML AlgorithmsListView: Алгоритм ID", algId, "перемещен вниз успешно.");
-                            // --- ИЗМЕНЕНО: Перезагружаем список и сохраняем/восстанавливаем выделение ---
-                            // Сохраняем ID перемещенного алгоритма
-                            var movedAlgorithmId = algId;
-                            // Перезагружаем список
-                            algorithmsListViewRoot.loadAlgorithms();
-                            // После перезагрузки пытаемся восстановить выделение
-                            // Ищем новый индекс алгоритма по его ID
-                            for (var i = 0; i < algorithmsModel.count; i++) {
-                                if (algorithmsModel.get(i).id === movedAlgorithmId) {
-                                    listView.currentIndex = i;
-                                    console.log("QML AlgorithmsListView: Выделение восстановлено на алгоритме ID", movedAlgorithmId, "на новой позиции", i);
-                                    break;
+            Rectangle {
+                Layout.preferredWidth: parent.width
+                Layout.preferredHeight: 36
+                radius: 8
+                color: {
+                    if (downAlgBtn.pressed) return "#5d6d7e"
+                    if (downAlgBtn.hovered) return "#85929e"
+                    return "#95a5a6"
+                }
+                Behavior on color { ColorAnimation { duration: 150 } }
+                enabled: listView.currentIndex !== -1 && listView.currentIndex < (algorithmsModel.count - 1)
+                opacity: (listView.currentIndex !== -1 && listView.currentIndex < (algorithmsModel.count - 1)) ? 1.0 : 0.5
+                MouseArea {
+                    id: downAlgBtn
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    enabled: parent.enabled
+                    onClicked: {
+                        var index = listView.currentIndex;
+                        if (index !== -1 && index < (algorithmsModel.count - 1)) {
+                            var algId = algorithmsModel.get(index).id;
+                            console.log("QML AlgorithmsListView: Запрошено перемещение алгоритма ID", algId, "вниз.");
+                            var result = appData.moveAlgorithmDown(algId);
+                            if (result === true) {
+                                console.log("QML AlgorithmsListView: Алгоритм ID", algId, "перемещен вниз успешно.");
+                                var movedAlgorithmId = algId;
+                                algorithmsListViewRoot.loadAlgorithms();
+                                for (var i = 0; i < algorithmsModel.count; i++) {
+                                    if (algorithmsModel.get(i).id === movedAlgorithmId) {
+                                        listView.currentIndex = i;
+                                        console.log("QML AlgorithmsListView: Выделение восстановлено на алгоритме ID", movedAlgorithmId, "на новой позиции", i);
+                                        break;
+                                    }
                                 }
+                            } else {
+                                console.warn("QML AlgorithmsListView: Ошибка перемещения алгоритма ID", algId, "вниз.");
                             }
-                            // --- ---
                         } else {
-                            console.warn("QML AlgorithmsListView: Ошибка перемещения алгоритма ID", algId, "вниз. Результат:", result);
-                            // TODO: Отобразить ошибку пользователю
+                            console.log("QML AlgorithmsListView: Перемещение вниз невозможно.");
                         }
-                    } else {
-                        console.log("QML AlgorithmsListView: Перемещение вниз невозможно: выбран последний элемент, элемент не выбран или список пуст.");
                     }
+                }
+                Text {
+                    anchors.centerIn: parent
+                    text: "⬇️ Вниз"
+                    color: "#ffffff"
+                    font.pixelSize: 13
+                    font.bold: true
                 }
             }
             // --- ---

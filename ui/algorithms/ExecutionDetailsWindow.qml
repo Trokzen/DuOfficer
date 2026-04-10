@@ -560,6 +560,29 @@ Window {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
+                                    if (row >= 0 && row < executionDetailsWindow.cachedActionsList.length) {
+                                        var component = Qt.createComponent("../ActionExecutionDetailsDialog.qml")
+                                        if (component.status === Component.Ready) {
+                                            var dialog = component.createObject(executionDetailsWindow, {
+                                                "executionId": executionId,
+                                                "currentActionIndex": row
+                                            })
+                                            if (dialog) {
+                                                console.log("QML: Dialog opened for row", row)
+                                                executionDetailsWindow.isDialogOpen = true
+                                                dialog.closed.connect(function() {
+                                                    executionDetailsWindow.isDialogOpen = false
+                                                })
+                                                dialog.open()
+                                            } else {
+                                                showInfoMessage("Ошибка создания окна деталей действия.")
+                                            }
+                                        } else {
+                                            showInfoMessage("Ошибка загрузки окна деталей действия: " + component.errorString())
+                                        }
+                                    }
+                                }
+                                onDoubleClicked: {
                                     fullDescriptionDialog.descriptionText = model.display || "";
                                     fullDescriptionDialog.open();
                                 }

@@ -3257,6 +3257,149 @@ class ApplicationData(QObject):
             return False
 
 
+    # ========================================================================
+    # СЛОТЫ ДЛЯ РАБОТЫ С ОРГАНИЗАЦИЯМИ (QML)
+    # ========================================================================
+
+    @Slot(result='QVariant')
+    def getAllOrganizations(self):
+        """Получить все организации для QML."""
+        if self.database_manager:
+            try:
+                result = self.database_manager.get_all_organizations()
+                print(f"Python ApplicationData: getAllOrganizations вернул: {result}")
+                print(f"Python ApplicationData: Тип результата: {type(result)}")
+                if result:
+                    print(f"Python ApplicationData: Тип первого элемента: {type(result[0])}")
+                    print(f"Python ApplicationData: Первый элемент: {result[0]}")
+                return result
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при получении организаций: {e}")
+                import traceback
+                traceback.print_exc()
+                return []
+        else:
+            print("Python ApplicationData: Менеджер БД не инициализирован.")
+            return []
+
+    @Slot('QVariant', result='QVariant')
+    def createOrganization(self, org_data: 'QVariant'):
+        """Создать организацию. Возвращает ID новой записи или 0 при ошибке."""
+        py_data = org_data.toVariant() if hasattr(org_data, 'toVariant') else org_data
+        if self.database_manager:
+            try:
+                return self.database_manager.create_organization(py_data)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при создании организации: {e}")
+                return 0
+        return 0
+
+    @Slot(int, 'QVariant', result=bool)
+    def updateOrganization(self, org_id: int, org_data: 'QVariant') -> bool:
+        """Обновить организацию."""
+        py_data = org_data.toVariant() if hasattr(org_data, 'toVariant') else org_data
+        if self.database_manager:
+            try:
+                return self.database_manager.update_organization(org_id, py_data)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при обновлении организации: {e}")
+                return False
+        return False
+
+    @Slot(int, result=bool)
+    def deleteOrganization(self, org_id: int) -> bool:
+        """Удалить организацию."""
+        if self.database_manager:
+            try:
+                return self.database_manager.delete_organization(org_id)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при удалении организации: {e}")
+                return False
+        return False
+
+    @Slot(int, result='QVariant')
+    def getOrganizationReferenceFiles(self, org_id: int):
+        """Получить справочные файлы организации."""
+        if self.database_manager:
+            try:
+                return self.database_manager.get_organization_reference_files(org_id)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при получении файлов: {e}")
+                return []
+        return []
+
+    @Slot(int, str, str, result=bool)
+    def addOrganizationReferenceFile(self, org_id: int, file_path: str, file_type: str = 'other') -> bool:
+        """Добавить справочный файл к организации."""
+        if self.database_manager:
+            try:
+                return self.database_manager.add_organization_reference_file(org_id, file_path, file_type)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при добавлении файла: {e}")
+                return False
+        return False
+
+    @Slot(int, result=bool)
+    def deleteOrganizationReferenceFile(self, file_id: int) -> bool:
+        """Удалить справочный файл организации (только запись в БД)."""
+        if self.database_manager:
+            try:
+                return self.database_manager.delete_organization_reference_file(file_id)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при удалении файла: {e}")
+                return False
+        return False
+
+    @Slot(int, result=bool)
+    def deleteOrganizationReferenceFileWithPhysicalFile(self, file_id: int) -> bool:
+        """Удалить справочный файл организации И физический файл с диска."""
+        import os
+        if self.database_manager:
+            try:
+                files = self.database_manager.get_organization_reference_files_by_id(file_id)
+                if files and len(files) > 0:
+                    file_path = files[0].get('file_path', '')
+                    db_success = self.database_manager.delete_organization_reference_file(file_id)
+                    if db_success and file_path:
+                        if os.path.exists(file_path):
+                            try:
+                                os.remove(file_path)
+                                print(f"Python ApplicationData: Файл удалён с диска: {file_path}")
+                                return True
+                            except OSError as e:
+                                print(f"Python ApplicationData: Ошибка при удалении файла с диска: {e}")
+                                return True
+                        else:
+                            print(f"Python ApplicationData: Файл не найден на диске: {file_path}")
+                            return True
+                    return db_success
+                else:
+                    print(f"Python ApplicationData: Файл с ID {file_id} не найден в БД.")
+                    return False
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при удалении файла с диска: {e}")
+                return False
+        return False
+
+    @Slot(int, result='QVariant')
+    def getOrganizationsForActionExecution(self, action_execution_id: int):
+        """Получить организации, привязанные к действию."""
+        if self.database_manager:
+            try:
+                orgs = self.database_manager.get_organizations_for_action_execution(action_execution_id)
+                result = []
+                for org in orgs:
+                    files = self.database_manager.get_organization_reference_files(org['id'])
+                    org_with_files = dict(org)
+                    org_with_files['reference_files'] = files
+                    result.append(org_with_files)
+                return result
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при получении организаций: {e}")
+                return []
+        return []
+
+
 def on_qml_loaded(obj, url):
     if obj and url.fileName() == "main.qml":
         print("QML main.qml загружен. Устанавливаем соединения сигналов...")

@@ -40,9 +40,30 @@ Item {
             Layout.fillWidth: true
             spacing: 10
 
-            Button {
-                text: "Запустить новый алгоритм"
-                onClicked: runningAlgorithmsViewRoot.startNewAlgorithmRequested(categoryFilter)
+            Rectangle {
+                Layout.preferredWidth: 216
+                Layout.preferredHeight: 29
+                radius: 8
+                color: {
+                    if (launchBtn.pressed) return "#1a6e32"
+                    if (launchBtn.hovered) return "#27ae60"
+                    return "#2ecc71"
+                }
+                Behavior on color { ColorAnimation { duration: 150 } }
+                MouseArea {
+                    id: launchBtn
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: runningAlgorithmsViewRoot.startNewAlgorithmRequested(categoryFilter)
+                }
+                Text {
+                    anchors.centerIn: parent
+                    text: "➕ Запустить новый алгоритм"
+                    color: "#ffffff"
+                    font.pixelSize: 13
+                    font.bold: true
+                }
             }
 
             Item {
@@ -146,65 +167,132 @@ Item {
                             Text {
                                 text: "Начат: " + (model.started_at || "—")
                                 color: "gray"
-                                // --- ИСПРАВЛЕНО: Используем scaleFactor из Window ---
                                 font.pixelSize: (Window.window && Window.window.scaleFactor ? Window.window.scaleFactor : 1) * 10
-                                // --- ---
                                 elide: Text.ElideRight
                             }
                         }
 
                         // Кнопки управления (размещаем в RowLayout, прижатом к правому краю)
                         RowLayout {
-                            Layout.alignment: Qt.AlignRight // Выравнивание кнопок по правому краю
-                            spacing: 8 // Немного больше отступа между кнопками
+                            Layout.alignment: Qt.AlignRight
+                            spacing: 8
 
-                            Button {
-                                text: "Завершить"
-                                // --- ИСПРАВЛЕНО: Используем scaleFactor из Window ---
-                                font.pixelSize: (Window.window && Window.window.scaleFactor ? Window.window.scaleFactor : 1) * 10
-                                // --- ---
-                                // Включаем только если статус 'active'
-                                enabled: model.status === "active"
-                                onClicked: {
-                                    console.log("QML RunningAlgorithmsView: Запрошено завершение execution ID:", model.id);
-                                    var success = appData.stopAlgorithm(model.id);
-                                    if (success) {
-                                        console.log("QML RunningAlgorithmsView: Execution ID", model.id, "успешно отмечен как завершённый.");
-                                        runningAlgorithmsViewRoot.loadExecutions(); // Перезагрузим список для обновления статуса
-                                    } else {
-                                        console.warn("QML RunningAlgorithmsView: Не удалось завершить execution ID", model.id);
-                                        // TODO: Показать сообщение об ошибке пользователю
+                            // Кнопка Завершить
+                            Rectangle {
+                                Layout.preferredWidth: 100
+                                Layout.preferredHeight: 32
+                                radius: 8
+                                color: {
+                                    if (model.status !== "active") return "#d5d8dc"
+                                    if (terminateBtn.pressed) return "#c0392b"
+                                    if (terminateBtn.hovered) return "#e74c3c"
+                                    return "#e8453c"
+                                }
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                                opacity: model.status === "active" ? 1.0 : 0.5
+                                MouseArea {
+                                    id: terminateBtn
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    enabled: model.status === "active"
+                                    onClicked: {
+                                        console.log("QML RunningAlgorithmsView: Запрошено завершение execution ID:", model.id);
+                                        var success = appData.stopAlgorithm(model.id);
+                                        if (success) {
+                                            runningAlgorithmsViewRoot.loadExecutions();
+                                        } else {
+                                            console.warn("QML RunningAlgorithmsView: Не удалось завершить execution ID", model.id);
+                                        }
                                     }
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "⏹ Завершить"
+                                    color: "#ffffff"
+                                    font.pixelSize: 12
+                                    font.bold: true
                                 }
                             }
 
-                            Button {
-                                text: "Развернуть"
-                                // --- ИСПРАВЛЕНО: Используем scaleFactor из Window ---
-                                font.pixelSize: (Window.window && Window.window.scaleFactor ? Window.window.scaleFactor : 1) * 10
-                                // --- ---
-                                onClicked: {
-                                    console.log("QML RunningAlgorithmsView: Запрошено развертывание execution ID:", model.id);
-                                    // --- НОВОЕ: Открытие ExecutionDetailsWindow ---
-                                    // Проверяем, что ExecutionDetailsWindow.qml существует
-                                    var component = Qt.createComponent("ExecutionDetailsWindow.qml");
-                                    if (component.status === Component.Ready) {
-                                        // Создаём новое окно
-                                        var detailsWindow = component.createObject(runningAlgorithmsViewRoot, {
-                                            "executionId": model.id // Передаём ID execution'а
-                                        });
-                                        if (detailsWindow) {
-                                            detailsWindow.show(); // Открываем окно
-                                            console.log("QML RunningAlgorithmsView: ExecutionDetailsWindow открыто для execution ID", model.id);
+                            // Кнопка Мероприятия
+                            Rectangle {
+                                Layout.preferredWidth: 120
+                                Layout.preferredHeight: 32
+                                radius: 8
+                                color: {
+                                    if (eventsBtn.pressed) return "#1a6e32"
+                                    if (eventsBtn.hovered) return "#27ae60"
+                                    return "#2ecc71"
+                                }
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                                MouseArea {
+                                    id: eventsBtn
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        console.log("QML RunningAlgorithmsView: Открытие окна мероприятий для execution ID:", model.id);
+                                        var component = Qt.createComponent("../ActionExecutionDetailsDialog.qml");
+                                        if (component.status === Component.Ready) {
+                                            var dialog = component.createObject(runningAlgorithmsViewRoot, {
+                                                "executionId": model.id,
+                                                "currentActionIndex": 0
+                                            });
+                                            if (dialog) {
+                                                dialog.open();
+                                            }
                                         } else {
-                                            console.error("QML RunningAlgorithmsView: Не удалось создать объект ExecutionDetailsWindow.qml.");
-                                            // TODO: Показать сообщение пользователю
+                                            console.error("QML RunningAlgorithmsView: Ошибка загрузки ActionExecutionDetailsDialog.qml:", component.errorString());
                                         }
-                                    } else {
-                                        console.error("QML RunningAlgorithmsView: Ошибка загрузки ExecutionDetailsWindow.qml:", component.errorString());
-                                        // TODO: Показать сообщение пользователю
                                     }
-                                    // --- ---
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "📋 Мероприятия"
+                                    color: "#ffffff"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                }
+                            }
+
+                            // Кнопка Развернуть
+                            Rectangle {
+                                Layout.preferredWidth: 100
+                                Layout.preferredHeight: 32
+                                radius: 8
+                                color: {
+                                    if (expandBtn.pressed) return "#2980b9"
+                                    if (expandBtn.hovered) return "#3498db"
+                                    return "#5dade2"
+                                }
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                                MouseArea {
+                                    id: expandBtn
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        console.log("QML RunningAlgorithmsView: Запрошено развертывание execution ID:", model.id);
+                                        var component = Qt.createComponent("ExecutionDetailsWindow.qml");
+                                        if (component.status === Component.Ready) {
+                                            var detailsWindow = component.createObject(runningAlgorithmsViewRoot, {
+                                                "executionId": model.id
+                                            });
+                                            if (detailsWindow) {
+                                                detailsWindow.show();
+                                            }
+                                        } else {
+                                            console.error("QML RunningAlgorithmsView: Ошибка загрузки ExecutionDetailsWindow.qml:", component.errorString());
+                                        }
+                                    }
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "🔍 Развернуть"
+                                    color: "#ffffff"
+                                    font.pixelSize: 12
+                                    font.bold: true
                                 }
                             }
                         }
@@ -255,21 +343,34 @@ Item {
             }
 
             // Кнопка свернуть/развернуть
-            Button {
-                text: runningAlgorithmsViewRoot.isHistoryExpanded ? "▼" : "▲"
-                // --- ИСПРАВЛЕНО: Используем scaleFactor из Window ---
-                font.pixelSize: (Window.window && Window.window.scaleFactor ? Window.window.scaleFactor : 1) * 10
-                // --- ---
-                onClicked: {
-                    console.log("QML RunningAlgorithmsView: Переключение состояния истории (свёрнута/развёрнута).");
-                    runningAlgorithmsViewRoot.isHistoryExpanded = !runningAlgorithmsViewRoot.isHistoryExpanded;
-                    // При разворачивании можно перезагрузить данные, если нужно
-                    if (runningAlgorithmsViewRoot.isHistoryExpanded) {
-                         console.log("QML RunningAlgorithmsView: История развернута. Загрузка данных...");
-                         runningAlgorithmsViewRoot.loadCompletedExecutions(); // Перезагружаем, на случай если дата изменилась
-                    } else {
-                         console.log("QML RunningAlgorithmsView: История свёрнута.");
+            Rectangle {
+                width: 32
+                height: 32
+                radius: 8
+                color: {
+                    if (toggleHistBtn.pressed) return "#5d6d7e"
+                    if (toggleHistBtn.hovered) return "#85929e"
+                    return "#95a5a6"
+                }
+                Behavior on color { ColorAnimation { duration: 150 } }
+                MouseArea {
+                    id: toggleHistBtn
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        runningAlgorithmsViewRoot.isHistoryExpanded = !runningAlgorithmsViewRoot.isHistoryExpanded;
+                        if (runningAlgorithmsViewRoot.isHistoryExpanded) {
+                             runningAlgorithmsViewRoot.loadCompletedExecutions();
+                        }
                     }
+                }
+                Text {
+                    anchors.centerIn: parent
+                    text: runningAlgorithmsViewRoot.isHistoryExpanded ? "▼" : "▲"
+                    color: "#ffffff"
+                    font.pixelSize: 14
+                    font.bold: true
                 }
             }
 
@@ -303,12 +404,23 @@ Item {
             }
 
             // Кнопка календаря
-            Button {
-                text: "📅"
-                font.pixelSize: 16
-                Layout.preferredWidth: 40
-                onClicked: {
-                    console.log("QML RunningAlgorithmsView: Нажата кнопка календаря для выбора даты истории.");
+            Rectangle {
+                width: 36
+                height: 36
+                radius: 8
+                color: {
+                    if (calBtn.pressed) return "#2980b9"
+                    if (calBtn.hovered) return "#3498db"
+                    return "#5dade2"
+                }
+                Behavior on color { ColorAnimation { duration: 150 } }
+                MouseArea {
+                    id: calBtn
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        console.log("QML RunningAlgorithmsView: Нажата кнопка календаря для выбора даты истории.");
                     // --- НОВОЕ: Открываем собственный календарь для выбора даты истории ---
                     // Пытаемся установить начальную дату в календаре
                     var currentDateText = runningAlgorithmsViewRoot.selectedHistoryDate.trim();
@@ -362,6 +474,13 @@ Item {
                     
                     historyCalendarPicker.open();
                     // --- ---
+                    }
+                }
+                Text {
+                    anchors.centerIn: parent
+                    text: "📅"
+                    font.pixelSize: 20
+                    color: "#ffffff"
                 }
             }
         }

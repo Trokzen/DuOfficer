@@ -51,7 +51,7 @@ Dialog {
 
         Text {
             Layout.fillWidth: true
-            text: "Версия: 1.0\n\n© 2026, Все права защищены"
+            text: "Версия: 1.1\n\n© 2026, Все права защищены"
             font.pixelSize: 10
             wrapMode: Text.Wrap
             color: "#7f8c8d"

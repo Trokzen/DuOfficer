@@ -32,9 +32,9 @@ Item {
             TabButton {
                 text: "Алгоритмы"
             }
-            // --- Вкладка 4: Дополнительно ---
+            // --- Вкладка 4: Организации ---
             TabButton {
-                text: "Дополнительно"
+                text: "Организации"
             }
         }
 
@@ -43,6 +43,15 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             currentIndex: settingsTabBar.currentIndex
+
+            onCurrentIndexChanged: {
+                console.log("QML SettingsView: Переключение на вкладку", currentIndex)
+                // При переключении на вкладку Организаций загружаем данные
+                if (currentIndex === 3 && organizationsListView) {
+                    console.log("QML SettingsView: Загрузка организаций...")
+                    organizationsListView.loadOrganizations()
+                }
+            }
 
             // --- Вкладка 1: Пост (с перенесенными настройками) ---
             Item {
@@ -100,7 +109,7 @@ Item {
                             }
                             // --- ---
 
-                            // --- Перенесенные настройки из "Дополнительно" ---
+                            // --- Перенесенные настройки из "Организации" ---
 
                             // Настройки напоминаний
                             CheckBox {
@@ -557,53 +566,102 @@ Item {
                         Layout.fillWidth: true
                         spacing: 10
 
-                        Button {
-                            text: "Добавить"
-                            onClicked: {
-                                console.log("QML SettingsView: Нажата кнопка 'Добавить' должностное лицо.");
-                                // Сбрасываем и открываем диалог добавления
-                                officerEditorDialog.resetForAdd();
-                                officerEditorDialog.open();
+                        Rectangle {
+                            Layout.preferredWidth: 110
+                            Layout.preferredHeight: 36
+                            radius: 8
+                            color: {
+                                if (addOfficerBtn.pressed) return "#218c3d"
+                                if (addOfficerBtn.hovered) return "#2ecc71"
+                                return "#27ae60"
                             }
-                        }
-                        Button {
-                            text: "Редактировать"
-                            enabled: officersListView.currentIndex !== -1 // Включена, если выбран элемент
-                            onClicked: {
-                                var selectedIndex = officersListView.currentIndex;
-                                if (selectedIndex !== -1) {
-                                    var officerData = officersListView.model.get(selectedIndex);
-                                    console.log("QML SettingsView: Нажата кнопка 'Редактировать' для пользователя ID:", officerData.id);
-                                    // Загружаем данные и открываем диалог редактирования
-                                    officerEditorDialog.loadDataForEdit(officerData);
-                                    officerEditorDialog.open();
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            MouseArea {
+                                id: addOfficerBtn
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    officerEditorDialog.resetForAdd()
+                                    officerEditorDialog.open()
                                 }
                             }
+                            Text {
+                                anchors.centerIn: parent
+                                text: "➕ Добавить"
+                                color: "#ffffff"
+                                font.pixelSize: 13
+                                font.bold: true
+                            }
                         }
-                        Button {
-                            text: "Удалить"
-                            enabled: officersListView.currentIndex !== -1 // Включена, если выбран элемент
-                            onClicked: {
-                                var selectedIndex = officersListView.currentIndex;
-                                if (selectedIndex !== -1) {
-                                    var officerData = officersListView.model.get(selectedIndex);
-                                    console.log("QML SettingsView: Нажата кнопка 'Удалить' для пользователя ID:", officerData.id);
-                                    // TODO: Добавить подтверждение удаления (например, MessageDialog)
-                                    var confirmDelete = true; // Пока без подтверждения
-                                    if (confirmDelete) {
-                                        var result = appData.deleteDutyOfficer(officerData.id);
+                        Rectangle {
+                            Layout.preferredWidth: 130
+                            Layout.preferredHeight: 36
+                            radius: 8
+                            color: {
+                                if (editOfficerBtn.pressed) return "#c9951d"
+                                if (editOfficerBtn.hovered) return "#f39c12"
+                                return "#f1c40f"
+                            }
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            opacity: officersListView.currentIndex !== -1 ? 1.0 : 0.5
+                            MouseArea {
+                                id: editOfficerBtn
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                enabled: officersListView.currentIndex !== -1
+                                onClicked: {
+                                    var selectedIndex = officersListView.currentIndex
+                                    if (selectedIndex !== -1) {
+                                        var officerData = officersListView.model.get(selectedIndex)
+                                        officerEditorDialog.loadDataForEdit(officerData)
+                                        officerEditorDialog.open()
+                                    }
+                                }
+                            }
+                            Text {
+                                anchors.centerIn: parent
+                                text: "✏️ Редактировать"
+                                color: "#2c3e50"
+                                font.pixelSize: 13
+                                font.bold: true
+                            }
+                        }
+                        Rectangle {
+                            Layout.preferredWidth: 110
+                            Layout.preferredHeight: 36
+                            radius: 8
+                            color: {
+                                if (delOfficerBtn.pressed) return "#c0392b"
+                                if (delOfficerBtn.hovered) return "#e74c3c"
+                                return "#e8453c"
+                            }
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            opacity: officersListView.currentIndex !== -1 ? 1.0 : 0.5
+                            MouseArea {
+                                id: delOfficerBtn
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                enabled: officersListView.currentIndex !== -1
+                                onClicked: {
+                                    var selectedIndex = officersListView.currentIndex
+                                    if (selectedIndex !== -1) {
+                                        var officerData = officersListView.model.get(selectedIndex)
+                                        var result = appData.deleteDutyOfficer(officerData.id)
                                         if (result === true || (typeof result === 'number' && result > 0)) {
-                                            console.log("QML SettingsView: Пользователь ID", officerData.id, "удален успешно.");
-                                            // Перезагружаем список
-                                            settingsViewRoot.loadDutyOfficers();
-                                        } else if (typeof result === 'string') {
-                                            console.warn("QML SettingsView: Ошибка удаления пользователя:", result);
-                                            // TODO: Отобразить ошибку пользователю
-                                        } else {
-                                             console.error("QML SettingsView: Неизвестная ошибка удаления пользователя. Результат:", result);
+                                            settingsViewRoot.loadDutyOfficers()
                                         }
                                     }
                                 }
+                            }
+                            Text {
+                                anchors.centerIn: parent
+                                text: "🗑️ Удалить"
+                                color: "#ffffff"
+                                font.pixelSize: 13
+                                font.bold: true
                             }
                         }
                         // Заполнитель
@@ -611,11 +669,29 @@ Item {
                             Layout.fillWidth: true
                         }
                         // Кнопка обновления списка (на случай, если данные изменились вне этого окна)
-                        Button {
-                            text: "Обновить"
-                            onClicked: {
-                                console.log("QML SettingsView: Нажата кнопка 'Обновить' список должностных лиц.");
-                                settingsViewRoot.loadDutyOfficers();
+                        Rectangle {
+                            Layout.preferredWidth: 110
+                            Layout.preferredHeight: 36
+                            radius: 8
+                            color: {
+                                if (refreshOfficerBtn.pressed) return "#2980b9"
+                                if (refreshOfficerBtn.hovered) return "#3498db"
+                                return "#5dade2"
+                            }
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            MouseArea {
+                                id: refreshOfficerBtn
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: settingsViewRoot.loadDutyOfficers()
+                            }
+                            Text {
+                                anchors.centerIn: parent
+                                text: "🔄 Обновить"
+                                color: "#ffffff"
+                                font.pixelSize: 13
+                                font.bold: true
                             }
                         }
                     }
@@ -760,26 +836,192 @@ Item {
                 }
             }
 
-            // --- Вкладка 4: Дополнительно (перенесенные настройки) ---
+            // --- Вкладка 4: Организации ---
             Item {
-                id: generalTab
+                id: organizationsTab
                 ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: 15
-                    spacing: 15
+                    spacing: 10
 
+                    // --- Заголовок ---
                     Label {
-                        text: "Дополнительные настройки"
+                        text: "Справочник организаций"
                         font.pointSize: 14
                         font.bold: true
                     }
-                    Text {
-                        text: "Настройки перенесены на вкладку 'Пост'."
-                        color: "gray"
+
+                    // --- Панель кнопок управления ---
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+
+                        Rectangle {
+                            Layout.preferredWidth: 110
+                            Layout.preferredHeight: 36
+                            radius: 8
+                            color: {
+                                if (addOrgBtn.pressed) return "#218c3d"
+                                if (addOrgBtn.hovered) return "#2ecc71"
+                                return "#27ae60"
+                            }
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            MouseArea {
+                                id: addOrgBtn
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    organizationEditorDialog.resetForAdd()
+                                    organizationEditorDialog.open()
+                                }
+                            }
+                            Text {
+                                anchors.centerIn: parent
+                                text: "➕ Добавить"
+                                color: "#ffffff"
+                                font.pixelSize: 13
+                                font.bold: true
+                            }
+                        }
+                        Rectangle {
+                            Layout.preferredWidth: 130
+                            Layout.preferredHeight: 36
+                            radius: 8
+                            color: {
+                                if (editOrgBtn.pressed) return "#c9951d"
+                                if (editOrgBtn.hovered) return "#f39c12"
+                                return "#f1c40f"
+                            }
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            opacity: organizationsListView.currentIndex !== -1 ? 1.0 : 0.5
+                            MouseArea {
+                                id: editOrgBtn
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                enabled: organizationsListView.currentIndex !== -1
+                                onClicked: {
+                                    if (organizationsListView.currentIndex !== -1) {
+                                        var orgData = organizationsListView.getOrganizationData(organizationsListView.currentIndex)
+                                        organizationEditorDialog.loadDataForEdit(orgData)
+                                        organizationEditorDialog.open()
+                                    }
+                                }
+                            }
+                            Text {
+                                anchors.centerIn: parent
+                                text: "✏️ Редактировать"
+                                color: "#2c3e50"
+                                font.pixelSize: 13
+                                font.bold: true
+                            }
+                        }
+                        Rectangle {
+                            Layout.preferredWidth: 110
+                            Layout.preferredHeight: 36
+                            radius: 8
+                            color: {
+                                if (delOrgBtn.pressed) return "#c0392b"
+                                if (delOrgBtn.hovered) return "#e74c3c"
+                                return "#e8453c"
+                            }
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            opacity: organizationsListView.currentIndex !== -1 ? 1.0 : 0.5
+                            MouseArea {
+                                id: delOrgBtn
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                enabled: organizationsListView.currentIndex !== -1
+                                onClicked: {
+                                    if (organizationsListView.currentIndex !== -1) {
+                                        var orgData = organizationsListView.getOrganizationData(organizationsListView.currentIndex)
+                                        deleteConfirmationDialog.orgIdToDelete = orgData.id
+                                        deleteConfirmationDialog.orgNameToDelete = orgData.name
+                                        deleteConfirmationDialog.open()
+                                    }
+                                }
+                            }
+                            Text {
+                                anchors.centerIn: parent
+                                text: "🗑️ Удалить"
+                                color: "#ffffff"
+                                font.pixelSize: 13
+                                font.bold: true
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                        Rectangle {
+                            Layout.preferredWidth: 110
+                            Layout.preferredHeight: 36
+                            radius: 8
+                            color: {
+                                if (refreshOrgBtn.pressed) return "#2980b9"
+                                if (refreshOrgBtn.hovered) return "#3498db"
+                                return "#5dade2"
+                            }
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            MouseArea {
+                                id: refreshOrgBtn
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: organizationsListView.loadOrganizations()
+                            }
+                            Text {
+                                anchors.centerIn: parent
+                                text: "🔄 Обновить"
+                                color: "#ffffff"
+                                font.pixelSize: 13
+                                font.bold: true
+                            }
+                        }
                     }
-                    // Заполнитель
-                    Item {
+
+                    // --- Список организаций ---
+                    OrganizationsListView {
+                        id: organizationsListView
+                        Layout.fillWidth: true
                         Layout.fillHeight: true
+
+                        onOrganizationDoubleClicked: {
+                            var orgData = organizationsListView.getOrganizationData(organizationsListView.currentIndex)
+                            if (orgData) {
+                                organizationEditorDialog.loadDataForEdit(orgData)
+                                organizationEditorDialog.open()
+                            }
+                        }
+                    }
+                }
+
+                // --- Диалог редактирования организации ---
+                OrganizationEditorDialog {
+                    id: organizationEditorDialog
+                    onOrganizationSaved: {
+                        organizationsListView.loadOrganizations()
+                    }
+                }
+
+                // --- Диалог подтверждения удаления ---
+                Dialog {
+                    id: deleteConfirmationDialog
+                    title: "Подтверждение удаления"
+                    standardButtons: Dialog.Yes | Dialog.No
+                    modal: true
+                    property int orgIdToDelete: -1
+                    property string orgNameToDelete: ""
+
+                    Label {
+                        text: "Вы действительно хотите удалить организацию \"" + deleteConfirmationDialog.orgNameToDelete + "\"?"
+                        wrapMode: Text.WordWrap
+                    }
+
+                    onAccepted: {
+                        if (orgIdToDelete > 0) {
+                            appData.deleteOrganization(orgIdToDelete)
+                            organizationsListView.loadOrganizations()
+                        }
                     }
                 }
             }

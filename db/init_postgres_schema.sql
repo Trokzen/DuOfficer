@@ -303,6 +303,56 @@ CREATE INDEX IF NOT EXISTS idx_event_occurrences_event_id ON app_schema.event_oc
 CREATE INDEX IF NOT EXISTS idx_event_occurrences_calculated_start_datetime ON app_schema.event_occurrences(calculated_start_datetime);
 CREATE INDEX IF NOT EXISTS idx_event_occurrences_status ON app_schema.event_occurrences(status);
 
+-- === НОВЫЕ ТАБЛИЦЫ ДЛЯ ОРГАНИЗАЦИЙ И СПРАВОЧНЫХ МАТЕРИАЛОВ ===
+
+-- Таблица для хранения справочника организаций
+CREATE TABLE IF NOT EXISTS app_schema.organizations (
+    id SERIAL PRIMARY KEY,                             -- Уникальный идентификатор организации
+    name TEXT NOT NULL,                                -- Наименование организации
+    phone TEXT,                                        -- Номер телефона организации
+    contact_person TEXT,                               -- Контактное лицо
+    notes TEXT,                                        -- Дополнительные заметки
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,    -- Дата и время создания записи
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP     -- Дата и время последнего обновления записи
+);
+
+-- Таблица для связи организаций с действиями (многие-ко-многим)
+CREATE TABLE IF NOT EXISTS app_schema.action_execution_organizations (
+    id SERIAL PRIMARY KEY,                             -- Уникальный идентификатор связи
+    action_execution_id INTEGER NOT NULL REFERENCES app_schema.action_executions(id) ON DELETE CASCADE, -- Ссылка на выполнение действия
+    organization_id INTEGER NOT NULL REFERENCES app_schema.organizations(id) ON DELETE CASCADE,         -- Ссылка на организацию
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP     -- Дата и время создания связи
+);
+
+-- Таблица для хранения справочных материалов организаций
+CREATE TABLE IF NOT EXISTS app_schema.organization_reference_files (
+    id SERIAL PRIMARY KEY,                             -- Уникальный идентификатор файла
+    organization_id INTEGER NOT NULL REFERENCES app_schema.organizations(id) ON DELETE CASCADE,  -- Ссылка на организацию
+    file_path TEXT NOT NULL,                           -- Путь к файлу на диске
+    file_type VARCHAR(20) DEFAULT 'other' CHECK (file_type IN ('word', 'excel', 'pdf', 'other')), -- Тип файла
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP     -- Дата и время добавления файла
+);
+
+-- === ИНДЕКСЫ ДЛЯ ОРГАНИЗАЦИЙ ===
+
+-- Индекс для ускорения поиска связей по action_execution
+CREATE INDEX IF NOT EXISTS idx_ae_orgs_action_execution_id ON app_schema.action_execution_organizations(action_execution_id);
+
+-- Индекс для ускорения поиска связей по organization
+CREATE INDEX IF NOT EXISTS idx_ae_orgs_organization_id ON app_schema.action_execution_organizations(organization_id);
+
+-- Индекс для ускорения поиска файлов по организации
+CREATE INDEX IF NOT EXISTS idx_org_ref_files_organization_id ON app_schema.organization_reference_files(organization_id);
+
+-- === ТРИГГЕРЫ ДЛЯ ОРГАНИЗАЦИЙ ===
+
+-- Триггер для обновления updated_at у организаций
+DROP TRIGGER IF EXISTS update_organizations_updated_at ON app_schema.organizations;
+CREATE TRIGGER update_organizations_updated_at
+BEFORE UPDATE ON app_schema.organizations
+FOR EACH ROW
+EXECUTE FUNCTION app_schema.update_updated_at_column();
+
 -- === ОГРАНИЧЕНИЯ ВНЕШНИХ КЛЮЧЕЙ С ON DELETE CASCADE ===
 
 -- При удалении мероприятия автоматически удаляются все его экземпляры
