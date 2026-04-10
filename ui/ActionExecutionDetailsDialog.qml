@@ -8,8 +8,8 @@ Popup {
     id: actionDetailsDialog
     x: (parent.width - width) / 2
     y: (parent.height - height) / 2
-    width: Math.min(parent.width * 0.95, 1400)
-    height: Math.min(parent.height * 0.9, 900)
+    width: Math.min(parent.width * 0.98, 1600)
+    height: Math.min(parent.height * 0.95, 1000)
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
@@ -39,6 +39,14 @@ Popup {
         repeat: true
         running: actionDetailsDialog.isOverdue
     }
+
+    // --- Модели данных ---
+    ListModel {
+        id: reportMaterialsModel
+    }
+    // Используем JS массив вместо ListModel для сохранения вложенных списков (файлов организаций)
+    property var allOrganizations: []
+    // --- ---
 
     // --- Функции ---
     function updateCountdown() {
@@ -151,12 +159,12 @@ Popup {
         statusRectangle.color = statusColor
 
         // Отчётные материалы
-        reportMaterialsList.clear()
+        reportMaterialsModel.clear()
         if (action.snapshot_report_materials) {
             var materials = action.snapshot_report_materials.split('\n')
             for (var i = 0; i < materials.length; i++) {
                 if (materials[i].trim()) {
-                    reportMaterialsList.append({ "path": materials[i].trim() })
+                    reportMaterialsModel.append({ "path": materials[i].trim() })
                 }
             }
         }
@@ -173,13 +181,45 @@ Popup {
     }
 
     function loadOrganizationsForAction() {
-        orgsModel.clear()
         // Запрашиваем ВСЕ организации с файлами
         var orgs = appData.getAllOrganizationsWithReferenceFiles()
-        if (orgs && orgs.length > 0) {
-            for (var i = 0; i < orgs.length; i++) {
-                orgsModel.append(orgs[i])
+        if (orgs) {
+            actionDetailsDialog.allOrganizations = orgs
+        } else {
+            actionDetailsDialog.allOrganizations = []
+        }
+    }
+
+    function openFilesDialog(orgData, fileType) {
+        if (!orgData) return;
+        var files = orgData.reference_files || [];
+        var filteredFiles = [];
+        var title = orgData.name + " - Файлы";
+
+        if (fileType === "all") {
+            filteredFiles = files;
+            title += " (Все)";
+        } else {
+            for (var i = 0; i < files.length; i++) {
+                if (files[i].file_type === fileType) {
+                    filteredFiles.push(files[i]);
+                }
             }
+            title += " (" + fileType.toUpperCase() + ")";
+        }
+
+        filesDialogModel.clear();
+        for (var j = 0; j < filteredFiles.length; j++) {
+            filesDialogModel.append(filteredFiles[j]);
+        }
+        
+        filesDialogTitle.text = title;
+        
+        if (filteredFiles.length > 0) {
+            filesDialog.open();
+        } else {
+            // Можно показать сообщение, что файлов нет
+            console.log("Нет файлов данного типа");
         }
     }
 
@@ -247,18 +287,16 @@ Popup {
             color: "#34495e"
         }
 
-        // --- Основной контент (2 колонки) ---
+        // --- Основной контент (2 колонки 50/50) ---
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 15
-            Layout.margins: 15
+            spacing: 20
 
             // === ЛЕВАЯ ЧАСТЬ ===
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: parent.width * 0.55
 
                 // --- Времена ---
                 GridLayout {
@@ -355,7 +393,7 @@ Popup {
                             clip: true
                             ListView {
                                 id: reportMaterialsList
-                                model: ListModel { id: reportMaterialsModel }
+                                model: reportMaterialsModel
                                 delegate: Rectangle {
                                     width: ListView.view.width
                                     height: 28
@@ -553,7 +591,7 @@ Popup {
 
                     ListView {
                         id: orgsList
-                        model: ListModel { id: orgsModel }
+                        model: actionDetailsDialog.allOrganizations
                         delegate: Rectangle {
                             width: ListView.view.width
                             height: 45
@@ -565,54 +603,6 @@ Popup {
                                 anchors.fill: parent
                                 anchors.margins: 6
                                 spacing: 8
-
-                                // Иконки файлов
-                                RowLayout {
-                                    spacing: 3
-                                    Repeater {
-                                        model: {
-                                            var files = []
-                                            if (modelData && modelData.reference_files) {
-                                                files = modelData.reference_files
-                                            }
-                                            return files
-                                        }
-                                        delegate: Rectangle {
-                                            width: 26
-                                            height: 26
-                                            radius: 4
-                                            color: {
-                                                var ft = modelData.file_type || "other"
-                                                if (ft === "word") return "#4a90e2"
-                                                else if (ft === "excel") return "#27ae60"
-                                                else if (ft === "pdf") return "#e74c3c"
-                                                else return "#95a5a6"
-                                            }
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                cursorShape: Qt.PointingHandCursor
-                                                ToolTip.text: modelData.file_path || ""
-                                                ToolTip.visible: hovered
-                                                ToolTip.delay: 500
-                                                onClicked: {
-                                                    var fp = modelData.file_path || ""
-                                                    if (fp) Qt.openUrlExternally("file:///" + fp.replace(/\\/g, "/"))
-                                                }
-                                            }
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: {
-                                                    var ft = modelData.file_type || "other"
-                                                    if (ft === "word") return "📝"
-                                                    else if (ft === "excel") return "📊"
-                                                    else if (ft === "pdf") return "📄"
-                                                    else return "📎"
-                                                }
-                                                font.pixelSize: 13
-                                            }
-                                        }
-                                    }
-                                }
 
                                 // Название организации
                                 Text {
@@ -632,15 +622,53 @@ Popup {
                                     horizontalAlignment: Text.AlignRight
                                     elide: Text.ElideRight
                                 }
+
+                                // Кнопки файлов
+                                RowLayout {
+                                    spacing: 4
+                                    Button {
+                                        text: "Word"
+                                        font.pixelSize: 10
+                                        visible: modelData.reference_files && modelData.reference_files.length > 0
+                                        onClicked: {
+                                            openFilesDialog(modelData, "word")
+                                        }
+                                    }
+                                    Button {
+                                        text: "Excel"
+                                        font.pixelSize: 10
+                                        visible: modelData.reference_files && modelData.reference_files.length > 0
+                                        onClicked: {
+                                            openFilesDialog(modelData, "excel")
+                                        }
+                                    }
+                                    Button {
+                                        text: "PDF"
+                                        font.pixelSize: 10
+                                        visible: modelData.reference_files && modelData.reference_files.length > 0
+                                        onClicked: {
+                                            openFilesDialog(modelData, "pdf")
+                                        }
+                                    }
+                                    Button {
+                                        text: "Все"
+                                        font.pixelSize: 10
+                                        visible: modelData.reference_files && modelData.reference_files.length > 0
+                                        onClicked: {
+                                            openFilesDialog(modelData, "all")
+                                        }
+                                    }
+                                }
                             }
                         }
                         Label {
-                            anchors.centerIn: parent
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.verticalCenter: parent.verticalCenter
                             text: "Нет организаций"
                             color: "#95a5a6"
                             font.pixelSize: 13
                             font.italic: true
-                            visible: orgsModel.count === 0
+                            visible: actionDetailsDialog.allOrganizations.length === 0
                         }
                     }
                 }
@@ -650,5 +678,77 @@ Popup {
 
     onOpened: {
         loadActionData()
+    }
+
+    // --- Модель и Диалог для просмотра файлов ---
+    ListModel {
+        id: filesDialogModel
+    }
+    
+    property alias filesDialogTitleText: filesDialogTitle.text
+
+    Dialog {
+        id: filesDialog
+        standardButtons: Dialog.Close
+        modal: true
+        width: 600
+        height: 400
+        
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+            
+            Label {
+                id: filesDialogTitle
+                text: "Файлы"
+                font.bold: true
+                font.pixelSize: 16
+                Layout.fillWidth: true
+            }
+            
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                color: "#f8f9fa"
+                border.color: "#dee2e6"
+                border.width: 1
+                radius: 4
+                
+                ListView {
+                    id: filesListView
+                    anchors.fill: parent
+                    anchors.margins: 4
+                    model: filesDialogModel
+                    clip: true
+                    delegate: Rectangle {
+                        width: ListView.view.width
+                        height: 30
+                        color: index % 2 ? "#ffffff" : "#f0f0f0"
+                        radius: 3
+                        Text {
+                            anchors.fill: parent
+                            anchors.leftMargin: 10
+                            verticalAlignment: Text.AlignVCenter
+                            text: {
+                                var p = model.file_path || ""
+                                var parts = p.replace(/\\/g, "/").split("/")
+                                return parts.length > 0 ? parts[parts.length - 1] : p
+                            }
+                            font.pixelSize: 13
+                            color: "#2980b9"
+                            elide: Text.ElideMiddle
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                var fp = model.file_path || ""
+                                if (fp) Qt.openUrlExternally("file:///" + fp.replace(/\\/g, "/"))
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
