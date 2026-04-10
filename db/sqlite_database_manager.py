@@ -976,7 +976,7 @@ class SQLiteDatabaseManager:
             conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, algorithm_id, description, start_offset, end_offset, contact_phones, report_materials, created_at, updated_at "
+                "SELECT id, algorithm_id, description, technical_text, start_offset, end_offset, contact_phones, report_materials, created_at, updated_at "
                 "FROM actions "
                 "WHERE algorithm_id = ? "
                 "ORDER BY "
@@ -1044,7 +1044,7 @@ class SQLiteDatabaseManager:
             conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, algorithm_id, description, start_offset, end_offset, contact_phones, report_materials FROM actions WHERE id = ?;",
+                "SELECT id, algorithm_id, description, technical_text, start_offset, end_offset, contact_phones, report_materials FROM actions WHERE id = ?;",
                 (action_id,)
             )
             row = cursor.fetchone()
@@ -1284,8 +1284,12 @@ class SQLiteDatabaseManager:
 
             # --- ИЗМЕНЕНО: Подготовка данных с преобразованием времени ---
             # Фильтруем и готовим только разрешенные поля
-            allowed_fields = ['algorithm_id', 'description', 'start_offset', 'end_offset', 'contact_phones', 'report_materials']
+            allowed_fields = ['algorithm_id', 'description', 'technical_text', 'start_offset', 'end_offset', 'contact_phones', 'report_materials']
             fields_to_update = [field for field in allowed_fields if field in action_data]
+
+            print(f"DEBUG update_action: action_data keys = {list(action_data.keys())}")
+            print(f"DEBUG update_action: allowed_fields = {allowed_fields}")
+            print(f"DEBUG update_action: fields_to_update = {fields_to_update}")
 
             if not fields_to_update:
                 logger.warning("Нет полей для обновления действия.")
@@ -1321,6 +1325,8 @@ class SQLiteDatabaseManager:
             sql_query = f"UPDATE actions SET {set_clause_str} WHERE id = ?;"
 
             logger.debug(f"Выполнение SQL обновления действия {action_id}: {sql_query} с параметрами {values}")
+            print(f"DEBUG UPDATE action {action_id}: SQL = {sql_query}")
+            print(f"DEBUG UPDATE action {action_id}: VALUES = {values}")
             cursor.execute(sql_query, values)
             conn.commit()
 
@@ -1807,7 +1813,7 @@ class SQLiteDatabaseManager:
                 print(f"SQLiteDatabaseManager: Запуск алгоритма ID {algorithm_id} с time_type '{algorithm_time_type}'.")
 
                 cursor.execute("""
-                    SELECT id, description, start_offset, end_offset, contact_phones, report_materials
+                    SELECT id, description, technical_text, start_offset, end_offset, contact_phones, report_materials
                     FROM actions WHERE algorithm_id = ? ORDER BY start_offset
                 """, (algorithm_id,))
                 original_actions_raw = cursor.fetchall()
@@ -1817,10 +1823,11 @@ class SQLiteDatabaseManager:
                     action_dict = {
                         'id': action_row[0],
                         'description': action_row[1],
-                        'start_offset': action_row[2], # Это будет строка в SQLite
-                        'end_offset': action_row[3],   # Это будет строка в SQLite
-                        'contact_phones': action_row[4],
-                        'report_materials': action_row[5]
+                        'technical_text': action_row[2],
+                        'start_offset': action_row[3],
+                        'end_offset': action_row[4],
+                        'contact_phones': action_row[5],
+                        'report_materials': action_row[6]
                     }
                     original_actions.append(action_dict)
                 print(f"SQLiteDatabaseManager: Получено {len(original_actions)} действий для алгоритма {algorithm_id}.")
@@ -1988,12 +1995,12 @@ class SQLiteDatabaseManager:
                     cursor.execute("""
                         INSERT INTO action_executions (
                             execution_id,
-                            snapshot_description, snapshot_contact_phones, snapshot_report_materials,
+                            snapshot_description, snapshot_technical_text, snapshot_contact_phones, snapshot_report_materials,
                             calculated_start_time, calculated_end_time
-                        ) VALUES (?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
                     """, (
                         new_execution_id,
-                        action['description'], action['contact_phones'], action['report_materials'],
+                        action['description'], action.get('technical_text'), action['contact_phones'], action['report_materials'],
                         calculated_start_time.isoformat() if calculated_start_time else None,
                         calculated_end_time.isoformat() if calculated_end_time else None
                     ))
@@ -2179,6 +2186,7 @@ class SQLiteDatabaseManager:
                         ae.id,
                         ae.execution_id,
                         ae.snapshot_description,
+                        ae.snapshot_technical_text,
                         ae.snapshot_contact_phones,
                         ae.snapshot_report_materials,
                         ae.calculated_start_time,

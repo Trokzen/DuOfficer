@@ -1457,6 +1457,8 @@ class ApplicationData(QObject):
                 action = self.database_manager.get_action_by_id(action_id)
                 if action:
                     print(f"Python: QML запросил действие ID {action_id}.")
+                    print(f"Python: action keys = {list(action.keys())}")
+                    print(f"Python: action['technical_text'] = {action.get('technical_text')}")
                     return action
                 else:
                     print(f"Python: Действие ID {action_id} не найдено.")
@@ -1550,11 +1552,11 @@ class ApplicationData(QObject):
         if self.database_manager:
             try:
                 # Подготовка данных (фильтрация разрешенных полей)
-                allowed_fields = ['description', 'start_offset', 'end_offset', 'contact_phones', 'report_materials']
+                allowed_fields = ['description', 'technical_text', 'start_offset', 'end_offset', 'contact_phones', 'report_materials']
                 prepared_data = {}
                 for key, value in action_data.items():
                     if key in allowed_fields:
-                        if key in ['description', 'contact_phones', 'report_materials']:
+                        if key in ['description', 'technical_text', 'contact_phones', 'report_materials']:
                             prepared_data[key] = str(value).strip() if value is not None else (None if key in ['contact_phones', 'report_materials'] else "")
                         elif key in ['start_offset', 'end_offset']:
                             # Аналогично добавлению
@@ -3396,6 +3398,29 @@ class ApplicationData(QObject):
                 return result
             except Exception as e:
                 print(f"Python ApplicationData: Ошибка при получении организаций: {e}")
+                return []
+        return []
+
+    @Slot(result='QVariant')
+    def getAllOrganizationsWithReferenceFiles(self):
+        """Получить ВСЕ организации с привязанными к ним справочными файлами."""
+        if self.database_manager:
+            try:
+                # 1. Получаем все организации
+                orgs = self.database_manager.get_all_organizations()
+                result = []
+                
+                # 2. Для каждой организации подгружаем файлы
+                for org in orgs:
+                    org_with_files = dict(org) # Копируем данные организации
+                    # Получаем файлы и добавляем их в словарь организации
+                    files = self.database_manager.get_organization_reference_files(org['id'])
+                    org_with_files['reference_files'] = files 
+                    result.append(org_with_files)
+                    
+                return result
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при получении списка всех организаций: {e}")
                 return []
         return []
 

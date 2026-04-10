@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS app_schema.actions (
     id SERIAL PRIMARY KEY,                             -- Уникальный идентификатор действия
     algorithm_id INTEGER NOT NULL REFERENCES app_schema.algorithms(id) ON DELETE CASCADE, -- Ссылка на родительский алгоритм
     description TEXT NOT NULL,                         -- Описание действия
+    technical_text TEXT,                               -- Технический текст порядка выполнения
     start_offset INTERVAL,                             -- Относительное время начала действия (смещение от начала алгоритма)
     end_offset INTERVAL,                               -- Относительное время окончания действия (смещение от начала алгоритма)
     contact_phones TEXT,                               -- Телефоны для связи, связанные с этим действием
@@ -120,6 +121,7 @@ CREATE TABLE IF NOT EXISTS app_schema.action_executions (
     -- Эти поля хранят копию данных действия на момент планирования его выполнения
     -- Они позволяют action_execution существовать независимо от оригинального шаблона действия
     snapshot_description TEXT NOT NULL,              -- Копия description действия на момент планирования
+    snapshot_technical_text TEXT,                    -- Копия technical_text действия на момент планирования
     snapshot_contact_phones TEXT,                     -- Копия contact_phones действия на момент планирования
     snapshot_report_materials TEXT,                   -- Копия report_materials действия на момент планирования
     -- --- ---

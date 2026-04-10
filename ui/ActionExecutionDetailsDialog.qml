@@ -124,8 +124,12 @@ Popup {
         // Время окончания
         calculatedEndTimeLabel.text = action.calculated_end_time ? formatDateTime(action.calculated_end_time) : "Не задано"
 
-        // Описание
-        actionDescriptionText.text = action.snapshot_description || ""
+        // Технический текст (из snapshot_technical_text)
+        if (action.snapshot_technical_text && action.snapshot_technical_text.trim()) {
+            technicalTextContent.text = action.snapshot_technical_text
+        } else {
+            technicalTextContent.text = "Нет технического текста"
+        }
 
         // Статус
         var statusText = ""
@@ -161,19 +165,20 @@ Popup {
         reportedToLabel.text = action.reported_to || "—"
 
         // Справочные материалы организаций
-        loadOrganizationsForAction(action.id)
+        loadOrganizationsForAction()
 
         // Обновляем таймер
         updateCountdown()
         checkOverdue()
     }
 
-    function loadOrganizationsForAction(actionExecutionId) {
-        orgsList.clear()
-        var orgs = appData.getOrganizationsForActionExecution(actionExecutionId)
+    function loadOrganizationsForAction() {
+        orgsModel.clear()
+        // Запрашиваем ВСЕ организации с файлами
+        var orgs = appData.getAllOrganizationsWithReferenceFiles()
         if (orgs && orgs.length > 0) {
             for (var i = 0; i < orgs.length; i++) {
-                orgsList.append(orgs[i])
+                orgsModel.append(orgs[i])
             }
         }
     }
@@ -222,7 +227,6 @@ Popup {
                 color: "#ffffff"
                 font.pointSize: 18
                 font.bold: true
-                horizontalAlignment: Text.AlignHCenter
             }
 
             Button {
@@ -247,17 +251,14 @@ Popup {
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 0
+            spacing: 15
+            Layout.margins: 15
 
             // === ЛЕВАЯ ЧАСТЬ ===
             ColumnLayout {
-                Layout.preferredWidth: parent.width * 0.55
+                Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 0
-                anchors.top: parent.top
-                anchors.topMargin: 15
-                anchors.left: parent.left
-                anchors.leftMargin: 15
+                Layout.preferredWidth: parent.width * 0.55
 
                 // --- Времена ---
                 GridLayout {
@@ -295,7 +296,7 @@ Popup {
                     Label { text: ""; }
                 }
 
-                // --- Описание ---
+                // --- Технический текст ---
                 Label {
                     text: "Технический текст:"
                     font.pixelSize: 13
@@ -307,7 +308,7 @@ Popup {
                     Layout.preferredHeight: 80
                     clip: true
                     TextArea {
-                        id: actionDescriptionText
+                        id: technicalTextContent
                         readOnly: true
                         wrapMode: TextArea.Wrap
                         font.pixelSize: 13
@@ -534,13 +535,8 @@ Popup {
 
             // === ПРАВАЯ ЧАСТЬ ===
             ColumnLayout {
-                Layout.preferredWidth: parent.width * 0.45
+                Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 0
-                anchors.top: parent.top
-                anchors.topMargin: 15
-                anchors.right: parent.right
-                anchors.rightMargin: 15
 
                 Label {
                     text: "📚 Справочный материал"

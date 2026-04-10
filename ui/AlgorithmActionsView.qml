@@ -361,6 +361,7 @@ Item {
                             "id": action["id"],
                             "algorithm_id": action["algorithm_id"],
                             "description": action["description"] || "",
+                            "technical_text": action["technical_text"] || "",
                             "start_offset": startOffsetValue, // Может быть строкой, null или undefined
                             "end_offset": endOffsetValue,     // Может быть строкой, null или undefined
                             "contact_phones": action["contact_phones"] || "",

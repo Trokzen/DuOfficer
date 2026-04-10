@@ -109,6 +109,26 @@ Popup {
                 }
                 // --- ---
 
+                // --- ТЕХНИЧЕСКИЙ ТЕКСТ ---
+                Label {
+                    text: "Технический текст:"
+                    Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                }
+                TextArea {
+                    id: technicalTextArea
+                    Layout.fillWidth: true
+                    Layout.minimumHeight: 80
+                    placeholderText: "Введите технический текст порядка выполнения..."
+                    wrapMode: TextArea.Wrap
+                    background: Rectangle {
+                        border.color: technicalTextArea.activeFocus ? "#3498db" : "#ccc"
+                        border.width: 1
+                        radius: 2
+                        color: "white"
+                    }
+                }
+                // --- ---
+
                 // --- ВРЕМЯ НАЧАЛА ---
                 Label {
                     text: "Время начала (смещение):*"
@@ -772,6 +792,7 @@ Popup {
                     var actionData = {
                         "algorithm_id": currentAlgorithmId, // Всегда передаем, даже при редактировании
                         "description": descriptionArea.text.trim(),
+                        "technical_text": technicalTextArea.text.trim(),
                         "start_offset": startOffset,
                         "end_offset": endOffset,
                         "contact_phones": contactPhonesArea.text,
@@ -817,7 +838,8 @@ Popup {
         currentActionId = -1;
         currentAlgorithmId = algorithmId; // Запоминаем ID алгоритма
         descriptionArea.text = "";
-        
+        technicalTextArea.text = "";
+
         // Сброс времени начала
         startDaysField.text = "0";
         startHoursField.text = "00";
@@ -842,11 +864,14 @@ Popup {
      */
     function loadDataForEdit(actionData) {
         console.log("QML ActionEditorDialog: Загрузка данных для редактирования:", JSON.stringify(actionData));
+        console.log("QML ActionEditorDialog: technical_text из actionData:", actionData.technical_text);
         isEditMode = true;
         currentActionId = actionData.id;
         currentAlgorithmId = actionData.algorithm_id; // Запоминаем ID алгоритма
         descriptionArea.text = actionData.description || "";
-        
+        technicalTextArea.text = actionData.technical_text || "";
+        console.log("QML ActionEditorDialog: Установлено technicalTextArea.text:", technicalTextArea.text);
+
         // Загрузка времени начала
         loadStartOffsetFromString(actionData.start_offset || "");
         

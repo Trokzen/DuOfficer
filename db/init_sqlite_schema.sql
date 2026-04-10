@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS actions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,              -- Уникальный идентификатор действия
     algorithm_id INTEGER NOT NULL,                     -- Ссылка на родительский алгоритм
     description TEXT NOT NULL,                         -- Описание действия
+    technical_text TEXT,                               -- Технический текст порядка выполнения
     start_offset TEXT,                                 -- Относительное время начала действия (смещение от начала алгоритма) в формате строки
     end_offset TEXT,                                   -- Относительное время окончания действия (смещение от начала алгоритма) в формате строки
     contact_phones TEXT,                               -- Телефоны для связи, связанные с этим действием
@@ -96,6 +97,7 @@ CREATE TABLE IF NOT EXISTS action_executions (
     execution_id INTEGER NOT NULL,                     -- Ссылка на экземпляр выполнения алгоритма
     -- ПОЛЯ ДЛЯ SNAPSHOT'А СТАТИЧЕСКИХ ДАННЫХ ДЕЙСТВИЯ НА МОМЕНТ ПЛАНИРОВАНИЯ
     snapshot_description TEXT NOT NULL,                -- Копия description действия на момент планирования
+    snapshot_technical_text TEXT,                      -- Копия technical_text действия на момент планирования
     snapshot_contact_phones TEXT,                      -- Копия contact_phones действия на момент планирования
     snapshot_report_materials TEXT,                    -- Копия report_materials действия на момент планирования
     -- РАССЧИТАННЫЕ АБСОЛЮТНЫЕ ВРЕМЕНА (вместо snapshot_*_offset шаблона действия)
