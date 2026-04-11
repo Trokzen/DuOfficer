@@ -571,7 +571,10 @@ Item {
                             if (index === 1) {
                                 // Вместо прямого перехода — открываем Popup с паролем
                                 passwordProtectionPopup.open();
-                                passwordField.forceActiveFocus(); // Удобно для пользователя
+                                loginField.text = "";
+                                passwordField.text = "";
+                                loginErrorMessage.text = "";
+                                loginField.forceActiveFocus(); // Удобно для пользователя
                             } else if (index === 0) {
                                 // Открываем диалог "О программе"
                                 aboutDialog.open();
@@ -751,13 +754,13 @@ Item {
         }
     }
     // --- ---
-    // --- Popup для ввода пароля перед доступом к настройкам ---
+    // --- Popup для ввода логина и пароля администратора ---
     Popup {
         id: passwordProtectionPopup
         x: (parent.width - width) / 2
         y: (parent.height - height) / 2
         width: Math.min(parent.width * 0.8, 700)
-        height: 160
+        height: 200
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
@@ -771,13 +774,22 @@ Item {
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 15
-            spacing: 12
+            spacing: 10
 
             Label {
-                text: "Введите пароль для доступа к настройкам"
+                text: "Введите логин и пароль администратора"
                 font.pixelSize: rootItem.scaleFactor * 12
+                font.bold: true
                 wrapMode: Text.Wrap
                 horizontalAlignment: Text.AlignHCenter
+            }
+
+            TextField {
+                id: loginField
+                Layout.fillWidth: true
+                placeholderText: "Логин"
+                font.pixelSize: rootItem.scaleFactor * 12
+                selectByMouse: true
             }
 
             TextField {
@@ -788,8 +800,17 @@ Item {
                 font.pixelSize: rootItem.scaleFactor * 12
                 selectByMouse: true
                 onAccepted: {
-                    passwordProtectionPopup.checkPassword(); // <-- явно через id
+                    passwordProtectionPopup.checkPassword();
                 }
+            }
+
+            Label {
+                id: loginErrorMessage
+                text: ""
+                color: "#e74c3c"
+                font.pixelSize: rootItem.scaleFactor * 10
+                visible: text !== ""
+                horizontalAlignment: Text.AlignHCenter
             }
 
             RowLayout {
@@ -800,7 +821,9 @@ Item {
                     Layout.fillWidth: true
                     text: "Отмена"
                     onClicked: {
+                        loginField.text = "";
                         passwordField.text = "";
+                        loginErrorMessage.text = "";
                         passwordProtectionPopup.close();
                     }
                 }
@@ -808,27 +831,43 @@ Item {
                 Button {
                     Layout.fillWidth: true
                     text: "Войти"
-                    onClicked: passwordProtectionPopup.checkPassword() // <-- явно через id
+                    onClicked: passwordProtectionPopup.checkPassword()
                 }
             }
         }
 
         function checkPassword() {
-            // Убираем статический пароль
-            // const correctPassword = "1234";
+            loginErrorMessage.text = "";
+
+            var login = loginField.text.trim();
+            var password = passwordField.text;
+
+            if (!login) {
+                loginErrorMessage.text = "Введите логин";
+                loginField.forceActiveFocus();
+                return;
+            }
+            if (!password) {
+                loginErrorMessage.text = "Введите пароль";
+                passwordField.forceActiveFocus();
+                return;
+            }
 
             // Вызываем Python-метод для проверки
-            if (appData.verifyAdminPassword(passwordField.text)) {
+            if (appData.verifyAdminPassword(login, password)) {
+                loginField.text = "";
                 passwordField.text = "";
+                loginErrorMessage.text = "";
                 passwordProtectionPopup.close();
                 rootItem.currentRightPanelIndex = 5;
                 if (settingsView.onOpened) {
                     settingsView.onOpened();
                 }
             } else {
+                loginField.text = "";
                 passwordField.text = "";
-                passwordField.placeholderText = "Неверный пароль!";
-                passwordField.forceActiveFocus();
+                loginErrorMessage.text = "Неверный логин или пароль!";
+                loginField.forceActiveFocus();
             }
         }
     }

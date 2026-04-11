@@ -2250,6 +2250,7 @@ class SQLiteDatabaseManager:
         # Определяем разрешенные поля (те, которые реально существуют в БД)
         allowed_fields_in_db = {
             'snapshot_description',
+            'snapshot_technical_text',
             'calculated_start_time',      # ← используем calculated как факт
             'calculated_end_time',
             'snapshot_contact_phones',
@@ -2393,9 +2394,14 @@ class SQLiteDatabaseManager:
         # --- 1. Подготовить данные для обновления ---
         # Определяем разрешенные поля (те, которые реально существуют в ТАБЛИЦЕ action_executions)
         allowed_fields_in_db = {
+            'snapshot_description',
+            'snapshot_technical_text',
+            'calculated_start_time',
+            'calculated_end_time',
             'actual_end_time',      # <-- Поле для фактического времени окончания
             'reported_to',          # <-- Поле для "Кому доложено"
             'notes',                # <-- Поле для "Примечания"
+            'snapshot_contact_phones',
             'snapshot_report_materials' # Обычно не меняется (это копия из шаблона)
         }
 
@@ -2856,6 +2862,160 @@ class SQLiteDatabaseManager:
             return False
         except Exception as e:
             logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при обновлении примечания для action_execution ID {action_execution_id}: {e}")
+            if 'conn' in locals():
+                conn.close()
+            return False
+
+    def update_action_execution_reported_to(self, action_execution_id: int, reported_to: str) -> bool:
+        """
+        Обновляет поле 'reported_to' (Кому доложено) у action_execution.
+        :param action_execution_id: ID action_execution'а.
+        :param reported_to: Новое значение.
+        :return: True, если успешно, иначе False.
+        """
+        if not isinstance(action_execution_id, int) or action_execution_id <= 0:
+            logger.error(f"SQLiteDatabaseManager: Некорректный action_execution_id: {action_execution_id}")
+            return False
+
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT id FROM action_executions WHERE id = ?;", (action_execution_id,))
+            if not cursor.fetchone():
+                logger.error(f"SQLiteDatabaseManager: Action_execution ID {action_execution_id} не существует.")
+                cursor.close()
+                conn.close()
+                return False
+
+            reported_value = reported_to if reported_to and reported_to.strip() else None
+            cursor.execute(
+                "UPDATE action_executions SET reported_to = ?, updated_at = datetime('now', 'localtime') WHERE id = ?;",
+                (reported_value, action_execution_id)
+            )
+            conn.commit()
+            affected = cursor.rowcount
+            logger.info(f"SQLiteDatabaseManager: Обновлено reported_to для action_execution ID {action_execution_id}. Строк: {affected}.")
+            cursor.close()
+            conn.close()
+            return True
+
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка БД при обновлении reported_to: {e}")
+            if 'conn' in locals():
+                conn.close()
+            return False
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при обновлении reported_to: {e}")
+            if 'conn' in locals():
+                conn.close()
+            return False
+
+    def append_action_execution_report_material(self, action_execution_id: int, material_path: str) -> bool:
+        """
+        Добавляет путь к отчётному материалу в action_execution (дополняет существующие).
+        :param action_execution_id: ID action_execution'а.
+        :param material_path: Путь к файлу материала.
+        :return: True, если успешно, иначе False.
+        """
+        if not isinstance(action_execution_id, int) or action_execution_id <= 0:
+            logger.error(f"SQLiteDatabaseManager: Некорректный action_execution_id: {action_execution_id}")
+            return False
+
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # Получаем текущие материалы
+            cursor.execute(
+                "SELECT snapshot_report_materials FROM action_executions WHERE id = ?;",
+                (action_execution_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                logger.error(f"SQLiteDatabaseManager: Action_execution ID {action_execution_id} не существует.")
+                cursor.close()
+                conn.close()
+                return False
+
+            current_materials = row[0] or ""
+            if current_materials:
+                new_materials = current_materials + "\n" + material_path
+            else:
+                new_materials = material_path
+
+            cursor.execute(
+                "UPDATE action_executions SET snapshot_report_materials = ?, updated_at = datetime('now', 'localtime') WHERE id = ?;",
+                (new_materials, action_execution_id)
+            )
+            conn.commit()
+            logger.info(f"SQLiteDatabaseManager: Добавлен отчётный материал для action_execution ID {action_execution_id}.")
+            cursor.close()
+            conn.close()
+            return True
+
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка БД при добавлении отчётного материала: {e}")
+            if 'conn' in locals():
+                conn.close()
+            return False
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при добавлении отчётного материала: {e}")
+            if 'conn' in locals():
+                conn.close()
+            return False
+
+    def delete_action_execution_report_material(self, action_execution_id: int, material_index: int) -> bool:
+        """
+        Удаляет отчётный материал по индексу (строка в snapshot_report_materials).
+        :param action_execution_id: ID action_execution'а.
+        :param material_index: Индекс строки для удаления (0-based).
+        :return: True, если успешно, иначе False.
+        """
+        if not isinstance(action_execution_id, int) or action_execution_id <= 0:
+            logger.error(f"SQLiteDatabaseManager: Некорректный action_execution_id: {action_execution_id}")
+            return False
+
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute(
+                "SELECT snapshot_report_materials FROM action_executions WHERE id = ?;",
+                (action_execution_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                cursor.close()
+                conn.close()
+                return False
+
+            current_materials = row[0] or ""
+            lines = [line for line in current_materials.split("\n") if line.strip()]
+            if material_index < 0 or material_index >= len(lines):
+                cursor.close()
+                conn.close()
+                return False
+
+            lines.pop(material_index)
+            new_materials = "\n".join(lines) if lines else None
+
+            cursor.execute(
+                "UPDATE action_executions SET snapshot_report_materials = ?, updated_at = datetime('now', 'localtime') WHERE id = ?;",
+                (new_materials, action_execution_id)
+            )
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return True
+
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка БД при удалении отчётного материала: {e}")
+            if 'conn' in locals():
+                conn.close()
+            return False
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при удалении отчётного материала: {e}")
             if 'conn' in locals():
                 conn.close()
             return False

@@ -467,6 +467,25 @@ Popup {
                 // --- ---
 
                 Label {
+                    text: "Технический текст:"
+                    Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                }
+                TextArea {
+                    id: technicalTextArea
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 60
+                    placeholderText: "Введите технический текст..."
+                    wrapMode: TextArea.Wrap
+                    selectByMouse: true
+                    background: Rectangle {
+                        border.color: technicalTextArea.activeFocus ? "#3498db" : "#ccc"
+                        border.width: 1
+                        radius: 2
+                        color: "white"
+                    }
+                }
+
+                Label {
                     text: "Кому доложено:"
                     Layout.alignment: Qt.AlignRight
                 }
@@ -547,6 +566,7 @@ Popup {
                     // --- СОБИРАЕМ ДАННЫЕ ДЛЯ PYTHON ---
                     var actionExecutionData = {
                         "snapshot_description": descriptionArea.text.trim(),
+                        "snapshot_technical_text": technicalTextArea.text.trim(),
                         "relative_start_days": parseInt(startDaysField.text || "0"),
                         "relative_start_hours": parseInt(startHoursField.text || "0"),
                         "relative_start_minutes": parseInt(startMinutesField.text || "0"),
@@ -600,6 +620,7 @@ Popup {
         descriptionArea.text = "";
         contactPhonesField.text = "";
         reportMaterialsArea.text = "";
+        technicalTextArea.text = "";
         reportedToField.text = "";
         notesArea.text = "";
         errorMessageLabel.text = "";
@@ -632,6 +653,7 @@ Popup {
         descriptionArea.text = actionExecutionData.snapshot_description || "";
         contactPhonesField.text = actionExecutionData.snapshot_contact_phones || "";
         reportMaterialsArea.text = actionExecutionData.snapshot_report_materials || "";
+        technicalTextArea.text = actionExecutionData.snapshot_technical_text || "";
         reportedToField.text = actionExecutionData.reported_to || "";
         notesArea.text = actionExecutionData.notes || "";
         errorMessageLabel.text = "";

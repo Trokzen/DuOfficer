@@ -298,7 +298,7 @@ Popup {
         // --- Заголовок ---
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 70
+            Layout.preferredHeight: 52
             color: "#2c3e50"
             radius: 12
             clip: true
@@ -488,7 +488,9 @@ Popup {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 hoverEnabled: true
-                                onClicked: showMessageDialog("Отчётные материалы", "Функция добавления материалов будет реализована в будущем.")
+                                onClicked: {
+                                    reportMaterialsDialog.open()
+                                }
                             }
                         }
 
@@ -565,7 +567,9 @@ Popup {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 hoverEnabled: true
-                                onClicked: showMessageDialog("Кому доложено", "Функция ввода информации о докладе будет реализована в будущем.")
+                                onClicked: {
+                                    reportedToDialog.open()
+                                }
                             }
                         }
 
@@ -806,7 +810,8 @@ Popup {
                                     text: modelData.phone || "—"
                                     font.pixelSize: 12
                                     color: "#666"
-                                    horizontalAlignment: Text.AlignRight
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
                                     elide: Text.ElideRight
                                 }
 
@@ -956,15 +961,14 @@ Popup {
 
     Dialog {
         id: filesDialog
-        standardButtons: Dialog.Close
         modal: true
         width: 600
         height: 400
-        
+
         ColumnLayout {
             anchors.fill: parent
             spacing: 10
-            
+
             Label {
                 id: filesDialogTitle
                 text: "Файлы"
@@ -1017,13 +1021,32 @@ Popup {
                 }
             }
         }
+
+        footer: Item {
+            width: parent.width
+            height: Math.max(30, parent.height * 0.06)
+
+            RowLayout {
+                anchors.right: parent.right
+                anchors.rightMargin: parent.width * 0.03
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: parent.height * 0.03
+                spacing: 10
+
+                Item { Layout.fillWidth: true }
+
+                Button {
+                    text: "Закрыть"
+                    onClicked: filesDialog.close()
+                }
+            }
+        }
     }
-    
+
     // --- Информационный диалог ---
     Dialog {
         id: infoDialog
         title: "Информация"
-        standardButtons: Dialog.Close
         modal: true
         x: (parent.width - width) / 2
         y: (parent.height - height) / 2
@@ -1051,6 +1074,26 @@ Popup {
                 Layout.fillHeight: true
             }
         }
+
+        footer: Item {
+            width: parent.width
+            height: Math.max(30, parent.height * 0.06)
+
+            RowLayout {
+                anchors.right: parent.right
+                anchors.rightMargin: parent.width * 0.03
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: parent.height * 0.03
+                spacing: 10
+
+                Item { Layout.fillWidth: true }
+
+                Button {
+                    text: "Закрыть"
+                    onClicked: infoDialog.close()
+                }
+            }
+        }
     }
 
     // --- Диалог полного названия организации ---
@@ -1062,7 +1105,6 @@ Popup {
         height: 150
         x: (parent.width - width) / 2
         y: (parent.height - height) / 2
-        standardButtons: Dialog.Close
 
         Label {
             id: orgNameDialogLabel
@@ -1070,6 +1112,298 @@ Popup {
             font.pixelSize: 14
             wrapMode: Text.Wrap
             Layout.fillWidth: true
+        }
+
+        footer: Item {
+            width: parent.width
+            height: Math.max(30, parent.height * 0.06)
+
+            RowLayout {
+                anchors.right: parent.right
+                anchors.rightMargin: parent.width * 0.03
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: parent.height * 0.03
+                spacing: 10
+
+                Item { Layout.fillWidth: true }
+
+                Button {
+                    text: "Закрыть"
+                    onClicked: orgNameDialog.close()
+                }
+            }
+        }
+    }
+
+    // --- Диалог "Кому доложено" ---
+    Dialog {
+        id: reportedToDialog
+        title: "Кому доложено"
+        modal: true
+        width: 500
+        height: 300
+        x: (parent.width - width) / 2
+        y: (parent.height - height) / 2
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+
+            Label {
+                text: "Введите информацию о докладе:"
+                font.pixelSize: 13
+                font.bold: true
+            }
+
+            TextArea {
+                id: reportedToInput
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                placeholderText: "Например: Командиру в/ч 12345, дежурному по штабу..."
+                text: reportedToHidden.text !== "—" ? reportedToHidden.text : ""
+                wrapMode: TextArea.Wrap
+                font.pixelSize: 13
+            }
+        }
+
+        footer: Item {
+            width: parent.width
+            height: Math.max(30, parent.height * 0.06)
+
+            RowLayout {
+                anchors.right: parent.right
+                anchors.rightMargin: parent.width * 0.03
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: parent.height * 0.03
+                spacing: 10
+
+                Item { Layout.fillWidth: true }
+
+                Button {
+                    text: "Сохранить"
+                    highlighted: true
+                    onClicked: reportedToDialog.accept()
+                }
+
+                Button {
+                    text: "Отмена"
+                    onClicked: reportedToDialog.reject()
+                }
+            }
+        }
+
+        onAccepted: {
+            var newText = reportedToInput.text.trim();
+            if (newText) {
+                var actionId = getCurrentActionId();
+                if (actionId > 0) {
+                    var success = appData.updateActionExecutionReportedTo(actionId, newText);
+                    if (success) {
+                        reportedToHidden.text = newText;
+                        console.log("QML: Поле 'Кому доложено' успешно обновлено.");
+                    } else {
+                        showMessageDialog("Ошибка", "Не удалось сохранить данные. Проверьте логи.");
+                    }
+                }
+            }
+        }
+
+        onRejected: {
+            // Восстанавливаем исходный текст
+            reportedToInput.text = reportedToHidden.text !== "—" ? reportedToHidden.text : "";
+        }
+    }
+
+    // --- Диалог "Отчётные материалы" ---
+    Dialog {
+        id: reportMaterialsDialog
+        title: "Отчётные материалы"
+        modal: true
+        width: 600
+        height: 450
+        x: (parent.width - width) / 2
+        y: (parent.height - height) / 2
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                Label {
+                    text: "Список материалов:"
+                    font.pixelSize: 13
+                    font.bold: true
+                    Layout.fillWidth: true
+                }
+
+                // Кнопка добавить
+                Rectangle {
+                    width: 80
+                    height: 28
+                    radius: 6
+                    color: {
+                        if (addMatBtn.pressed) return "#1e8449"
+                        if (addMatBtn.hovered) return "#27ae60"
+                        return "#2ecc71"
+                    }
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    MouseArea {
+                        id: addMatBtn
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: reportMatFileDialog.open()
+                    }
+                    Text {
+                        anchors.centerIn: parent
+                        text: "➕ Добавить"
+                        color: "#ffffff"
+                        font.pixelSize: 11
+                        font.bold: true
+                    }
+                }
+            }
+
+            // Список материалов
+            ScrollView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+
+                ListView {
+                    id: reportMaterialsDialogList
+                    model: reportMaterialsModel
+                    spacing: 4
+
+                    delegate: Rectangle {
+                        width: ListView.view.width
+                        height: 32
+                        radius: 4
+                        color: index % 2 ? "#f0f0f0" : "#ffffff"
+                        border.color: "#e0e0e0"
+                        border.width: 1
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            spacing: 8
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: {
+                                    var p = model.path || ""
+                                    var parts = p.replace(/\\/g, "/").split("/")
+                                    return parts.length > 0 ? parts[parts.length - 1] : p
+                                }
+                                font.pixelSize: 12
+                                elide: Text.ElideMiddle
+                                verticalAlignment: Text.AlignVCenter
+                                color: "#2980b9"
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Qt.openUrlExternally("file:///" + model.path.replace(/\\/g, "/"))
+                                }
+                            }
+
+                            // Кнопка удалить
+                            Rectangle {
+                                width: 24
+                                height: 24
+                                radius: 4
+                                color: {
+                                    if (delMatBtn.pressed) return "#922b21"
+                                    if (delMatBtn.hovered) return "#cb4335"
+                                    return "#e74c3c"
+                                }
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                                MouseArea {
+                                    id: delMatBtn
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        var matIndex = index;
+                                        var actionId = getCurrentActionId();
+                                        if (actionId > 0) {
+                                            var success = appData.deleteActionExecutionReportMaterial(actionId, matIndex);
+                                            if (success) {
+                                                // Перезагружаем материалы
+                                                loadActionData();
+                                            }
+                                        }
+                                    }
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "✕"
+                                    color: "#ffffff"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                }
+                            }
+                        }
+                    }
+
+                    Label {
+                        anchors.centerIn: parent
+                        text: "Нет материалов"
+                        color: "#95a5a6"
+                        font.pixelSize: 13
+                        font.italic: true
+                        visible: reportMaterialsModel.count === 0
+                    }
+                }
+            }
+        }
+
+        footer: Item {
+            width: parent.width
+            height: Math.max(30, parent.height * 0.06)
+
+            RowLayout {
+                anchors.right: parent.right
+                anchors.rightMargin: parent.width * 0.03
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: parent.height * 0.03
+                spacing: 10
+
+                Item { Layout.fillWidth: true }
+
+                Button {
+                    text: "Закрыть"
+                    onClicked: reportMaterialsDialog.close()
+                }
+            }
+        }
+    }
+
+    // --- FileDialog для выбора файла отчётного материала ---
+    FileDialog {
+        id: reportMatFileDialog
+        title: "Выберите файл отчётного материала"
+        fileMode: FileDialog.OpenFile
+        onAccepted: {
+            var selectedFile = reportMatFileDialog.selectedFile;
+            if (selectedFile) {
+                var localPath = selectedFile.toString().replace(/^file:[\/\\]{2,3}/, "");
+                console.log("QML: Выбран файл отчётного материала:", localPath);
+                var actionId = getCurrentActionId();
+                if (actionId > 0) {
+                    var success = appData.addActionExecutionReportMaterial(actionId, localPath);
+                    if (success) {
+                        console.log("QML: Файл успешно добавлен.");
+                        // Перезагружаем данные действия
+                        loadActionData();
+                    } else {
+                        showMessageDialog("Ошибка", "Не удалось добавить файл. Проверьте логи.");
+                    }
+                }
+            }
         }
     }
 }

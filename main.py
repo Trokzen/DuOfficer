@@ -2419,33 +2419,43 @@ class ApplicationData(QObject):
             print(f"Ошибка печати: {e}")
             traceback.print_exc()
 
-    @Slot(str, result=bool)
-    def verifyAdminPassword(self, password: str) -> bool:
+    @Slot(str, str, result=bool)
+    def verifyAdminPassword(self, login: str, password: str) -> bool:
         """
-        Проверяет, совпадает ли переданный пароль с паролем пользователя 'admin'.
-        Использует database_manager для запроса к SQLite.
+        Проверяет, совпадает ли переданный пароль с паролем указанного пользователя.
+        Также проверяет, что пользователь является администратором.
         """
         try:
-            # Проверяем, инициализирован ли менеджер SQLite
             if self.database_manager is None:
                 print("Ошибка: database_manager не инициализирован.")
                 return False
 
-            # Получаем подключение
             conn = self.database_manager._get_connection()
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT password_hash FROM users WHERE login = ? AND is_active = 1;",
-                ("admin",)
+                "SELECT id, login, password_hash, is_admin FROM users WHERE login = ? AND is_active = 1;",
+                (login,)
             )
             row = cursor.fetchone()
             cursor.close()
 
             if row:
+                user_id = row["id"]
+                user_login = row["login"]
                 stored_hash = row["password_hash"]
-                return check_password_hash(stored_hash, password)
+                is_admin = bool(row["is_admin"])
+
+                print(f"Python verifyAdminPassword: Пользователь найден: ID={user_id}, логин={user_login}, is_admin={is_admin}")
+
+                if not is_admin:
+                    print(f"Пользователь '{login}' не является администратором (is_admin={is_admin}).")
+                    return False
+
+                result = check_password_hash(stored_hash, password)
+                print(f"Python verifyAdminPassword: Проверка пароля: {'УСПЕХ' if result else 'НЕУДАЧА'}")
+                return result
             else:
-                print("Пользователь 'admin' не найден или неактивен.")
+                print(f"Пользователь '{login}' не найден или неактивен.")
                 return False
 
         except Exception as e:
@@ -3433,6 +3443,39 @@ class ApplicationData(QObject):
                 return self.database_manager.update_action_execution_status(action_execution_id, new_status)
             except Exception as e:
                 print(f"Python ApplicationData: Ошибка при обновлении статуса: {e}")
+                return False
+        return False
+
+    @Slot(int, str, result=bool)
+    def updateActionExecutionReportedTo(self, action_execution_id: int, reported_to: str) -> bool:
+        """Обновить поле 'Кому доложено' для действия."""
+        if self.database_manager:
+            try:
+                return self.database_manager.update_action_execution_reported_to(action_execution_id, reported_to)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при обновлении reported_to: {e}")
+                return False
+        return False
+
+    @Slot(int, str, result=bool)
+    def addActionExecutionReportMaterial(self, action_execution_id: int, material_path: str) -> bool:
+        """Добавить отчётный материал к действию."""
+        if self.database_manager:
+            try:
+                return self.database_manager.append_action_execution_report_material(action_execution_id, material_path)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при добавлении отчётного материала: {e}")
+                return False
+        return False
+
+    @Slot(int, int, result=bool)
+    def deleteActionExecutionReportMaterial(self, action_execution_id: int, material_index: int) -> bool:
+        """Удалить отчётный материал по индексу."""
+        if self.database_manager:
+            try:
+                return self.database_manager.delete_action_execution_report_material(action_execution_id, material_index)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при удалении отчётного материала: {e}")
                 return False
         return False
 
