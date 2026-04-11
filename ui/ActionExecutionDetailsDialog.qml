@@ -8,8 +8,8 @@ Popup {
     id: actionDetailsDialog
     x: (parent.width - width) / 2
     y: (parent.height - height) / 2
-    width: Math.min(parent.width * 0.98, 1600)
-    height: Math.min(parent.height * 0.95, 1000)
+    width: parent.width * 0.98
+    height: parent.height * 0.95
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
@@ -232,21 +232,22 @@ Popup {
                     filteredFiles.push(files[i]);
                 }
             }
-            title += " (" + fileType.toUpperCase() + ")";
+            // Красивое название типа для заголовка
+            var typeNames = { "word": "Документы", "excel": "Таблицы", "pdf": "PDF" };
+            title += " (" + (typeNames[fileType] || fileType.toUpperCase()) + ")";
         }
 
         filesDialogModel.clear();
         for (var j = 0; j < filteredFiles.length; j++) {
             filesDialogModel.append(filteredFiles[j]);
         }
-        
+
         filesDialogTitle.text = title;
-        
+
         if (filteredFiles.length > 0) {
             filesDialog.open();
         } else {
-            // Можно показать сообщение, что файлов нет
-            console.log("Нет файлов данного типа");
+            showMessageDialog("Нет файлов", "У организации \"" + orgData.name + "\" нет файлов данного типа.");
         }
     }
 
@@ -282,9 +283,9 @@ Popup {
     background: Rectangle {
         id: dialogBackground
         radius: 12
-        color: actionDetailsDialog.isOverdue ? (overduePulseTimer.running ? "#f5b7b1" : "#ffffff") : "#ffffff"
-        border.color: actionDetailsDialog.isOverdue ? "#e74c3c" : "#e0e0e0"
-        border.width: actionDetailsDialog.isOverdue ? 2 : 1
+        color: (actionDetailsDialog.isOverdue && actionDetailsDialog.currentStatus !== "completed") ? (overduePulseTimer.running ? "#f5b7b1" : "#ffffff") : "#ffffff"
+        border.color: (actionDetailsDialog.isOverdue && actionDetailsDialog.currentStatus !== "completed") ? "#e74c3c" : "#e0e0e0"
+        border.width: (actionDetailsDialog.isOverdue && actionDetailsDialog.currentStatus !== "completed") ? 2 : 1
         Behavior on color { ColorAnimation { duration: 400 } }
     }
 
@@ -337,7 +338,7 @@ Popup {
 
             // === ЛЕВАЯ ЧАСТЬ ===
             ColumnLayout {
-                Layout.fillWidth: true
+                Layout.preferredWidth: parent.width * 0.5
                 Layout.fillHeight: true
 
                 // --- Времена ---
@@ -392,10 +393,10 @@ Popup {
                         readOnly: true
                         wrapMode: TextArea.Wrap
                         font.pixelSize: 13
-                        background: Rectangle { 
-                            color: actionDetailsDialog.isOverdue ? "#f8d7da" : "#f8f9fa"
+                        background: Rectangle {
+                            color: (actionDetailsDialog.isOverdue && actionDetailsDialog.currentStatus !== "completed") ? "#f8d7da" : "#f8f9fa"
                             Behavior on color { ColorAnimation { duration: 400 } }
-                            radius: 6; border.color: "#dee2e6"; border.width: 1 
+                            radius: 6; border.color: "#dee2e6"; border.width: 1
                         }
                     }
                 }
@@ -459,11 +460,10 @@ Popup {
                     Layout.topMargin: 10
                     spacing: 15
 
-                    // Отчётные материалы (60% ширины)
+                    // Отчётные материалы (50% ширины)
                     ColumnLayout {
-                        Layout.fillWidth: true
+                        Layout.preferredWidth: parent.width * 0.5
                         Layout.fillHeight: true
-                        Layout.preferredWidth: parent.width * 0.6
                         spacing: 5
 
                         // Кнопка-заголовок Отчетные материалы
@@ -502,8 +502,8 @@ Popup {
                                 delegate: Rectangle {
                                     width: ListView.view.width
                                     height: 28
-                                    color: actionDetailsDialog.isOverdue ? 
-                                        (index % 2 ? "#f5b7b1" : "#f8d7da") : 
+                                    color: (actionDetailsDialog.isOverdue && actionDetailsDialog.currentStatus !== "completed") ?
+                                        (index % 2 ? "#f5b7b1" : "#f8d7da") :
                                         (index % 2 ? "#f9f9f9" : "#ffffff")
                                     Behavior on color { ColorAnimation { duration: 400 } }
                                     Text {
@@ -537,11 +537,10 @@ Popup {
                         }
                     }
 
-                    // Кому доложено (40% ширины)
+                    // Кому доложено (50% ширины)
                     ColumnLayout {
-                        Layout.fillWidth: true
+                        Layout.preferredWidth: parent.width * 0.5
                         Layout.fillHeight: true
-                        Layout.preferredWidth: parent.width * 0.4
                         spacing: 5
 
                         // Кнопка-заголовок Кому доложено
@@ -722,7 +721,7 @@ Popup {
 
             // === ПРАВАЯ ЧАСТЬ ===
             ColumnLayout {
-                Layout.fillWidth: true
+                Layout.preferredWidth: parent.width * 0.5
                 Layout.fillHeight: true
 
                 Label {
@@ -742,34 +741,70 @@ Popup {
                         id: orgsList
                         model: actionDetailsDialog.allOrganizations
                         delegate: Rectangle {
+                            id: orgDelegate
                             width: ListView.view.width
-                            height: 45
-                            color: actionDetailsDialog.isOverdue ? 
-                                (index % 2 ? "#f5b7b1" : "#f8d7da") : 
+                            height: 42
+                            color: (actionDetailsDialog.isOverdue && actionDetailsDialog.currentStatus !== "completed") ?
+                                (index % 2 ? "#f5b7b1" : "#f8d7da") :
                                 (index % 2 ? "#f9f9f9" : "#ffffff")
                             Behavior on color { ColorAnimation { duration: 400 } }
                             border.color: "#eee"
                             border.width: 1
 
+                            property string orgNameValue: modelData ? (modelData.name || "Без названия") : ""
+
+                            // MouseArea на весь делегат
+                            MouseArea {
+                                id: delegateMouseArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    console.log("QML: Клик по организации:", orgDelegate.orgNameValue);
+                                    orgNameDialogLabel.text = orgDelegate.orgNameValue;
+                                    orgNameDialog.open();
+                                }
+                            }
+
                             RowLayout {
                                 anchors.fill: parent
                                 anchors.margins: 6
-                                spacing: 8
+                                spacing: 5
 
-                                // Название организации
-                                Text {
+                                // Название организации (клик для просмотра полного имени)
+                                Item {
+                                    id: orgNameItem
                                     Layout.fillWidth: true
-                                    text: modelData.name || "Без названия"
-                                    font.pixelSize: 13
-                                    font.bold: true
-                                    elide: Text.ElideRight
+                                    Layout.fillHeight: true
+
+                                    Text {
+                                        id: orgName
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 2
+                                        text: modelData ? modelData.name : ""
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                        elide: Text.ElideRight
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            console.log("QML: Клик по названию организации:", orgName.text);
+                                            orgNameDialogLabel.text = orgName.text;
+                                            orgNameDialog.open();
+                                        }
+                                    }
                                 }
 
                                 // Телефон
                                 Text {
-                                    Layout.preferredWidth: 100
+                                    Layout.preferredWidth: 80
                                     text: modelData.phone || "—"
-                                    font.pixelSize: 13
+                                    font.pixelSize: 12
                                     color: "#666"
                                     horizontalAlignment: Text.AlignRight
                                     elide: Text.ElideRight
@@ -778,36 +813,116 @@ Popup {
                                 // Кнопки файлов
                                 RowLayout {
                                     spacing: 4
-                                    Button {
-                                        text: "Word"
-                                        font.pixelSize: 10
-                                        visible: modelData.reference_files && modelData.reference_files.length > 0
-                                        onClicked: {
-                                            openFilesDialog(modelData, "word")
+
+                                    // Кнопка Документы (Word, ODT, RTF)
+                                    Rectangle {
+                                        width: 28
+                                        height: 28
+                                        radius: 6
+                                        color: {
+                                            if (btnDoc.pressed) return "#1a5276"
+                                            if (btnDoc.hovered) return "#2980b9"
+                                            return "#3498db"
+                                        }
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                        ToolTip.visible: btnDoc.hovered
+                                        ToolTip.text: "Документы (Word, ODT, RTF)"
+                                        ToolTip.delay: 300
+                                        MouseArea {
+                                            id: btnDoc
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: openFilesDialog(modelData, "word")
+                                        }
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "📄"
+                                            font.pixelSize: 14
                                         }
                                     }
-                                    Button {
-                                        text: "Excel"
-                                        font.pixelSize: 10
-                                        visible: modelData.reference_files && modelData.reference_files.length > 0
-                                        onClicked: {
-                                            openFilesDialog(modelData, "excel")
+
+                                    // Кнопка Таблицы (Excel и аналоги)
+                                    Rectangle {
+                                        width: 28
+                                        height: 28
+                                        radius: 6
+                                        color: {
+                                            if (btnXls.pressed) return "#1e8449"
+                                            if (btnXls.hovered) return "#27ae60"
+                                            return "#2ecc71"
+                                        }
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                        ToolTip.visible: btnXls.hovered
+                                        ToolTip.text: "Таблицы (Excel, ODS, CSV)"
+                                        ToolTip.delay: 300
+                                        MouseArea {
+                                            id: btnXls
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: openFilesDialog(modelData, "excel")
+                                        }
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "📊"
+                                            font.pixelSize: 14
                                         }
                                     }
-                                    Button {
-                                        text: "PDF"
-                                        font.pixelSize: 10
-                                        visible: modelData.reference_files && modelData.reference_files.length > 0
-                                        onClicked: {
-                                            openFilesDialog(modelData, "pdf")
+
+                                    // Кнопка PDF
+                                    Rectangle {
+                                        width: 28
+                                        height: 28
+                                        radius: 6
+                                        color: {
+                                            if (btnPdf.pressed) return "#922b21"
+                                            if (btnPdf.hovered) return "#cb4335"
+                                            return "#e74c3c"
+                                        }
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                        ToolTip.visible: btnPdf.hovered
+                                        ToolTip.text: "PDF файлы"
+                                        ToolTip.delay: 300
+                                        MouseArea {
+                                            id: btnPdf
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: openFilesDialog(modelData, "pdf")
+                                        }
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "📕"
+                                            font.pixelSize: 14
                                         }
                                     }
-                                    Button {
-                                        text: "Все"
-                                        font.pixelSize: 10
-                                        visible: modelData.reference_files && modelData.reference_files.length > 0
-                                        onClicked: {
-                                            openFilesDialog(modelData, "all")
+
+                                    // Кнопка Все файлы
+                                    Rectangle {
+                                        width: 28
+                                        height: 28
+                                        radius: 6
+                                        color: {
+                                            if (btnAll.pressed) return "#7d6608"
+                                            if (btnAll.hovered) return "#b7950b"
+                                            return "#f1c40f"
+                                        }
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                        ToolTip.visible: btnAll.hovered
+                                        ToolTip.text: "Все файлы"
+                                        ToolTip.delay: 300
+                                        MouseArea {
+                                            id: btnAll
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: openFilesDialog(modelData, "all")
+                                        }
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "📁"
+                                            font.pixelSize: 14
                                         }
                                     }
                                 }
@@ -935,6 +1050,26 @@ Popup {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
             }
+        }
+    }
+
+    // --- Диалог полного названия организации ---
+    Dialog {
+        id: orgNameDialog
+        title: "Название организации"
+        modal: true
+        width: 500
+        height: 150
+        x: (parent.width - width) / 2
+        y: (parent.height - height) / 2
+        standardButtons: Dialog.Close
+
+        Label {
+            id: orgNameDialogLabel
+            text: ""
+            font.pixelSize: 14
+            wrapMode: Text.Wrap
+            Layout.fillWidth: true
         }
     }
 }

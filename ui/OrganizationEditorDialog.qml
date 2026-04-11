@@ -467,9 +467,13 @@ Popup {
                 var localPath = selectedFile.toString().replace(/^file:[\/\\]{2,3}/, "")
                 var fileType = "other"
                 var lowerPath = localPath.toLowerCase()
-                if (lowerPath.endsWith(".doc") || lowerPath.endsWith(".docx")) {
+                // Word-подобные форматы
+                if (lowerPath.endsWith(".doc") || lowerPath.endsWith(".docx") ||
+                    lowerPath.endsWith(".odt") || lowerPath.endsWith(".rtf")) {
                     fileType = "word"
-                } else if (lowerPath.endsWith(".xls") || lowerPath.endsWith(".xlsx")) {
+                // Табличные форматы
+                } else if (lowerPath.endsWith(".xls") || lowerPath.endsWith(".xlsx") ||
+                           lowerPath.endsWith(".ods") || lowerPath.endsWith(".csv")) {
                     fileType = "excel"
                 } else if (lowerPath.endsWith(".pdf")) {
                     fileType = "pdf"
