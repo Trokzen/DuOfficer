@@ -1,25 +1,32 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_all
-
-datas = [('ui', 'ui'), ('resources', 'resources'), ('sounds', 'sounds'), ('db', 'db')]
-binaries = []
-hiddenimports = ['PySide6.QtSql', 'PySide6.QtOpenGL', 'PySide6.QtCharts', 'PySide6.QtMultimedia', 'PySide6.QtPrintSupport', 'sqlite3', 'werkzeug.security']
-tmp_ret = collect_all('PySide6')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=binaries,
-    datas=datas,
-    hiddenimports=hiddenimports,
+    binaries=[],
+    datas=[
+        ('ui', 'ui'),
+        ('resources', 'resources'),
+        ('sounds', 'sounds'),
+        ('db', 'db'),
+        ('qmldir', '.'),
+    ],
+    hiddenimports=[
+        'PySide6.QtSql',
+        'PySide6.QtCharts',
+        'PySide6.QtMultimedia',
+        'PySide6.QtPrintSupport',
+        'PySide6.QtQml',
+        'PySide6.QtQuick',
+        'sqlite3',
+        'werkzeug.security',
+        'psycopg2',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['tkinter', 'test', 'unittest'],
     noarchive=False,
-    optimize=0,
 )
 pyz = PYZ(a.pure)
 

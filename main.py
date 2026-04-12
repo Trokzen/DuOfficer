@@ -1499,7 +1499,7 @@ class ApplicationData(QObject):
                 # Подготовка данных, включая преобразование INTERVAL из строки QML
                 prepared_data = {}
                 for key, value in action_data.items():
-                    if key in ['algorithm_id', 'description', 'contact_phones', 'report_materials']:
+                    if key in ['algorithm_id', 'description', 'technical_text', 'contact_phones', 'report_materials']:
                         prepared_data[key] = str(value).strip() if value is not None else (None if key in ['contact_phones', 'report_materials'] else "")
                     elif key in ['start_offset', 'end_offset']:
                         # Ожидаем, что QML передаст строку вроде '2 days 3 hours' или '03:30:00'

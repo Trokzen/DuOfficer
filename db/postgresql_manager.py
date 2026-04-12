@@ -920,21 +920,22 @@ class PostgreSQLDatabaseManager:
                     
                     # 4. Дублируем действия оригинального алгоритма
                     cursor.execute("""
-                        SELECT id, description, start_offset, end_offset, contact_phones, report_materials
+                        SELECT id, description, technical_text, start_offset, end_offset, contact_phones, report_materials
                         FROM {self.SCHEMA_NAME}.actions WHERE algorithm_id = %s ORDER BY start_offset
                     """.format(self=self), (original_algorithm_id,))
                     original_actions_rows = cursor.fetchall()
-                    
+
                     # --- ИСПРАВЛЕНО: Преобразование кортежей в список словарей ---
                     original_actions = []
                     for action_row in original_actions_rows:
                         action_dict = {
                             'id': action_row[0],
                             'description': action_row[1],
-                            'start_offset': action_row[2],
-                            'end_offset': action_row[3],
-                            'contact_phones': action_row[4],
-                            'report_materials': action_row[5]
+                            'technical_text': action_row[2],
+                            'start_offset': action_row[3],
+                            'end_offset': action_row[4],
+                            'contact_phones': action_row[5],
+                            'report_materials': action_row[6]
                         }
                         original_actions.append(action_dict)
                     # --- ---
@@ -950,6 +951,7 @@ class PostgreSQLDatabaseManager:
                         new_action_data = {
                             'algorithm_id': new_algorithm_id, # <-- ВАЖНО: Новый algorithm_id
                             'description': original_action.get('description', ''),
+                            'technical_text': original_action.get('technical_text', ''),
                             'start_offset': original_action.get('start_offset'),
                             'end_offset': original_action.get('end_offset'),
                             'contact_phones': original_action.get('contact_phones'),
@@ -1169,10 +1171,10 @@ class PostgreSQLDatabaseManager:
 
             # --- ИЗМЕНЕНО: Подготовка полей и значений с преобразованием времени ---
             # Определяем поля, которые будут вставлены
-            allowed_fields = ['algorithm_id', 'description', 'start_offset', 'end_offset', 'contact_phones', 'report_materials']
+            allowed_fields = ['algorithm_id', 'description', 'technical_text', 'start_offset', 'end_offset', 'contact_phones', 'report_materials']
             fields = [field for field in allowed_fields if field in action_data]
-            
-            # Создаем список %s плейсхолдеров
+
+            # Создаем список ? плейсхолдеров
             placeholders = ['%s'] * len(fields)
             
             # Формируем значения для вставки, обрабатывая типы данных
@@ -1255,7 +1257,7 @@ class PostgreSQLDatabaseManager:
 
             # --- ИЗМЕНЕНО: Подготовка данных с преобразованием времени ---
             # Фильтруем и готовим только разрешенные поля
-            allowed_fields = ['algorithm_id', 'description', 'start_offset', 'end_offset', 'contact_phones', 'report_materials']
+            allowed_fields = ['algorithm_id', 'description', 'technical_text', 'start_offset', 'end_offset', 'contact_phones', 'report_materials']
             fields_to_update = [field for field in allowed_fields if field in action_data]
             
             if not fields_to_update:
@@ -1378,6 +1380,7 @@ class PostgreSQLDatabaseManager:
         new_action_data = {
             'algorithm_id': new_algorithm_id if new_algorithm_id is not None else original_action['algorithm_id'],
             'description': original_action['description'],
+            'technical_text': original_action.get('technical_text', ''),
             'start_offset': original_action.get('start_offset'),
             'end_offset': original_action.get('end_offset'),
             'contact_phones': original_action.get('contact_phones'),

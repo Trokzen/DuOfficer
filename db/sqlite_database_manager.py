@@ -1,4 +1,4 @@
-# db/sqlite_database_manager.py
+﻿# db/sqlite_database_manager.py
 import sqlite3
 from typing import Optional, Dict, Any, List
 import logging
@@ -66,10 +66,9 @@ class SQLiteDatabaseManager:
 
         # Определяем путь к файлу в зависимости от того, запущено ли приложение как скрипт или exe
         if getattr(sys, 'frozen', False):
-            # Приложение запущено как exe
-            script_dir = os.path.dirname(sys.executable)
-            # В собранном приложении файлы данных находятся в папке _internal
-            schema_path = os.path.join(script_dir, '_internal', 'db', 'init_sqlite_schema.sql')
+            # Приложение запущено как exe — используем _MEIPASS (стандартный способ PyInstaller)
+            base_path = sys._MEIPASS
+            schema_path = os.path.join(base_path, 'db', 'init_sqlite_schema.sql')
         else:
             # Приложение запущено как скрипт
             script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -80,6 +79,25 @@ class SQLiteDatabaseManager:
 
         # Выполняем скрипт
         cursor.executescript(sql_script)
+
+        # --- МИГРАЦИЯ: Добавляем missing колонки если их нет ---
+        cursor.execute("PRAGMA table_info(actions)")
+        existing_columns = [info[1] for info in cursor.fetchall()]
+
+        if 'technical_text' not in existing_columns:
+            try:
+                cursor.execute("ALTER TABLE actions ADD COLUMN technical_text TEXT;")
+                logger.info("Миграция: добавлена колонка technical_text в actions.")
+            except sqlite3.Error as e:
+                logger.warning(f"Миграция: не удалось добавить technical_text: {e}")
+
+        if 'snapshot_technical_text' not in existing_columns:
+            try:
+                cursor.execute("ALTER TABLE action_executions ADD COLUMN snapshot_technical_text TEXT;")
+                logger.info("Миграция: добавлена колонка snapshot_technical_text в action_executions.")
+            except sqlite3.Error as e:
+                logger.warning(f"Миграция: не удалось добавить snapshot_technical_text: {e}")
+        # --- Конец миграции ---
 
         conn.commit()
         conn.close()
@@ -895,7 +913,7 @@ class SQLiteDatabaseManager:
 
                 # 4. Дублируем действия оригинального алгоритма
                 cursor.execute("""
-                    SELECT id, description, start_offset, end_offset, contact_phones, report_materials
+                    SELECT id, description, technical_text, start_offset, end_offset, contact_phones, report_materials
                     FROM actions WHERE algorithm_id = ? ORDER BY start_offset
                 """, (original_algorithm_id,))
                 original_actions_rows = cursor.fetchall()
@@ -906,10 +924,11 @@ class SQLiteDatabaseManager:
                     action_dict = {
                         'id': action_row[0],
                         'description': action_row[1],
-                        'start_offset': action_row[2],
-                        'end_offset': action_row[3],
-                        'contact_phones': action_row[4],
-                        'report_materials': action_row[5]
+                        'technical_text': action_row[2],
+                        'start_offset': action_row[3],
+                        'end_offset': action_row[4],
+                        'contact_phones': action_row[5],
+                        'report_materials': action_row[6]
                     }
                     original_actions.append(action_dict)
 
@@ -921,6 +940,7 @@ class SQLiteDatabaseManager:
                     new_action_data = {
                         'algorithm_id': new_algorithm_id, # <-- ВАЖНО: Новый algorithm_id
                         'description': original_action.get('description', ''),
+                        'technical_text': original_action.get('technical_text', ''),
                         'start_offset': original_action.get('start_offset'),
                         'end_offset': original_action.get('end_offset'),
                         'contact_phones': original_action.get('contact_phones'),
@@ -1199,7 +1219,11 @@ class SQLiteDatabaseManager:
 
             # --- ИЗМЕНЕНО: Подготовка полей и значений с преобразованием времени ---
             # Определяем поля, которые будут встав��ены
-            allowed_fields = ['algorithm_id', 'description', 'start_offset', 'end_offset', 'contact_phones', 'report_materials']
+            # Поддержка snapshot_technical_text из QML
+            if 'snapshot_technical_text' in action_data and 'technical_text' not in action_data:
+                action_data['technical_text'] = action_data.pop('snapshot_technical_text')
+
+            allowed_fields = ['algorithm_id', 'description', 'technical_text', 'start_offset', 'end_offset', 'contact_phones', 'report_materials']
             fields = [field for field in allowed_fields if field in action_data]
 
             # Создаем спи��ок ? плейсхолдеров
@@ -1235,11 +1259,22 @@ class SQLiteDatabaseManager:
             # Используем lastrowid для получения ID нового действия
             sql_query = f"INSERT INTO actions ({columns_str}) VALUES ({placeholders_str});"
 
-            logger.debug(f"Выполнение SQL создания действия: {sql_query} с параметрами {values}")
+            logger.debug(f"Выполнение SQL создания действия: {sql_query}")
+            logger.debug(f"Значения для вставки: {values}")
             cursor.execute(sql_query, values)
             new_id = cursor.lastrowid
             conn.commit()
             cursor.close()
+
+            if new_id:
+                # Проверка: считываем обратно technical_text
+                if 'technical_text' in action_data:
+                    conn2 = self._get_connection()
+                    c2 = conn2.cursor()
+                    c2.execute("SELECT technical_text FROM actions WHERE id = ?", (new_id,))
+                    r = c2.fetchone()
+                    c2.close()
+                    logger.info(f"Проверка: после вставки technical_text для ID {new_id} = {repr(r[0] if r else 'N/A')}")
 
             if new_id:
                 logger.info(f"Новое действие успешно создано с ID: {new_id}")
@@ -1407,6 +1442,7 @@ class SQLiteDatabaseManager:
         new_action_data = {
             'algorithm_id': new_algorithm_id if new_algorithm_id is not None else original_action['algorithm_id'],
             'description': original_action['description'],
+            'technical_text': original_action.get('technical_text', ''),
             'start_offset': original_action.get('start_offset'),
             'end_offset': original_action.get('end_offset'),
             'contact_phones': original_action.get('contact_phones'),
