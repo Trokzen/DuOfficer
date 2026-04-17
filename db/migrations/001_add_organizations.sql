@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS organization_reference_files (
     file_type TEXT DEFAULT 'other',
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
-    CHECK (file_type IN ('word', 'excel', 'pdf', 'other'))
+    CHECK (file_type IN ('word', 'excel', 'pdf', 'image', 'other'))
 );
 
 -- Индексы для ускорения поиска

@@ -253,10 +253,10 @@ CREATE TABLE IF NOT EXISTS organization_reference_files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,              -- Уникальный идентификатор файла
     organization_id INTEGER NOT NULL,                  -- Ссылка на организацию
     file_path TEXT NOT NULL,                           -- Путь к файлу на диске
-    file_type TEXT DEFAULT 'other',                    -- Тип файла: word, excel, pdf, other
+    file_type TEXT DEFAULT 'other',                    -- Тип файла: word, excel, pdf, image, other
     created_at TEXT DEFAULT (datetime('now', 'localtime')), -- Дата и время добавления файла
     FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
-    CHECK (file_type IN ('word', 'excel', 'pdf', 'other'))
+    CHECK (file_type IN ('word', 'excel', 'pdf', 'image', 'other'))
 );
 
 -- === ИНДЕКСЫ ДЛЯ ОРГАНИЗАЦИЙ ===

@@ -331,7 +331,7 @@ CREATE TABLE IF NOT EXISTS app_schema.organization_reference_files (
     id SERIAL PRIMARY KEY,                             -- Уникальный идентификатор файла
     organization_id INTEGER NOT NULL REFERENCES app_schema.organizations(id) ON DELETE CASCADE,  -- Ссылка на организацию
     file_path TEXT NOT NULL,                           -- Путь к файлу на диске
-    file_type VARCHAR(20) DEFAULT 'other' CHECK (file_type IN ('word', 'excel', 'pdf', 'other')), -- Тип файла
+    file_type VARCHAR(20) DEFAULT 'other' CHECK (file_type IN ('word', 'excel', 'pdf', 'image', 'other')), -- Тип файла
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP     -- Дата и время добавления файла
 );
 

@@ -200,6 +200,7 @@ Popup {
                                                     var fType = model.file_type || "other"
                                                     if (fType === "word") return "#4a90e2"
                                                     else if (fType === "excel") return "#27ae60"
+                                                    else if (fType === "image") return "#e74c3c"
                                                     else if (fType === "pdf") return "#e74c3c"
                                                     else return "#95a5a6"
                                                 }
@@ -209,6 +210,7 @@ Popup {
                                                         var fType = model.file_type || "other"
                                                         if (fType === "word") return "📝"
                                                         else if (fType === "excel") return "📊"
+                                                        else if (fType === "image") return "🖼️"
                                                         else if (fType === "pdf") return "📄"
                                                         else return "📎"
                                                     }
@@ -467,16 +469,23 @@ Popup {
                 var localPath = selectedFile.toString().replace(/^file:[\/\\]{2,3}/, "")
                 var fileType = "other"
                 var lowerPath = localPath.toLowerCase()
-                // Word-подобные форматы
-                if (lowerPath.endsWith(".doc") || lowerPath.endsWith(".docx") ||
-                    lowerPath.endsWith(".odt") || lowerPath.endsWith(".rtf")) {
+                // Текстовые редакторы (документы)
+                if (lowerPath.endsWith(".txt") || lowerPath.endsWith(".doc") || lowerPath.endsWith(".docx") ||
+                    lowerPath.endsWith(".odt") || lowerPath.endsWith(".rtf") || lowerPath.endsWith(".pdf") ||
+                    lowerPath.endsWith(".pages")) {
                     fileType = "word"
-                // Табличные форматы
+                // Табличные редакторы
                 } else if (lowerPath.endsWith(".xls") || lowerPath.endsWith(".xlsx") ||
-                           lowerPath.endsWith(".ods") || lowerPath.endsWith(".csv")) {
+                           lowerPath.endsWith(".ods") || lowerPath.endsWith(".csv") ||
+                           lowerPath.endsWith(".numbers")) {
                     fileType = "excel"
-                } else if (lowerPath.endsWith(".pdf")) {
-                    fileType = "pdf"
+                // Изображения
+                } else if (lowerPath.endsWith(".jpg") || lowerPath.endsWith(".jpeg") ||
+                           lowerPath.endsWith(".png") || lowerPath.endsWith(".gif") ||
+                           lowerPath.endsWith(".bmp") || lowerPath.endsWith(".tiff") ||
+                           lowerPath.endsWith(".tif") || lowerPath.endsWith(".webp") ||
+                           lowerPath.endsWith(".svg") || lowerPath.endsWith(".raw")) {
+                    fileType = "image"
                 }
                 appData.addOrganizationReferenceFile(organizationEditorDialog.currentOrganizationId, localPath, fileType)
                 loadReferenceFiles()

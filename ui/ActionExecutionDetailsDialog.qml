@@ -75,9 +75,38 @@ Popup {
 
     function updateCountdown() {
         var now = getLocalNow()
+        var startTimeText = calculatedStartTimeLabel.text
         var endTimeText = calculatedEndTimeLabel.text
+
+        // Проверяем, задано ли время начала
+        if (!startTimeText || startTimeText === "Не задано" || startTimeText === "—") {
+            remainingTimeLabel.text = "—"
+            remainingTimeLabel.color = "#95a5a6"
+            return
+        }
+
+        // Проверяем, задано ли время окончания
         if (!endTimeText || endTimeText === "Не задано") {
             remainingTimeLabel.text = "—"
+            remainingTimeLabel.color = "#95a5a6"
+            return
+        }
+
+        // Парсим дату начала
+        var startParts = startTimeText.match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/)
+        if (!startParts) {
+            remainingTimeLabel.text = "—"
+            remainingTimeLabel.color = "#95a5a6"
+            return
+        }
+
+        var startDate = new Date(parseInt(startParts[3]), parseInt(startParts[2]) - 1, parseInt(startParts[1]),
+                                 parseInt(startParts[4]), parseInt(startParts[5]), parseInt(startParts[6]))
+
+        // Если время начала еще не наступило - таймер не идет
+        if (now < startDate) {
+            remainingTimeLabel.text = "⏸ Ожидание"
+            remainingTimeLabel.color = "#3498db"
             return
         }
 
@@ -85,6 +114,7 @@ Popup {
         var endParts = endTimeText.match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/)
         if (!endParts) {
             remainingTimeLabel.text = "—"
+            remainingTimeLabel.color = "#95a5a6"
             return
         }
 
@@ -233,7 +263,7 @@ Popup {
                 }
             }
             // Красивое название типа для заголовка
-            var typeNames = { "word": "Документы", "excel": "Таблицы", "pdf": "PDF" };
+            var typeNames = { "word": "Документы", "excel": "Таблицы", "image": "Изображения" };
             title += " (" + (typeNames[fileType] || fileType.toUpperCase()) + ")";
         }
 
@@ -341,45 +371,240 @@ Popup {
                 Layout.preferredWidth: parent.width * 0.5
                 Layout.fillHeight: true
 
-                // --- Времена ---
-                GridLayout {
+                // --- Времена (новый дизайн с карточками) ---
+                ColumnLayout {
                     Layout.fillWidth: true
-                    columns: 3
-                    columnSpacing: 15
-                    rowSpacing: 8
+                    spacing: 12
 
-                    Label { text: "Начало:"; font.pixelSize: 13; color: "#666" }
-                    Label {
-                        id: calculatedStartTimeLabel
-                        text: "—"
-                        font.pixelSize: 14
-                        font.bold: true
-                    }
-                    Label { text: ""; }
+                    // Верхний ряд: Время начала и Время окончания (50/50)
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
 
-                    Label { text: "Окончание:"; font.pixelSize: 13; color: "#666" }
-                    Label {
-                        id: calculatedEndTimeLabel
-                        text: "—"
-                        font.pixelSize: 14
-                        font.bold: true
-                    }
-                    Label { text: ""; }
+                        // Карточка: Время начала
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
 
-                    Label { text: "Осталось:"; font.pixelSize: 13; color: "#666" }
-                    Label {
-                        id: remainingTimeLabel
-                        text: "—"
-                        font.pixelSize: 16
-                        font.bold: true
-                        color: "#27ae60"
+                            Label {
+                                text: "Время начала"
+                                font.pixelSize: 12
+                                color: "#666"
+                                horizontalAlignment: Text.AlignHCenter
+                                Layout.fillWidth: true
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 70
+                                radius: 10
+                                color: "#ebf5fb"
+                                border.color: "#3498db"
+                                border.width: 2
+
+                                ColumnLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 4
+
+                                    // Дата
+                                    Text {
+                                        id: startDateText
+                                        text: {
+                                            var dtStr = calculatedStartTimeLabel.text
+                                            if (dtStr && dtStr !== "—") {
+                                                var parts = dtStr.match(/(\d{2})\.(\d{2})\.(\d{4})/)
+                                                if (parts) return parts[1] + "." + parts[2] + "." + parts[3]
+                                            }
+                                            return "—"
+                                        }
+                                        font.pixelSize: 14
+                                        font.bold: true
+                                        color: "#2980b9"
+                                        horizontalAlignment: Text.AlignHCenter
+                                        Layout.fillWidth: true
+                                    }
+
+                                    // Время
+                                    Text {
+                                        id: startTimeText
+                                        text: {
+                                            var dtStr = calculatedStartTimeLabel.text
+                                            if (dtStr && dtStr !== "—") {
+                                                var parts = dtStr.match(/(\d{2}):(\d{2}):(\d{2})/)
+                                                if (parts) return parts[1] + ":" + parts[2] + ":" + parts[3]
+                                            }
+                                            return "—"
+                                        }
+                                        font.pixelSize: 20
+                                        font.bold: true
+                                        color: "#2c3e50"
+                                        horizontalAlignment: Text.AlignHCenter
+                                        Layout.fillWidth: true
+                                    }
+                                }
+                            }
+                        }
+
+                        // Карточка: Время окончания
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+
+                            Label {
+                                text: "Время окончания"
+                                font.pixelSize: 12
+                                color: "#666"
+                                horizontalAlignment: Text.AlignHCenter
+                                Layout.fillWidth: true
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 70
+                                radius: 10
+                                color: {
+                                    if (actionDetailsDialog.isOverdue && actionDetailsDialog.currentStatus !== "completed") {
+                                        return "#fadbd8"
+                                    }
+                                    return "#e8f8f5"
+                                }
+                                border.color: {
+                                    if (actionDetailsDialog.isOverdue && actionDetailsDialog.currentStatus !== "completed") {
+                                        return "#e74c3c"
+                                    }
+                                    return "#1abc9c"
+                                }
+                                border.width: 2
+                                Behavior on color { ColorAnimation { duration: 400 } }
+                                Behavior on border.color { ColorAnimation { duration: 400 } }
+
+                                ColumnLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 4
+
+                                    // Дата
+                                    Text {
+                                        id: endDateText
+                                        text: {
+                                            var dtStr = calculatedEndTimeLabel.text
+                                            if (dtStr && dtStr !== "—" && dtStr !== "Не задано") {
+                                                var parts = dtStr.match(/(\d{2})\.(\d{2})\.(\d{4})/)
+                                                if (parts) return parts[1] + "." + parts[2] + "." + parts[3]
+                                            }
+                                            return "—"
+                                        }
+                                        font.pixelSize: 14
+                                        font.bold: true
+                                        color: {
+                                            if (actionDetailsDialog.isOverdue && actionDetailsDialog.currentStatus !== "completed") {
+                                                return "#c0392b"
+                                            }
+                                            return "#16a085"
+                                        }
+                                        horizontalAlignment: Text.AlignHCenter
+                                        Layout.fillWidth: true
+                                        Behavior on color { ColorAnimation { duration: 400 } }
+                                    }
+
+                                    // Время
+                                    Text {
+                                        id: endTimeText
+                                        text: {
+                                            var dtStr = calculatedEndTimeLabel.text
+                                            if (dtStr && dtStr !== "—" && dtStr !== "Не задано") {
+                                                var parts = dtStr.match(/(\d{2}):(\d{2}):(\d{2})/)
+                                                if (parts) return parts[1] + ":" + parts[2] + ":" + parts[3]
+                                            }
+                                            return "—"
+                                        }
+                                        font.pixelSize: 20
+                                        font.bold: true
+                                        color: {
+                                            if (actionDetailsDialog.isOverdue && actionDetailsDialog.currentStatus !== "completed") {
+                                                return "#e74c3c"
+                                            }
+                                            return "#2c3e50"
+                                        }
+                                        horizontalAlignment: Text.AlignHCenter
+                                        Layout.fillWidth: true
+                                        Behavior on color { ColorAnimation { duration: 400 } }
+                                    }
+                                }
+                            }
+                        }
                     }
-                    Label { text: ""; }
+
+                    // Нижний ряд: Оставшееся время (по центру)
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        Label {
+                            text: "Оставшееся время"
+                            font.pixelSize: 12
+                            color: "#666"
+                            horizontalAlignment: Text.AlignHCenter
+                            Layout.fillWidth: true
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 70
+                            radius: 10
+                            color: {
+                                var timeText = remainingTimeLabel.text
+                                if (timeText === "⏸ Ожидание") {
+                                    return "#ebf5fb"
+                                } else if (timeText === "00:00:00" || timeText === "—") {
+                                    return "#fadbd8"
+                                } else if (remainingTimeLabel.color === "#f39c12") {
+                                    return "#fef9e7"
+                                }
+                                return "#e8f8f5"
+                            }
+                            border.color: {
+                                var timeText = remainingTimeLabel.text
+                                if (timeText === "⏸ Ожидание") {
+                                    return "#3498db"
+                                } else if (timeText === "00:00:00" || timeText === "—") {
+                                    return "#e74c3c"
+                                } else if (remainingTimeLabel.color === "#f39c12") {
+                                    return "#f39c12"
+                                }
+                                return "#27ae60"
+                            }
+                            border.width: 2
+                            Behavior on color { ColorAnimation { duration: 400 } }
+                            Behavior on border.color { ColorAnimation { duration: 400 } }
+
+                            ColumnLayout {
+                                anchors.centerIn: parent
+                                spacing: 4
+
+                                // Метка времени
+                                Text {
+                                    id: countdownTimeText
+                                    text: remainingTimeLabel.text
+                                    font.pixelSize: 28
+                                    font.bold: true
+                                    color: remainingTimeLabel.color
+                                    horizontalAlignment: Text.AlignHCenter
+                                    Layout.fillWidth: true
+                                    Behavior on color { ColorAnimation { duration: 400 } }
+                                }
+                            }
+                        }
+                    }
+
+                    // Скрытые оригинальные элементы (для совместимости с логикой)
+                    Label { id: calculatedStartTimeLabel; visible: false; text: "—" }
+                    Label { id: calculatedEndTimeLabel; visible: false; text: "—" }
+                    Label { id: remainingTimeLabel; visible: false; text: "—"; color: "#27ae60" }
                 }
 
                 // --- Технический текст ---
                 Label {
-                    text: "Технический текст:"
+                    text: "Сведения о порядке выполнения:"
                     font.pixelSize: 13
                     color: "#666"
                     Layout.topMargin: 10
@@ -831,7 +1056,7 @@ Popup {
                                         }
                                         Behavior on color { ColorAnimation { duration: 150 } }
                                         ToolTip.visible: btnDoc.hovered
-                                        ToolTip.text: "Документы (Word, ODT, RTF)"
+                                        ToolTip.text: "Документы (TXT, DOC, DOCX, ODT, RTF, PDF, PAGES)"
                                         ToolTip.delay: 300
                                         MouseArea {
                                             id: btnDoc
@@ -859,7 +1084,7 @@ Popup {
                                         }
                                         Behavior on color { ColorAnimation { duration: 150 } }
                                         ToolTip.visible: btnXls.hovered
-                                        ToolTip.text: "Таблицы (Excel, ODS, CSV)"
+                                        ToolTip.text: "Таблицы (XLS, XLSX, ODS, CSV, NUMBERS)"
                                         ToolTip.delay: 300
                                         MouseArea {
                                             id: btnXls
@@ -875,7 +1100,7 @@ Popup {
                                         }
                                     }
 
-                                    // Кнопка PDF
+                                    // Кнопка Изображения
                                     Rectangle {
                                         width: 28
                                         height: 28
@@ -887,18 +1112,18 @@ Popup {
                                         }
                                         Behavior on color { ColorAnimation { duration: 150 } }
                                         ToolTip.visible: btnPdf.hovered
-                                        ToolTip.text: "PDF файлы"
+                                        ToolTip.text: "Изображения (JPEG, PNG, GIF, BMP, TIFF, WEBP, SVG, RAW)"
                                         ToolTip.delay: 300
                                         MouseArea {
                                             id: btnPdf
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: openFilesDialog(modelData, "pdf")
+                                            onClicked: openFilesDialog(modelData, "image")
                                         }
                                         Text {
                                             anchors.centerIn: parent
-                                            text: "📕"
+                                            text: "🖼️"
                                             font.pixelSize: 14
                                         }
                                     }
