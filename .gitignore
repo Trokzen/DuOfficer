@@ -1,3 +1,26 @@
-(ui/AboutDialog.qml and ui/MainWindowContent.qml are QML source files, which are source code files and should not be ignored)
+```
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-(empty — output nothing)
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Local environment
+.env
+.env.local
+.env.*
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.#*
+```
