@@ -1052,7 +1052,7 @@ class SQLiteDatabaseManager:
 
     def get_action_by_id(self, action_id: int) -> Optional[Dict[str, Any]]:
         """
-        Получает данные действия по его ID.
+        Получает данные действия по его ID, включая привязанные организации и файлы.
         :param action_id: ID действия.
         :return: Словарь с данными действия или None.
         """
@@ -1073,6 +1073,8 @@ class SQLiteDatabaseManager:
 
             if row:
                 action_dict = dict(zip(colnames, row))
+                # Добавляем информацию о привязанных организациях и файлах
+                action_dict['organization_links'] = self.get_action_organization_links(action_id)
                 logger.debug(f"Получены данные действия по ID {action_id}: {action_dict}")
                 return action_dict
             else:
@@ -1276,6 +1278,17 @@ class SQLiteDatabaseManager:
                     c2.close()
                     logger.info(f"Проверка: после вставки technical_text для ID {new_id} = {repr(r[0] if r else 'N/A')}")
 
+            # Обработка привязанных организаций и файлов (если переданы)
+            if new_id and 'organization_links' in action_data:
+                # organization_links ожидается как список словарей: [{'organization_id': X, 'file_id': Y}, ...]
+                self.clear_action_organization_links(new_id)
+                for link in action_data['organization_links']:
+                    org_id = link.get('organization_id')
+                    file_id = link.get('file_id')
+                    if org_id and file_id:
+                        self.add_action_organization_link(new_id, org_id, file_id)
+                logger.info(f"Привязано {len(action_data['organization_links'])} связей к действию ID {new_id}.")
+
             if new_id:
                 logger.info(f"Новое действие успешно создано с ID: {new_id}")
                 return new_id
@@ -1370,6 +1383,18 @@ class SQLiteDatabaseManager:
 
             if rows_affected > 0:
                 logger.info(f"Действие с ID {action_id} успешно обновлено. Затронуто строк: {rows_affected}.")
+                
+                # Обработка привязанных организаций и файлов (если переданы)
+                if 'organization_links' in action_data:
+                    # organization_links ожидается как список словарей: [{'organization_id': X, 'file_id': Y}, ...]
+                    self.clear_action_organization_links(action_id)
+                    for link in action_data['organization_links']:
+                        org_id = link.get('organization_id')
+                        file_id = link.get('file_id')
+                        if org_id and file_id:
+                            self.add_action_organization_link(action_id, org_id, file_id)
+                    logger.info(f"Обновлено {len(action_data['organization_links'])} связей для действия ID {action_id}.")
+                
                 return True
             else:
                 logger.warning(f"Не удалось обновить действие с ID {action_id} (запись не найдена или данные не изменились).")
@@ -3258,7 +3283,117 @@ class SQLiteDatabaseManager:
             return False
 
     # ========================================================================
-    # МЕТОДЫ ДЛЯ СВЯЗИ ОРГАНИЗАЦИЙ С ДЕЙСТВИЯМИ
+    # МЕТОДЫ ДЛЯ СВЯЗИ ОРГАНИЗАЦИЙ С ДЕЙСТВИЯМИ (НОВАЯ РЕАЛИЗАЦИЯ)
+    # ========================================================================
+
+    def get_action_organization_links(self, action_id: int) -> list:
+        """
+        Получить все связи (организации + файлы) для конкретного действия.
+        Возвращает список словарей с информацией об организации и привязанных файлах.
+        """
+        try:
+            conn = self._get_connection()
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT 
+                    aol.id as link_id,
+                    aol.action_id,
+                    aol.organization_id,
+                    aol.file_id,
+                    o.name as organization_name,
+                    o.phone as organization_phone,
+                    o.contact_person as organization_contact_person,
+                    f.file_path,
+                    f.file_type
+                FROM action_organization_links aol
+                INNER JOIN organizations o ON aol.organization_id = o.id
+                LEFT JOIN organization_reference_files f ON aol.file_id = f.id
+                WHERE aol.action_id = ?
+                ORDER BY o.name, f.file_type;
+            """, (action_id,))
+            rows = cursor.fetchall()
+            links = [dict(row) for row in rows]
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Получено {len(links)} связей для действия ID {action_id}.")
+            return links
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при получении связей для действия ID {action_id}: {e}")
+            return []
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при получении связей для действия ID {action_id}: {e}")
+            return []
+
+    def add_action_organization_link(self, action_id: int, organization_id: int, file_id: int) -> int:
+        """
+        Добавить связь: Действие -> Организация -> Файл.
+        Возвращает ID новой связи или 0 при ошибке.
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO action_organization_links (action_id, organization_id, file_id) VALUES (?, ?, ?);",
+                (action_id, organization_id, file_id)
+            )
+            conn.commit()
+            new_id = cursor.lastrowid
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Добавлена связь ID {new_id}: действие={action_id}, организация={organization_id}, файл={file_id}.")
+            return new_id
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при добавлении связи: {e}")
+            return 0
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при добавлении связи: {e}")
+            return 0
+
+    def remove_action_organization_link(self, link_id: int) -> bool:
+        """
+        Удалить связь по ID.
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM action_organization_links WHERE id = ?;", (link_id,))
+            conn.commit()
+            affected_rows = cursor.rowcount
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Удалена связь ID {link_id}.")
+            return affected_rows > 0
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при удалении связи ID {link_id}: {e}")
+            return False
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при удалении связи ID {link_id}: {e}")
+            return False
+
+    def clear_action_organization_links(self, action_id: int) -> bool:
+        """
+        Удалить все связи для конкретного действия (перед обновлением списка).
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM action_organization_links WHERE action_id = ?;", (action_id,))
+            conn.commit()
+            affected_rows = cursor.rowcount
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Очищено {affected_rows} связей для действия ID {action_id}.")
+            return True
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при очистке связей для действия ID {action_id}: {e}")
+            return False
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при очистке связей для действия ID {action_id}: {e}")
+            return False
+
+    # ========================================================================
+    # СТАРЫЕ МЕТОДЫ ДЛЯ СВЯЗИ ОРГАНИЗАЦИЙ С ВЫПОЛНЕНИЯМИ ДЕЙСТВИЙ
     # ========================================================================
 
     def get_organizations_for_action_execution(self, action_execution_id: int) -> list:
