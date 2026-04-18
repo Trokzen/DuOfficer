@@ -3434,6 +3434,50 @@ class ApplicationData(QObject):
                 return []
         return []
 
+    @Slot(int, result='QVariant')
+    def getActionReferenceFiles(self, action_id: int):
+        """Получить справочные файлы, привязанные к действию."""
+        if self.database_manager:
+            try:
+                return self.database_manager.get_action_reference_files(action_id)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при получении файлов для действия ID {action_id}: {e}")
+                return []
+        return []
+
+    @Slot(int, int, int, result=bool)
+    def addActionReferenceFile(self, action_id: int, organization_id: int, file_id: int) -> bool:
+        """Привязать справочный файл к действию."""
+        if self.database_manager:
+            try:
+                return self.database_manager.add_action_reference_file(action_id, organization_id, file_id)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при привязке файла к действию ID {action_id}: {e}")
+                return False
+        return False
+
+    @Slot(int, int, result=bool)
+    def removeActionReferenceFile(self, action_id: int, file_id: int) -> bool:
+        """Отвязать справочный файл от действия."""
+        if self.database_manager:
+            try:
+                return self.database_manager.remove_action_reference_file(action_id, file_id)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при отвязке файла от действия ID {action_id}: {e}")
+                return False
+        return False
+
+    @Slot(int, result='QVariant')
+    def getOrganizationsWithReferenceFilesForAction(self, action_id: int):
+        """Получить все организации с файлами и информацией о привязке к действию."""
+        if self.database_manager:
+            try:
+                return self.database_manager.get_all_organizations_with_reference_files_for_action(action_id)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при получении организаций для действия ID {action_id}: {e}")
+                return []
+        return []
+
 
     @Slot(int, str, result=bool)
     def updateActionExecutionStatus(self, action_execution_id: int, new_status: str) -> bool:

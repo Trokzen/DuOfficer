@@ -238,12 +238,17 @@ Popup {
     }
 
     function loadOrganizationsForAction() {
-        // Запрашиваем ВСЕ организации с файлами
-        var orgs = appData.getAllOrganizationsWithReferenceFiles()
-        if (orgs) {
-            actionDetailsDialog.allOrganizations = orgs
+        // Запрашиваем организации с файлами, привязанными к текущему действию
+        var actionId = getCurrentActionId();
+        if (actionId > 0) {
+            var orgs = appData.getOrganizationsWithReferenceFilesForAction(actionId);
+            if (orgs) {
+                actionDetailsDialog.allOrganizations = orgs;
+            } else {
+                actionDetailsDialog.allOrganizations = [];
+            }
         } else {
-            actionDetailsDialog.allOrganizations = []
+            actionDetailsDialog.allOrganizations = [];
         }
     }
 
@@ -253,16 +258,23 @@ Popup {
         var filteredFiles = [];
         var title = orgData.name + " - Файлы";
 
-        if (fileType === "all") {
-            filteredFiles = files;
-            title += " (Все)";
-        } else {
-            for (var i = 0; i < files.length; i++) {
+        // Фильтруем только привязанные файлы
+        for (var i = 0; i < files.length; i++) {
+            if (!files[i].is_linked) continue; // Показываем только привязанные файлы
+            
+            if (fileType === "all") {
+                filteredFiles.push(files[i]);
+            } else {
                 if (files[i].file_type === fileType) {
                     filteredFiles.push(files[i]);
                 }
             }
-            // Красивое название типа для заголовка
+        }
+        
+        // Красивое название типа для заголовка
+        if (fileType === "all") {
+            title += " (Все привязанные)";
+        } else {
             var typeNames = { "word": "Документы", "excel": "Таблицы", "image": "Изображения" };
             title += " (" + (typeNames[fileType] || fileType.toUpperCase()) + ")";
         }
@@ -277,7 +289,7 @@ Popup {
         if (filteredFiles.length > 0) {
             filesDialog.open();
         } else {
-            showMessageDialog("Нет файлов", "У организации \"" + orgData.name + "\" нет файлов данного типа.");
+            showMessageDialog("Нет файлов", "У организации \"" + orgData.name + "\" нет привязанных файлов данного типа.");
         }
     }
 
@@ -1161,7 +1173,7 @@ Popup {
                         Label {
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "Нет организаций"
+                            text: "Нет привязанных организаций"
                             color: "#95a5a6"
                             font.pixelSize: 13
                             font.italic: true

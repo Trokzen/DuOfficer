@@ -545,7 +545,7 @@ Item {
 
                 Repeater {
                      model: ListModel {
-                         ListElement { text: "О программе" }
+                         ListElement { text: "О программе 2" }
                          ListElement { text: "Настройки" }
                     }
                     Button {

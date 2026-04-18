@@ -20,6 +20,9 @@ Popup {
     property int currentAlgorithmId: -1
 
     signal actionSaved()
+    
+    // Для управления справочными материалами действия
+    property var organizationsWithFiles: []
 
     // --- Для выбора файлов ---
     FileDialog {
@@ -58,6 +61,123 @@ Popup {
         }
     }
     // --- ---
+    
+    // Диалог для выбора справочных материалов из организаций
+    Dialog {
+        id: referenceFilesDialog
+        x: (parent.width - width) / 2
+        y: (parent.height - height) / 2
+        width: Math.min(parent.width * 0.8, 800)
+        height: Math.min(parent.height * 0.85, 650)
+        modal: true
+        title: "Выберите справочные материалы"
+        
+        background: Rectangle {
+            color: "white"
+            border.color: "lightgray"
+            radius: 8
+        }
+        
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+            
+            Label {
+                text: "Выберите организации и файлы для привязки к действию:"
+                font.bold: true
+                wrapMode: Text.WordWrap
+            }
+            
+            ScrollView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                
+                ListView {
+                    id: orgFilesListView
+                    model: actionEditorDialog.organizationsWithFiles
+                    
+                    delegate: Rectangle {
+                        width: orgFilesListView.width
+                        height: orgContent.height + 20
+                        color: index % 2 === 0 ? "#f9f9f9" : "white"
+                        
+                        ColumnLayout {
+                            id: orgContent
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.margins: 10
+                            spacing: 8
+                            
+                            Text {
+                                text: modelData.name || "Без названия"
+                                font.bold: true
+                                font.pixelSize: 14
+                            }
+                            
+                            Repeater {
+                                model: modelData.reference_files || []
+                                
+                                delegate: RowLayout {
+                                    spacing: 8
+                                    
+                                    CheckBox {
+                                        id: fileCheckBox
+                                        checked: modelData.is_linked || false
+                                        text: modelData.file_path.split('/').pop() || modelData.file_path
+                                        
+                                        onCheckedChanged: {
+                                            var fileId = modelData.id;
+                                            var orgId = modelData.organization_id || modelData.org_id;
+                                            var actionId = actionEditorDialog.currentActionId;
+                                            
+                                            if (checked) {
+                                                // Привязываем файл
+                                                if (actionId > 0 && fileId && orgId) {
+                                                    appData.addActionReferenceFile(actionId, orgId, fileId);
+                                                }
+                                            } else {
+                                                // Отвязываем файл
+                                                if (actionId > 0 && fileId) {
+                                                    appData.removeActionReferenceFile(actionId, fileId);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    Text {
+                                        text: {
+                                            var typeNames = { 
+                                                "word": "📄 Документ", 
+                                                "excel": "📊 Таблица", 
+                                                "image": "🖼️ Изображение",
+                                                "other": "📁 Файл"
+                                            };
+                                            return typeNames[modelData.file_type] || ("📁 " + (modelData.file_type || "Файл"));
+                                        }
+                                        font.pixelSize: 12
+                                        color: "#666"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+                
+                Item { Layout.fillWidth: true }
+                
+                Button {
+                    text: "Закрыть"
+                    onClicked: referenceFilesDialog.close()
+                }
+            }
+        }
+    }
 
     background: Rectangle {
         color: "white"
@@ -738,11 +858,25 @@ Popup {
                         // --- ---
                     }
                     
-                    Button {
-                        text: "Добавить файл..."
-                        onClicked: {
-                            console.log("QML ActionEditorDialog: Нажата кнопка 'Добавить файл'")
-                            fileDialog.open()
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        
+                        Button {
+                            text: "Добавить файл..."
+                            onClicked: {
+                                console.log("QML ActionEditorDialog: Нажата кнопка 'Добавить файл'")
+                                fileDialog.open()
+                            }
+                        }
+                        
+                        Button {
+                            text: "Справочные материалы..."
+                            onClicked: {
+                                console.log("QML ActionEditorDialog: Нажата кнопка 'Справочные материалы'")
+                                loadOrganizationsForActionEditor()
+                                referenceFilesDialog.open()
+                            }
                         }
                     }
                 }
@@ -857,6 +991,7 @@ Popup {
         contactPhonesArea.text = "";
         reportMaterialsArea.text = "";
         errorMessageLabel.text = "";
+        actionEditorDialog.organizationsWithFiles = [];
     }
 
     /**
@@ -881,6 +1016,42 @@ Popup {
         contactPhonesArea.text = actionData.contact_phones || "";
         reportMaterialsArea.text = actionData.report_materials || "";
         errorMessageLabel.text = "";
+        
+        // Загружаем организации с файлами для редактирования
+        loadOrganizationsForActionEditor();
+    }
+    
+    /**
+     * Загружает организации с файлами для редактора действий
+     */
+    function loadOrganizationsForActionEditor() {
+        var actionId = actionEditorDialog.currentActionId;
+        if (actionId > 0) {
+            var orgs = appData.getOrganizationsWithReferenceFilesForAction(actionId);
+            if (orgs) {
+                actionEditorDialog.organizationsWithFiles = orgs;
+                console.log("QML ActionEditorDialog: Загружено", orgs.length, "организаций с файлами");
+            } else {
+                actionEditorDialog.organizationsWithFiles = [];
+            }
+        } else {
+            // Для нового действия загружаем все организации без привязок
+            var allOrgs = appData.getAllOrganizationsWithReferenceFiles();
+            if (allOrgs) {
+                // Добавляем флаг is_linked = false для всех файлов
+                for (var i = 0; i < allOrgs.length; i++) {
+                    var org = allOrgs[i];
+                    if (org.reference_files) {
+                        for (var j = 0; j < org.reference_files.length; j++) {
+                            org.reference_files[j].is_linked = false;
+                        }
+                    }
+                }
+                actionEditorDialog.organizationsWithFiles = allOrgs;
+            } else {
+                actionEditorDialog.organizationsWithFiles = [];
+            }
+        }
     }
 
     /**

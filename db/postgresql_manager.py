@@ -2799,6 +2799,142 @@ class PostgreSQLDatabaseManager:
             return False
 
     # ========================================================================
+    # Методы для справочных материалов действий (action_reference_files)
+    # ========================================================================
+
+    def get_action_reference_files(self, action_id: int) -> list:
+        """Получить все справочные файлы, привязанные к действию."""
+        try:
+            conn = self._get_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        SELECT arf.id, arf.action_id, arf.organization_id, arf.file_id, 
+                               orf.file_path, orf.file_type, orf.created_at,
+                               o.name as organization_name
+                        FROM app_schema.action_reference_files arf
+                        JOIN app_schema.organization_reference_files orf ON arf.file_id = orf.id
+                        JOIN app_schema.organizations o ON arf.organization_id = o.id
+                        WHERE arf.action_id = %s 
+                        ORDER BY o.name, orf.file_type, orf.file_path;
+                    """, (action_id,))
+                    rows = cursor.fetchall()
+                    files = [dict(row) for row in rows]
+                    logger.info(f"PostgreSQLDatabaseManager: Получено {len(files)} файлов для действия ID {action_id}.")
+                    return files
+        except Exception as e:
+            logger.error(f"PostgreSQLDatabaseManager: Ошибка при получении файлов для действия ID {action_id}: {e}")
+            return []
+        except Exception as e:
+            logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при получении файлов для действия ID {action_id}: {e}")
+            return []
+        return []
+
+    def add_action_reference_file(self, action_id: int, organization_id: int, file_id: int) -> bool:
+        """Привязать справочный файл к действию."""
+        try:
+            conn = self._get_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        """INSERT INTO app_schema.action_reference_files (action_id, organization_id, file_id) 
+                           VALUES (%s, %s, %s) 
+                           ON CONFLICT (action_id, file_id) DO NOTHING;""",
+                        (action_id, organization_id, file_id)
+                    )
+                    conn.commit()
+                    affected_rows = cursor.rowcount
+                    logger.info(f"PostgreSQLDatabaseManager: Привязан файл ID {file_id} к действию ID {action_id}.")
+                    return affected_rows > 0
+        except Exception as e:
+            logger.error(f"PostgreSQLDatabaseManager: Ошибка при привязке файла к действию ID {action_id}: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        except Exception as e:
+            logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при привязке файла к действию ID {action_id}: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        return False
+
+    def remove_action_reference_file(self, action_id: int, file_id: int) -> bool:
+        """Отвязать справочный файл от действия."""
+        try:
+            conn = self._get_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "DELETE FROM app_schema.action_reference_files WHERE action_id = %s AND file_id = %s;",
+                        (action_id, file_id)
+                    )
+                    conn.commit()
+                    affected_rows = cursor.rowcount
+                    logger.info(f"PostgreSQLDatabaseManager: Отвязан файл ID {file_id} от действия ID {action_id}.")
+                    return affected_rows > 0
+        except Exception as e:
+            logger.error(f"PostgreSQLDatabaseManager: Ошибка при отвязке файла от действия ID {action_id}: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        except Exception as e:
+            logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при отвязке файла от действия ID {action_id}: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        return False
+
+    def get_all_organizations_with_reference_files_for_action(self, action_id: int) -> list:
+        """
+        Получить все организации с их файлами, но с информацией о том,
+        какие файлы уже привязаны к указанному действию.
+        """
+        try:
+            conn = self._get_connection()
+            if conn:
+                with conn.cursor() as cursor:
+                    # Получаем все организации
+                    cursor.execute("SELECT id, name FROM app_schema.organizations ORDER BY name;")
+                    orgs = cursor.fetchall()
+                    
+                    result = []
+                    for org in orgs:
+                        org_dict = dict(org)
+                        
+                        # Получаем все файлы этой организации
+                        cursor.execute("""
+                            SELECT id, file_path, file_type, created_at 
+                            FROM app_schema.organization_reference_files 
+                            WHERE organization_id = %s 
+                            ORDER BY file_type, file_path;
+                        """, (org_dict['id'],))
+                        files = [dict(row) for row in cursor.fetchall()]
+                        
+                        # Получаем ID файлов, уже привязанных к действию
+                        cursor.execute("""
+                            SELECT file_id FROM app_schema.action_reference_files 
+                            WHERE action_id = %s AND organization_id = %s;
+                        """, (action_id, org_dict['id']))
+                        linked_file_ids = set(row['file_id'] for row in cursor.fetchall())
+                        
+                        # Добавляем флаг is_linked к каждому файлу
+                        for f in files:
+                            f['is_linked'] = f['id'] in linked_file_ids
+                        
+                        org_dict['reference_files'] = files
+                        result.append(org_dict)
+                    
+                    logger.info(f"PostgreSQLDatabaseManager: Получено {len(result)} организаций с файлами для действия ID {action_id}.")
+                    return result
+        except Exception as e:
+            logger.error(f"PostgreSQLDatabaseManager: Ошибка при получении организаций для действия ID {action_id}: {e}")
+            return []
+        except Exception as e:
+            logger.exception(f"PostgreSQLDatabaseManager: Неизвестная ошибка при получении организаций для действия ID {action_id}: {e}")
+            return []
+        return []
+
+    # ========================================================================
     # МЕТОДЫ ДЛЯ СВЯЗИ ОРГАНИЗАЦИЙ С ДЕЙСТВИЯМИ
     # ========================================================================
 
