@@ -4,13 +4,14 @@ import QtQuick 6.5
 import QtQuick.Controls 6.5
 import QtQuick.Layouts 6.5
 import QtQuick.Dialogs 6.5
+import "qrc:/ui/algorithms" as AlgorithmsComponents
 
 Popup {
     id: actionExecutionEditorDialog
     x: (parent.width - width) / 2
     y: (parent.height - height) / 2
-    width: Math.min(parent.width * 0.8, 800) // 80% ширины или максимум 600
-    height: Math.min(parent.height * 0.85, 600) // Увеличена высота для новых полей
+    width: Math.min(parent.width * 0.8, 800) // 80% ширины или максимум 800
+    height: Math.min(parent.height * 0.9, 700) // Увеличена высота для новых полей и компонента организаций/файлов
     modal: true
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
@@ -591,6 +592,38 @@ Popup {
                     placeholderText: "Введите дополнительные примечания..."
                     wrapMode: TextArea.Wrap
                 }
+
+                // --- НОВОЕ: Выбор организаций и файлов ---
+                Label {
+                    text: "Организации и файлы:"
+                    Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                    Layout.rowSpan: 2
+                }
+                AlgorithmsComponents.OrganizationFilesSelector {
+                    id: organizationFilesSelectorComponent
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 200
+                    actionExecutionId: actionExecutionEditorDialog.isEditMode ? actionExecutionEditorDialog.currentActionExecutionId : -1
+                    isEditMode: actionExecutionEditorDialog.isEditMode
+                    
+                    onDataLoaded: {
+                        console.log("ActionExecutionEditorDialog: Данные организаций/файлов загружены")
+                    }
+                    onDataSaved: {
+                        console.log("ActionExecutionEditorDialog: Данные организаций/файлов сохранены")
+                    }
+                    onErrorOccurred: function(message) {
+                        errorMessageLabel.text = "Ошибка организаций/файлов: " + message
+                        console.warn("ActionExecutionEditorDialog: Ошибка организаций/файлов:", message)
+                    }
+                    
+                    Component.onCompleted: {
+                        if (actionExecutionEditorDialog.isEditMode && actionExecutionEditorDialog.currentActionExecutionId > 0) {
+                            loadOrganizationFiles()
+                        }
+                    }
+                }
+                // --- ---
             }
         }
 
@@ -766,6 +799,12 @@ Popup {
         actualEndTimeHoursField.text = h;
         actualEndTimeMinutesField.text = min;
         actualEndTimeSecondsField.text = s;
+        
+        // Сброс компонента организаций/файлов для нового действия
+        if (organizationFilesSelectorComponent) {
+            organizationFilesSelectorComponent.actionExecutionId = -1;
+            organizationFilesSelectorComponent.isEditMode = false;
+        }
     }
 
     /**

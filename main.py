@@ -3479,6 +3479,97 @@ class ApplicationData(QObject):
                 return False
         return False
 
+    # --- МЕТОДЫ ДЛЯ РАБОТЫ С ОРГАНИЗАЦИЯМИ И ФАЙЛАМИ ВЫПОЛНЕНИЯ ДЕЙСТВИЙ ---
+    
+    @Slot(int, result='QVariant')
+    def getOrganizationFilesForActionExecution(self, action_execution_id: int):
+        """
+        Получить все организации и файлы, привязанные к выполнению действия.
+        Возвращает список словарей с информацией об организациях и их файлах.
+        """
+        print(f"Python ApplicationData: Запрос организаций/файлов для выполнения действия ID {action_execution_id}")
+        if self.database_manager:
+            try:
+                result = self.database_manager.get_organization_files_for_action_execution(action_execution_id)
+                print(f"Python ApplicationData: Получено {len(result)} записей организаций/файлов")
+                return result
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при получении организаций/файлов: {e}")
+                return []
+        return []
+
+    @Slot(int, int, int, result=bool)
+    def addOrganizationFileToActionExecution(self, action_execution_id: int, organization_id: int, file_id: int) -> bool:
+        """
+        Привязать файл организации к выполнению действия.
+        """
+        print(f"Python ApplicationData: Привязка файла ID {file_id} организации ID {organization_id} к выполнению действия ID {action_execution_id}")
+        if self.database_manager:
+            try:
+                success = self.database_manager.add_organization_file_to_action_execution(
+                    action_execution_id, organization_id, file_id
+                )
+                if success:
+                    print("Python ApplicationData: Файл успешно привязан")
+                else:
+                    print("Python ApplicationData: Не удалось привязать файл")
+                return success
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при привязке файла: {e}")
+                return False
+        return False
+
+    @Slot(int, result=bool)
+    def removeOrganizationFileFromActionExecution(self, link_id: int) -> bool:
+        """
+        Удалить связь между выполнением действия, организацией и файлом по ID связи.
+        """
+        print(f"Python ApplicationData: Удаление связи ID {link_id}")
+        if self.database_manager:
+            try:
+                success = self.database_manager.remove_organization_file_from_action_execution(link_id)
+                if success:
+                    print("Python ApplicationData: Связь успешно удалена")
+                else:
+                    print("Python ApplicationData: Не удалось удалить связь")
+                return success
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при удалении связи: {e}")
+                return False
+        return False
+
+    @Slot(int, result='QVariant')
+    def getAvailableOrganizationsForActionExecution(self, action_execution_id: int):
+        """
+        Получить организации, которые еще не привязаны к выполнению действия.
+        """
+        print(f"Python ApplicationData: Запрос доступных организаций для выполнения действия ID {action_execution_id}")
+        if self.database_manager:
+            try:
+                result = self.database_manager.get_available_organizations_for_action_execution(action_execution_id)
+                print(f"Python ApplicationData: Получено {len(result)} доступных организаций")
+                return result
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при получении доступных организаций: {e}")
+                return []
+        return []
+
+    @Slot(int, result='QVariant')
+    def getFilesForOrganization(self, organization_id: int):
+        """
+        Получить все файлы для конкретной организации.
+        """
+        print(f"Python ApplicationData: Запрос файлов для организации ID {organization_id}")
+        if self.database_manager:
+            try:
+                result = self.database_manager.get_files_for_organization(organization_id)
+                print(f"Python ApplicationData: Получено {len(result)} файлов")
+                return result
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при получении файлов организации: {e}")
+                return []
+        return []
+
 
 def on_qml_loaded(obj, url):
     if obj and url.fileName() == "main.qml":

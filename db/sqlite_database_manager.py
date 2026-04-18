@@ -3465,3 +3465,178 @@ class SQLiteDatabaseManager:
         except Exception as e:
             logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при отвязке организации от действия: {e}")
             return False
+
+    # --- МЕТОДЫ ДЛЯ РАБОТЫ С ТАБЛИЦЕЙ action_execution_organization_files ---
+    
+    def get_organization_files_for_action_execution(self, action_execution_id: int) -> List[Dict[str, Any]]:
+        """
+        Получить все организации и файлы, привязанные к выполнению действия.
+        Возвращает список словарей с информацией об организациях и их файлах.
+        """
+        try:
+            conn = self._get_connection()
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT 
+                    aeof.id as link_id,
+                    aeof.action_execution_id,
+                    aeof.organization_id,
+                    aeof.file_id,
+                    o.name as organization_name,
+                    orf.file_path,
+                    orf.file_name,
+                    orf.uploaded_at
+                FROM action_execution_organization_files aeof
+                INNER JOIN organizations o ON aeof.organization_id = o.id
+                INNER JOIN organization_reference_files orf ON aeof.file_id = orf.id
+                WHERE aeof.action_execution_id = ?
+                ORDER BY o.name, orf.file_name;
+            """, (action_execution_id,))
+            rows = cursor.fetchall()
+            result = [dict(row) for row in rows]
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Получено {len(result)} записей организаций/файлов для выполнения действия ID {action_execution_id}.")
+            return result
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при получении организаций/файлов для выполнения действия ID {action_execution_id}: {e}")
+            return []
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при получении организаций/файлов для выполнения действия ID {action_execution_id}: {e}")
+            return []
+
+    def add_organization_file_to_action_execution(self, action_execution_id: int, organization_id: int, file_id: int) -> bool:
+        """
+        Привязать файл организации к выполнению действия.
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """INSERT INTO action_execution_organization_files (action_execution_id, organization_id, file_id) 
+                   VALUES (?, ?, ?);""",
+                (action_execution_id, organization_id, file_id)
+            )
+            conn.commit()
+            new_id = cursor.lastrowid
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Файл ID {file_id} организации ID {organization_id} привязан к выполнению действия ID {action_execution_id}.")
+            return new_id > 0
+        except sqlite3.IntegrityError as e:
+            logger.warning(f"SQLiteDatabaseManager: Такая связь уже существует или нарушены внешние ключи: {e}")
+            return False
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при привязке файла организации к выполнению действия: {e}")
+            return False
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при привязке файла организации к выполнению действия: {e}")
+            return False
+
+    def remove_organization_file_from_action_execution(self, link_id: int) -> bool:
+        """
+        Удалить связь между выполнением действия, организацией и файлом по ID связи.
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM action_execution_organization_files WHERE id = ?;",
+                (link_id,)
+            )
+            conn.commit()
+            affected_rows = cursor.rowcount
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Удалена связь ID {link_id}. Затронуто строк: {affected_rows}.")
+            return affected_rows > 0
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при удалении связи организации/файла: {e}")
+            return False
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при удалении связи организации/файла: {e}")
+            return False
+
+    def clear_organization_files_for_action_execution(self, action_execution_id: int) -> bool:
+        """
+        Удалить все связи организаций и файлов для конкретного выполнения действия.
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM action_execution_organization_files WHERE action_execution_id = ?;",
+                (action_execution_id,)
+            )
+            conn.commit()
+            affected_rows = cursor.rowcount
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Удалено {affected_rows} связей организаций/файлов для выполнения действия ID {action_execution_id}.")
+            return True
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при очистке связей организаций/файлов: {e}")
+            return False
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при очистке связей организаций/файлов: {e}")
+            return False
+
+    def get_available_organizations_for_action_execution(self, action_execution_id: int) -> List[Dict[str, Any]]:
+        """
+        Получить организации, которые еще не привязаны к выполнению действия.
+        Используется для отображения в списке доступных для выбора организаций.
+        """
+        try:
+            conn = self._get_connection()
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT o.*
+                FROM organizations o
+                WHERE o.id NOT IN (
+                    SELECT organization_id 
+                    FROM action_execution_organization_files 
+                    WHERE action_execution_id = ?
+                )
+                ORDER BY o.name;
+            """, (action_execution_id,))
+            rows = cursor.fetchall()
+            organizations = [dict(row) for row in rows]
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Получено {len(organizations)} доступных организаций для выполнения действия ID {action_execution_id}.")
+            return organizations
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при получении доступных организаций: {e}")
+            return []
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при получении доступных организаций: {e}")
+            return []
+
+    def get_files_for_organization(self, organization_id: int) -> List[Dict[str, Any]]:
+        """
+        Получить все файлы для конкретной организации.
+        """
+        try:
+            conn = self._get_connection()
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, file_name, file_path, uploaded_at
+                FROM organization_reference_files
+                WHERE organization_id = ?
+                ORDER BY file_name;
+            """, (organization_id,))
+            rows = cursor.fetchall()
+            files = [dict(row) for row in rows]
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Получено {len(files)} файлов для организации ID {organization_id}.")
+            return files
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при получении файлов организации: {e}")
+            return []
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при получении файлов организации: {e}")
+            return []
