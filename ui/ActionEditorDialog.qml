@@ -3,6 +3,7 @@ import QtQuick 6.5
 import QtQuick.Controls 6.5
 import QtQuick.Layouts 6.5
 import QtQuick.Dialogs 6.5 // Для FileDialog
+import "algorithms" // Импорт компонентов из папки algorithms
 
 Popup {
     id: actionEditorDialog
@@ -22,6 +23,18 @@ Popup {
     property var selectedReferenceFiles: []  // Выбранные справочные файлы для действия
 
     signal actionSaved()
+
+    // Диалог выбора справочных материалов
+    ReferenceMaterialsSelectorDialog {
+        id: referenceFilesSelectorDialog
+        parent: actionEditorDialog
+        allOrganizations: actionEditorDialog.allOrganizations
+        selectedMaterials: actionEditorDialog.selectedReferenceFiles
+        onAccepted: {
+            actionEditorDialog.selectedReferenceFiles = referenceFilesSelectorDialog.selectedMaterials;
+            console.log("QML ActionEditorDialog: Выбрано файлов:", actionEditorDialog.selectedReferenceFiles.length);
+        }
+    }
 
     // --- Для выбора файлов ---
     FileDialog {

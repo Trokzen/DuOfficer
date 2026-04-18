@@ -18,6 +18,9 @@ Popup {
     property var allOrganizations: [] // Все организации с файлами из БД
     property var selectedMaterials: [] // Уже выбранные материалы
 
+    signal accepted()
+    signal rejected()
+
     background: Rectangle {
         color: "white"
         border.color: "lightgray"
@@ -180,8 +183,20 @@ Popup {
             }
 
             Button {
-                text: "Закрыть"
-                onClicked: referenceMaterialsSelectorDialog.close()
+                text: "Отмена"
+                onClicked: {
+                    referenceMaterialsSelectorDialog.rejected();
+                    referenceMaterialsSelectorDialog.close();
+                }
+            }
+
+            Button {
+                text: "Готово"
+                highlighted: true
+                onClicked: {
+                    referenceMaterialsSelectorDialog.accepted();
+                    referenceMaterialsSelectorDialog.close();
+                }
             }
         }
     }
