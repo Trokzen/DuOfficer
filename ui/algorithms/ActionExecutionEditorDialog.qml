@@ -1155,12 +1155,17 @@ Popup {
         }
     }
     // --- ---
-        // Добавлен в конец ActionExecutionEditorDialog.qml
+    
+    // Компонент выбора справочных материалов
+    ReferenceMaterialsSelectorDialog {
+        id: referenceMaterialsSelectorDialog
+        parent: actionExecutionEditorDialog
+    }
+    // --- ---
+    
+    // Календарь
     CustomCalendarPicker {
         id: customCalendarPicker
-        // visible: false // Обычно Popup сам управляет видимостью, но можно явно скрыть
-        // anchors.fill: parent // Обычно не нужно для Popup/Dialog
-        // z: -1 // Можно поместить позади, если нужно, но обычно Popup выше
     }
     // --- ---
 }
