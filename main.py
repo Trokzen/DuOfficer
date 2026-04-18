@@ -3479,6 +3479,91 @@ class ApplicationData(QObject):
                 return False
         return False
 
+    # ========================================================================
+    # МЕТОДЫ ДЛЯ СВЯЗИ ШАБЛОНОВ ДЕЙСТВИЙ СО СПРАВОЧНЫМИ ФАЙЛАМИ
+    # ========================================================================
+
+    @Slot(int, result='QVariant')
+    def getReferenceFilesForAction(self, action_id: int) -> list:
+        """Получить все справочные файлы, привязанные к шаблону действия."""
+        if self.database_manager:
+            try:
+                files = self.database_manager.get_reference_files_for_action(action_id)
+                return files
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при получении справочных файлов для шаблона действия ID {action_id}: {e}")
+                return []
+        return []
+
+    @Slot(int, int, int, result=bool)
+    def addReferenceFileToAction(self, action_id: int, organization_id: int, reference_file_id: int) -> bool:
+        """Привязать справочный файл организации к шаблону действия."""
+        if self.database_manager:
+            try:
+                return self.database_manager.add_reference_file_to_action(action_id, organization_id, reference_file_id)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при привязке справочного файла к шаблону действия: {e}")
+                return False
+        return False
+
+    @Slot(int, int, result=bool)
+    def removeReferenceFileFromAction(self, action_id: int, reference_file_id: int) -> bool:
+        """Отвязать справочный файл от шаблона действия."""
+        if self.database_manager:
+            try:
+                return self.database_manager.remove_reference_file_from_action(action_id, reference_file_id)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при отвязке справочного файла от шаблона действия: {e}")
+                return False
+        return False
+
+    @Slot(result='QVariant')
+    def getAllOrganizationsWithReferenceFilesForActionEditor(self):
+        """Получить ВСЕ организации с привязанными к ним справочными файлами для редактора действий."""
+        if self.database_manager:
+            try:
+                # Используем тот же метод что и для деталей выполнения
+                orgs = self.database_manager.get_all_organizations_with_reference_files_grouped()
+                return orgs
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при получении списка всех организаций для редактора действий: {e}")
+                return []
+        return []
+
+    @Slot(int, result='QVariant')
+    def getReferenceFilesForActionExecution(self, action_execution_id: int) -> list:
+        """Получить все справочные файлы, привязанные к выполнению действия."""
+        if self.database_manager:
+            try:
+                files = self.database_manager.get_reference_files_for_action_execution(action_execution_id)
+                return files
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при получении справочных файлов для выполнения действия ID {action_execution_id}: {e}")
+                return []
+        return []
+
+    @Slot(int, int, int, result=bool)
+    def addReferenceFileToActionExecution(self, action_execution_id: int, organization_id: int, reference_file_id: int) -> bool:
+        """Привязать справочный файл организации к выполнению действия."""
+        if self.database_manager:
+            try:
+                return self.database_manager.add_reference_file_to_action_execution(action_execution_id, organization_id, reference_file_id)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при привязке справочного файла к выполнению действия: {e}")
+                return False
+        return False
+
+    @Slot(int, int, result=bool)
+    def removeReferenceFileFromActionExecution(self, action_execution_id: int, reference_file_id: int) -> bool:
+        """Отвязать справочный файл от выполнения действия."""
+        if self.database_manager:
+            try:
+                return self.database_manager.remove_reference_file_from_action_execution(action_execution_id, reference_file_id)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при отвязке справочного файла от выполнения действия: {e}")
+                return False
+        return False
+
 
 def on_qml_loaded(obj, url):
     if obj and url.fileName() == "main.qml":

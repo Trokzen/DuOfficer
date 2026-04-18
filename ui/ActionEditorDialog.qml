@@ -18,6 +18,8 @@ Popup {
     property bool isEditMode: false // <-- Добавьте эту строку, если её нет
     property int currentActionId: -1
     property int currentAlgorithmId: -1
+    property var allOrganizations: []  // Все организации с файлами
+    property var selectedReferenceFiles: []  // Выбранные справочные файлы для действия
 
     signal actionSaved()
 
@@ -712,37 +714,103 @@ Popup {
                 }
                 // --- ---
 
-                // --- ОТЧЕТНЫЕ МАТЕРИАЛЫ ---
+                // --- СПРАВОЧНЫЕ МАТЕРИАЛЫ (ИНДИВИДУАЛЬНЫЙ ВЫБОР) ---
                 Label {
-                    text: "Отчетные материалы:"
+                    text: "Справочные материалы:"
                     Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                    ToolTip.text: "Выберите организации и привяжите необходимые справочные файлы"
+                    ToolTip.visible: hovered
                 }
                 ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.minimumHeight: 100
-                    spacing: 5
+                    Layout.minimumHeight: 200
+                    spacing: 8
                     
-                    TextArea {
-                        id: reportMaterialsArea
+                    // Список выбранных файлов
+                    Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        placeholderText: "Введите пути/ссылки на отчетные материалы (через новую строку)..."
-                        wrapMode: TextArea.Wrap
-                        // --- Делаем границу видимой ---
-                        background: Rectangle {
-                            border.color: reportMaterialsArea.activeFocus ? "#3498db" : "#ccc"
-                            border.width: 1
-                            radius: 2
-                            color: "white"
+                        Layout.minimumHeight: 120
+                        color: "#f8f9fa"
+                        border.color: "#dee2e6"
+                        border.width: 1
+                        radius: 4
+                        
+                        ScrollView {
+                            anchors.fill: parent
+                            anchors.margins: 5
+                            clip: true
+                            
+                            ListView {
+                                id: selectedFilesList
+                                model: actionEditorDialog.selectedReferenceFiles
+                                delegate: Rectangle {
+                                    width: selectedFilesList.width - 10
+                                    height: 36
+                                    color: index % 2 ? "#ffffff" : "#f1f3f4"
+                                    
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 8
+                                        anchors.rightMargin: 8
+                                        spacing: 6
+                                        
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData.organization_name + " - " + modelData.file_path
+                                            font.pixelSize: 11
+                                            elide: Text.ElideRight
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                        
+                                        Button {
+                                            text: "✕"
+                                            Layout.preferredWidth: 24
+                                            Layout.preferredHeight: 24
+                                            font.pixelSize: 12
+                                            background: Rectangle {
+                                                color: parent.pressed ? "#dc3545" : (parent.hovered ? "#c82333" : "#e74c3c")
+                                                radius: 3
+                                            }
+                                            contentItem: Text {
+                                                text: parent.parent.text
+                                                font: parent.parent.font
+                                                color: "white"
+                                                horizontalAlignment: Text.AlignHCenter
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                            onClicked: {
+                                                var fileId = modelData.reference_file_id;
+                                                var orgId = modelData.organization_id;
+                                                if (actionEditorDialog.currentActionId > 0) {
+                                                    appData.removeReferenceFileFromAction(actionEditorDialog.currentActionId, fileId);
+                                                }
+                                                actionEditorDialog.selectedReferenceFiles.splice(index, 1);
+                                                actionEditorDialog.selectedReferenceFiles = actionEditorDialog.selectedReferenceFiles;
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "Нет выбранных файлов"
+                                    font.pixelSize: 12
+                                    color: "#6c757d"
+                                    visible: parent.model.length === 0
+                                }
+                            }
                         }
-                        // --- ---
                     }
                     
+                    // Кнопка выбора файлов
                     Button {
-                        text: "Добавить файл..."
+                        text: "Выбрать справочные материалы..."
+                        icon.source: "qrc:/icons/add.png"
                         onClicked: {
-                            console.log("QML ActionEditorDialog: Нажата кнопка 'Добавить файл'")
-                            fileDialog.open()
+                            // Загружаем все организации с файлами
+                            actionEditorDialog.allOrganizations = appData.getAllOrganizationsWithReferenceFilesForActionEditor();
+                            referenceFilesSelectorDialog.open();
                         }
                     }
                 }
@@ -855,7 +923,7 @@ Popup {
         updateEndOffsetPreview();
         
         contactPhonesArea.text = "";
-        reportMaterialsArea.text = "";
+        actionEditorDialog.selectedReferenceFiles = [];
         errorMessageLabel.text = "";
     }
 
@@ -879,7 +947,19 @@ Popup {
         loadEndOffsetFromString(actionData.end_offset || "");
         
         contactPhonesArea.text = actionData.contact_phones || "";
-        reportMaterialsArea.text = actionData.report_materials || "";
+        
+        // Загрузка справочных файлов для действия
+        if (currentActionId > 0) {
+            var files = appData.getReferenceFilesForAction(currentActionId);
+            if (files && files.length > 0) {
+                actionEditorDialog.selectedReferenceFiles = files;
+            } else {
+                actionEditorDialog.selectedReferenceFiles = [];
+            }
+        } else {
+            actionEditorDialog.selectedReferenceFiles = [];
+        }
+        
         errorMessageLabel.text = "";
     }
 

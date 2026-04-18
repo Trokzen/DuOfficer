@@ -20,6 +20,10 @@ Popup {
     property int executionId: -1 // ID execution'а, к которому принадлежит или будет принадлежать action_execution
     property int currentActionExecutionId: -1 // ID редактируемого action_execution (только в режиме редактирования)
 
+    // --- Справочные материалы ---
+    property var allOrganizationsWithFiles: [] // Все организации с файлами из БД
+    property var selectedReferenceMaterials: [] // Выбранные справочные материалы для текущего действия
+
     // --- Сигналы ---
     signal actionExecutionSaved() // Сигнал для уведомления об успешном сохранении/добавлении
 
@@ -591,6 +595,51 @@ Popup {
                     placeholderText: "Введите дополнительные примечания..."
                     wrapMode: TextArea.Wrap
                 }
+
+                // === СПРАВОЧНЫЕ МАТЕРИАЛЫ ===
+                Label {
+                    text: "Справочные материалы:"
+                    Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                    font.bold: true
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    // Кнопка добавления справочных материалов
+                    Button {
+                        text: "➕ Добавить справочные материалы"
+                        Layout.alignment: Qt.AlignLeft
+                        onClicked: {
+                            console.log("QML ActionExecutionEditorDialog: Нажата кнопка добавления справочных материалов");
+                            openReferenceMaterialsSelector();
+                        }
+                    }
+
+                    // Список выбранных организаций с файлами
+                    ScrollView {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 200
+                        clip: true
+                        ScrollBar.vertical.policy: ScrollBar.AsNeeded
+
+                        ColumnLayout {
+                            id: selectedReferenceMaterialsList
+                            width: parent.width
+                            spacing: 10
+
+                            Label {
+                                text: selectedReferenceMaterialsModel.count === 0 
+                                      ? "Справочные материалы не выбраны" 
+                                      : "Выбранные организации и файлы:"
+                                font.pixelSize: 11
+                                color: "#666"
+                                Layout.fillWidth: true
+                            }
+                        }
+                    }
+                }
+                // === ===
             }
         }
 
@@ -719,6 +768,20 @@ Popup {
 
                     if (result === true || (typeof result === 'number' && result > 0)) {
                         console.log("QML ActionExecutionEditorDialog: Успешно сохранено.");
+                        
+                        // Если это новый режим редактирования и у нас есть ID действия, сохраняем справочные материалы
+                        var newActionExecutionId = currentActionExecutionId;
+                        if (!isEditMode && typeof result === 'number' && result > 0) {
+                            // Это новое действие, result содержит его ID
+                            newActionExecutionId = result;
+                            currentActionExecutionId = result;
+                        }
+                        
+                        // Сохраняем справочные материалы
+                        if (selectedReferenceMaterials.length > 0) {
+                            saveReferenceMaterialsToDatabase();
+                        }
+                        
                         actionExecutionEditorDialog.actionExecutionSaved();
                         actionExecutionEditorDialog.close();
                     } else {
@@ -870,9 +933,219 @@ Popup {
         textField.text = newText;
     }
 
+    // === ФУНКЦИИ ДЛЯ РАБОТЫ СО СПРАВОЧНЫМИ МАТЕРИАЛАМИ ===
+    
+    function loadSelectedReferenceMaterials() {
+        if (currentActionExecutionId <= 0) return;
+        
+        var files = appData.getReferenceFilesForActionExecution(currentActionExecutionId);
+        if (files) {
+            selectedReferenceMaterials = [];
+            for (var i = 0; i < files.length; i++) {
+                var file = files[i];
+                selectedReferenceMaterials.push({
+                    organization_id: file.organization_id,
+                    organization_name: file.organization_name,
+                    reference_file_id: file.reference_file_id,
+                    file_path: file.file_path,
+                    file_type: file.file_type
+                });
+            }
+            console.log("QML ActionExecutionEditorDialog: Загружено выбранных справочных материалов:", selectedReferenceMaterials.length);
+        } else {
+            selectedReferenceMaterials = [];
+        }
+    }
+    
+    function updateSelectedReferenceMaterialsDisplay() {
+        // Очищаем текущий список
+        while (selectedReferenceMaterialsList.children.length > 1) { // Оставляем Label
+            selectedReferenceMaterialsList.children[1].destroy();
+        }
+        
+        if (selectedReferenceMaterials.length === 0) {
+            return;
+        }
+        
+        // Группируем по организациям
+        var orgMap = {};
+        for (var i = 0; i < selectedReferenceMaterials.length; i++) {
+            var item = selectedReferenceMaterials[i];
+            var orgId = item.organization_id;
+            if (!orgMap[orgId]) {
+                orgMap[orgId] = {
+                    name: item.organization_name,
+                    files: []
+                };
+            }
+            orgMap[orgId].files.push(item);
+        }
+        
+        // Создаем компоненты для отображения
+        for (var orgKey in orgMap) {
+            var org = orgMap[orgKey];
+            
+            // Заголовок организации
+            var orgLabel = Qt.createQmlObject(`
+                import QtQuick 6.5
+                import QtQuick.Controls 6.5
+                import QtQuick.Layouts 6.5
+                
+                Label {
+                    text: "📁 ${org.name}"
+                    font.pixelSize: 12
+                    font.bold: true
+                    color: "#2c3e50"
+                    Layout.fillWidth: true
+                    padding: 5
+                }
+            `, selectedReferenceMaterialsList, "orgLabel_" + orgKey);
+            
+            // Список файлов организации
+            for (var j = 0; j < org.files.length; j++) {
+                var file = org.files[j];
+                var fileRow = Qt.createQmlObject(`
+                    import QtQuick 6.5
+                    import QtQuick.Controls 6.5
+                    import QtQuick.Layouts 6.5
+                    
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 5
+                        padding: 2
+                        
+                        Label {
+                            text: "  • ${file.file_path.split('/').pop() || file.file_path}"
+                            font.pixelSize: 11
+                            color: "#555"
+                            elide: Text.ElideMiddle
+                            Layout.fillWidth: true
+                        }
+                        
+                        Button {
+                            text: "✕"
+                            font.pixelSize: 10
+                            Layout.preferredWidth: 24
+                            Layout.preferredHeight: 24
+                            onClicked: {
+                                removeReferenceFile(${file.organization_id}, ${file.reference_file_id});
+                            }
+                        }
+                    }
+                `, selectedReferenceMaterialsList, "fileRow_" + orgKey + "_" + j);
+            }
+        }
+    }
+    
+    function openReferenceMaterialsSelector() {
+        referenceMaterialsSelectorDialog.allOrganizations = allOrganizationsWithFiles;
+        referenceMaterialsSelectorDialog.selectedMaterials = selectedReferenceMaterials;
+        referenceMaterialsSelectorDialog.open();
+    }
+    
+    function addReferenceFile(orgId, fileId) {
+        // Проверяем, не добавлен ли уже этот файл
+        for (var i = 0; i < selectedReferenceMaterials.length; i++) {
+            if (selectedReferenceMaterials[i].reference_file_id === fileId) {
+                console.log("QML ActionExecutionEditorDialog: Файл уже добавлен");
+                return;
+            }
+        }
+        
+        // Находим информацию об организации и файле
+        var orgName = "";
+        var filePath = "";
+        var fileType = "";
+        
+        for (var i = 0; i < allOrganizationsWithFiles.length; i++) {
+            var org = allOrganizationsWithFiles[i];
+            if (org.id === orgId) {
+                orgName = org.name;
+                for (var j = 0; j < org.reference_files.length; j++) {
+                    if (org.reference_files[j].id === fileId) {
+                        filePath = org.reference_files[j].file_path;
+                        fileType = org.reference_files[j].file_type;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+        
+        if (orgName && filePath) {
+            selectedReferenceMaterials.push({
+                organization_id: orgId,
+                organization_name: orgName,
+                reference_file_id: fileId,
+                file_path: filePath,
+                file_type: fileType
+            });
+            updateSelectedReferenceMaterialsDisplay();
+            console.log("QML ActionExecutionEditorDialog: Добавлен справочный файл:", filePath);
+        }
+    }
+    
+    function removeReferenceFile(orgId, fileId) {
+        for (var i = 0; i < selectedReferenceMaterials.length; i++) {
+            if (selectedReferenceMaterials[i].reference_file_id === fileId) {
+                selectedReferenceMaterials.splice(i, 1);
+                break;
+            }
+        }
+        updateSelectedReferenceMaterialsDisplay();
+        console.log("QML ActionExecutionEditorDialog: Удален справочный файл ID:", fileId);
+    }
+    
+    function saveReferenceMaterialsToDatabase() {
+        if (currentActionExecutionId <= 0) {
+            console.log("QML ActionExecutionEditorDialog: Нельзя сохранить справочные материалы - действие еще не создано");
+            return false;
+        }
+        
+        // Сначала удаляем все текущие привязки
+        for (var i = 0; i < selectedReferenceMaterials.length; i++) {
+            var item = selectedReferenceMaterials[i];
+            // Удаляем старую привязку (на случай если была)
+            appData.removeReferenceFileFromActionExecution(currentActionExecutionId, item.reference_file_id);
+        }
+        
+        // Затем добавляем новые привязки
+        var success = true;
+        for (var i = 0; i < selectedReferenceMaterials.length; i++) {
+            var item = selectedReferenceMaterials[i];
+            var result = appData.addReferenceFileToActionExecution(
+                currentActionExecutionId, 
+                item.organization_id, 
+                item.reference_file_id
+            );
+            if (!result) {
+                success = false;
+                console.error("QML ActionExecutionEditorDialog: Ошибка при сохранении справочного файла:", item.file_path);
+            }
+        }
+        
+        return success;
+    }
+    // === ===
+
     onOpened: {
         console.log("QML ActionExecutionEditorDialog: Диалог открыт. Режим:", isEditMode ? "Редактирование" : "Добавление");
         errorMessageLabel.text = "";
+        
+        // Загружаем все организации с файлами для выбора
+        allOrganizationsWithFiles = appData.getAllOrganizationsWithReferenceFilesForActionEditor();
+        console.log("QML ActionExecutionEditorDialog: Загружено организаций с файлами:", allOrganizationsWithFiles.length);
+        
+        // Если режим редактирования - загружаем уже выбранные справочные материалы
+        if (isEditMode && currentActionExecutionId > 0) {
+            loadSelectedReferenceMaterials();
+        } else {
+            selectedReferenceMaterials = [];
+        }
+        
+        // Обновляем отображение выбранных материалов
+        updateSelectedReferenceMaterialsDisplay();
+        
         // Фокус на первое поле
         if (isEditMode) {
             descriptionArea.forceActiveFocus();

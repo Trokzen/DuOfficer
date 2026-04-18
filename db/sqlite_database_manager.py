@@ -3330,3 +3330,201 @@ class SQLiteDatabaseManager:
         except Exception as e:
             logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при отвязке организации от действия: {e}")
             return False
+
+    # === МЕТОДЫ ДЛЯ ИНДИВИДУАЛЬНОГО ВЫБОРА СПРАВОЧНЫХ ФАЙЛОВ ===
+
+    def get_reference_files_for_action_execution(self, action_execution_id: int) -> list:
+        """Получить все справочные файлы, привязанные к действию (с информацией об организациях)."""
+        try:
+            conn = self._get_connection()
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT 
+                    aef.id as link_id,
+                    aef.action_execution_id,
+                    aef.organization_id,
+                    aef.reference_file_id,
+                    o.name as organization_name,
+                    o.phone as organization_phone,
+                    rf.file_path,
+                    rf.file_type,
+                    rf.created_at as file_created_at
+                FROM action_execution_reference_files aef
+                INNER JOIN organizations o ON aef.organization_id = o.id
+                INNER JOIN organization_reference_files rf ON aef.reference_file_id = rf.id
+                WHERE aef.action_execution_id = ?
+                ORDER BY o.name, rf.file_type, rf.file_path;
+            """, (action_execution_id,))
+            rows = cursor.fetchall()
+            files = [dict(row) for row in rows]
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Получено {len(files)} справочных файлов для действия ID {action_execution_id}.")
+            return files
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при получении справочных файлов для действия ID {action_execution_id}: {e}")
+            return []
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при получении справочных файлов для действия ID {action_execution_id}: {e}")
+            return []
+
+    def add_reference_file_to_action_execution(self, action_execution_id: int, organization_id: int, reference_file_id: int) -> bool:
+        """Привязать справочный файл организации к действию."""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT OR IGNORE INTO action_execution_reference_files (action_execution_id, organization_id, reference_file_id) VALUES (?, ?, ?);",
+                (action_execution_id, organization_id, reference_file_id)
+            )
+            conn.commit()
+            new_id = cursor.lastrowid
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Справочный файл ID {reference_file_id} организации ID {organization_id} привязан к действию ID {action_execution_id}.")
+            return new_id > 0 or True  # Возвращаем True даже если запись уже существовала (INSERT OR IGNORE)
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при привязке справочного файла к действию: {e}")
+            return False
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при привязке справочного файла к действию: {e}")
+            return False
+
+    def remove_reference_file_from_action_execution(self, action_execution_id: int, reference_file_id: int) -> bool:
+        """Отвязать справочный файл от действия."""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM action_execution_reference_files WHERE action_execution_id = ? AND reference_file_id = ?;",
+                (action_execution_id, reference_file_id)
+            )
+            conn.commit()
+            affected_rows = cursor.rowcount
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Отвязано {affected_rows} справочных файлов от действия ID {action_execution_id}.")
+            return affected_rows > 0
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при отвязке справочного файла от действия: {e}")
+            return False
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при отвязке справочного файла от действия: {e}")
+            return False
+
+    def get_all_organizations_with_reference_files_grouped(self) -> list:
+        """Получить все организации с их справочными файлами, сгруппированными по организациям."""
+        try:
+            conn = self._get_connection()
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # Получаем все организации
+            cursor.execute("SELECT id, name, phone, contact_person, notes FROM organizations ORDER BY name;")
+            orgs = [dict(row) for row in cursor.fetchall()]
+            
+            # Для каждой организации получаем файлы
+            for org in orgs:
+                cursor.execute("""
+                    SELECT id, file_path, file_type, created_at
+                    FROM organization_reference_files
+                    WHERE organization_id = ?
+                    ORDER BY file_type, file_path;
+                """, (org['id'],))
+                org['reference_files'] = [dict(row) for row in cursor.fetchall()]
+            
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Получено {len(orgs)} организаций с справочными файлами.")
+            return orgs
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при получении организаций с файлами: {e}")
+            return []
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при получении организаций с файлами: {e}")
+            return []
+
+    # ========================================================================
+    # МЕТОДЫ ДЛЯ СВЯЗИ ШАБЛОНОВ ДЕЙСТВИЙ СО СПРАВОЧНЫМИ ФАЙЛАМИ
+    # ========================================================================
+
+    def get_reference_files_for_action(self, action_id: int) -> list:
+        """Получить все справочные файлы, привязанные к шаблону действия (с информацией об организациях)."""
+        try:
+            conn = self._get_connection()
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT 
+                    arf.id as link_id,
+                    arf.action_id,
+                    arf.organization_id,
+                    arf.reference_file_id,
+                    o.name as organization_name,
+                    o.phone as organization_phone,
+                    rf.file_path,
+                    rf.file_type,
+                    rf.created_at as file_created_at
+                FROM action_reference_files arf
+                INNER JOIN organizations o ON arf.organization_id = o.id
+                INNER JOIN organization_reference_files rf ON arf.reference_file_id = rf.id
+                WHERE arf.action_id = ?
+                ORDER BY o.name, rf.file_type, rf.file_path;
+            """, (action_id,))
+            rows = cursor.fetchall()
+            files = [dict(row) for row in rows]
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Получено {len(files)} справочных файлов для шаблона действия ID {action_id}.")
+            return files
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при получении справочных файлов для шаблона действия ID {action_id}: {e}")
+            return []
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при получении справочных файлов для шаблона действия ID {action_id}: {e}")
+            return []
+
+    def add_reference_file_to_action(self, action_id: int, organization_id: int, reference_file_id: int) -> bool:
+        """Привязать справочный файл организации к шаблону действия."""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT OR IGNORE INTO action_reference_files (action_id, organization_id, reference_file_id) VALUES (?, ?, ?);",
+                (action_id, organization_id, reference_file_id)
+            )
+            conn.commit()
+            new_id = cursor.lastrowid
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Справочный файл ID {reference_file_id} организации ID {organization_id} привязан к шаблону действия ID {action_id}.")
+            return new_id > 0 or True  # Возвращаем True даже если запись уже существовала (INSERT OR IGNORE)
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при привязке справочного файла к шаблону действия: {e}")
+            return False
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при привязке справочного файла к шаблону действия: {e}")
+            return False
+
+    def remove_reference_file_from_action(self, action_id: int, reference_file_id: int) -> bool:
+        """Отвязать справочный файл от шаблона действия."""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM action_reference_files WHERE action_id = ? AND reference_file_id = ?;",
+                (action_id, reference_file_id)
+            )
+            conn.commit()
+            affected_rows = cursor.rowcount
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Отвязано {affected_rows} справочных файлов от шаблона действия ID {action_id}.")
+            return affected_rows > 0
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при отвязке справочного файла от шаблона действия: {e}")
+            return False
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при отвязке справочного файла от шаблона действия: {e}")
+            return False

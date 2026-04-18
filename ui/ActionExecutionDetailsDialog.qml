@@ -238,12 +238,41 @@ Popup {
     }
 
     function loadOrganizationsForAction() {
-        // Запрашиваем ВСЕ организации с файлами
-        var orgs = appData.getAllOrganizationsWithReferenceFiles()
-        if (orgs) {
-            actionDetailsDialog.allOrganizations = orgs
+        // Запрашиваем справочные файлы, привязанные к текущему действию выполнения
+        var actionExecutionId = getCurrentActionId();
+        if (actionExecutionId > 0) {
+            var files = appData.getReferenceFilesForActionExecution(actionExecutionId);
+            if (files) {
+                // Группируем файлы по организациям
+                var orgMap = {};
+                for (var i = 0; i < files.length; i++) {
+                    var file = files[i];
+                    var orgId = file.organization_id;
+                    if (!orgMap[orgId]) {
+                        orgMap[orgId] = {
+                            id: orgId,
+                            name: file.organization_name,
+                            phone: file.organization_phone,
+                            reference_files: []
+                        };
+                    }
+                    orgMap[orgId].reference_files.push({
+                        id: file.reference_file_id,
+                        file_path: file.file_path,
+                        file_type: file.file_type
+                    });
+                }
+                // Преобразуем карту в массив
+                var orgsArray = [];
+                for (var key in orgMap) {
+                    orgsArray.push(orgMap[key]);
+                }
+                actionDetailsDialog.allOrganizations = orgsArray;
+            } else {
+                actionDetailsDialog.allOrganizations = [];
+            }
         } else {
-            actionDetailsDialog.allOrganizations = []
+            actionDetailsDialog.allOrganizations = [];
         }
     }
 
