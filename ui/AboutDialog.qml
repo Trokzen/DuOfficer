@@ -4,7 +4,7 @@ import QtQuick.Layouts 6.5
 
 Dialog {
     id: aboutDialog
-    title: "О программе_1"
+    title: "О программе 2"
     width: 500
     height: 400
     x: (parent.width - width) / 2
