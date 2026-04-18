@@ -74,12 +74,27 @@ Popup {
                             model: allOrganizations
 
                             delegate: Rectangle {
+                                id: orgDelegate
                                 width: organizationsList.width
                                 height: orgLabel.contentHeight + 16
                                 radius: 5
                                 color: orgMouseArea.containsMouse ? "#e8f4f8" : "white"
                                 border.color: "#3498db"
                                 border.width: 1
+
+                                property bool containsMouse: false
+
+                                MouseArea {
+                                    id: orgMouseArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onEntered: { orgDelegate.containsMouse = true; }
+                                    onExited: { orgDelegate.containsMouse = false; }
+                                    onClicked: {
+                                        showOrganizationFiles(modelData);
+                                    }
+                                }
 
                                 RowLayout {
                                     anchors.fill: parent
@@ -104,17 +119,8 @@ Popup {
                                             showOrganizationFiles(modelData);
                                         }
                                         ToolTip.text: "Показать файлы организации"
-                                        ToolTip.visible: containsMouse
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: orgMouseArea
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        showOrganizationFiles(modelData);
+                                        ToolTip.visible: hovered
+                                        hoverEnabled: true
                                     }
                                 }
                             }
@@ -243,61 +249,56 @@ Popup {
                 import QtQuick.Controls 6.5
                 import QtQuick.Layouts 6.5
 
-                RowLayout {
+                Rectangle {
                     Layout.fillWidth: true
-                    spacing: 8
-                    padding: 5
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: fileLabel.contentHeight + 10
-                        radius: 4
-                        color: "${isAlreadySelected ? "#d5f5e3" : "white"}"
-                        border.color: "${isAlreadySelected ? "#27ae60" : "#ddd"}"
-                        border.width: 1
+                    Layout.preferredHeight: fileLabel.contentHeight + 10
+                    radius: 4
+                    color: "${isAlreadySelected ? "#d5f5e3" : "white"}"
+                    border.color: "${isAlreadySelected ? "#27ae60" : "#ddd"}"
+                    border.width: 1
 
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            spacing: 8
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        spacing: 8
 
-                            Text {
-                                text: "${fileTypeIcon}"
-                                font.pixelSize: 14
+                        Text {
+                            text: "${fileTypeIcon}"
+                            font.pixelSize: 14
+                        }
+
+                        Label {
+                            id: fileLabel
+                            text: "${fileName}"
+                            font.pixelSize: 11
+                            elide: Text.ElideMiddle
+                            Layout.fillWidth: true
+                            color: "${isAlreadySelected ? "#27ae60" : "#333"}"
+                        }
+
+                        Label {
+                            text: "${file.file_type.toUpperCase()}"
+                            font.pixelSize: 9
+                            font.bold: true
+                            color: "#666"
+                            padding: 2
+                            Rectangle {
+                                anchors.fill: parent
+                                color: "#f0f0f0"
+                                radius: 3
+                                z: -1
                             }
+                        }
 
-                            Label {
-                                id: fileLabel
-                                text: "${fileName}"
-                                font.pixelSize: 11
-                                elide: Text.ElideMiddle
-                                Layout.fillWidth: true
-                                color: "${isAlreadySelected ? "#27ae60" : "#333"}"
-                            }
-
-                            Label {
-                                text: "${file.file_type.toUpperCase()}"
-                                font.pixelSize: 9
-                                font.bold: true
-                                color: "#666"
-                                padding: 2
-                                Rectangle {
-                                    anchors.fill: parent
-                                    color: "#f0f0f0"
-                                    radius: 3
-                                    z: -1
-                                }
-                            }
-
-                            Button {
-                                text: "${isAlreadySelected ? "✓ Добавлен" : "+ Добавить"}"
-                                font.pixelSize: 10
-                                enabled: ${!isAlreadySelected}
-                                Layout.preferredWidth: 80
-                                Layout.preferredHeight: 26
-                                onClicked: {
-                                    addFile(${orgData.id}, ${file.id});
-                                }
+                        Button {
+                            text: "${isAlreadySelected ? "✓ Добавлен" : "+ Добавить"}"
+                            font.pixelSize: 10
+                            enabled: ${!isAlreadySelected}
+                            Layout.preferredWidth: 80
+                            Layout.preferredHeight: 26
+                            onClicked: {
+                                addFile(${orgData.id}, ${file.id});
                             }
                         }
                     }

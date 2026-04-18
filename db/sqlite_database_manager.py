@@ -1,4 +1,4 @@
-﻿# db/sqlite_database_manager.py
+# db/sqlite_database_manager.py
 import sqlite3
 from typing import Optional, Dict, Any, List
 import logging
@@ -97,6 +97,37 @@ class SQLiteDatabaseManager:
                 logger.info("Миграция: добавлена колонка snapshot_technical_text в action_executions.")
             except sqlite3.Error as e:
                 logger.warning(f"Миграция: не удалось добавить snapshot_technical_text: {e}")
+        
+        # Миграция: Создаем таблицы для справочных файлов действий если их нет
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS action_reference_files (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action_id INTEGER NOT NULL,
+                organization_id INTEGER NOT NULL,
+                reference_file_id INTEGER NOT NULL,
+                created_at TEXT DEFAULT (datetime('now', 'localtime')),
+                FOREIGN KEY (action_id) REFERENCES actions(id) ON DELETE CASCADE,
+                FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+                FOREIGN KEY (reference_file_id) REFERENCES organization_reference_files(id) ON DELETE CASCADE,
+                UNIQUE(action_id, reference_file_id)
+            );
+        """)
+        logger.info("Миграция: таблица action_reference_files создана или уже существует.")
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS action_execution_reference_files (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action_execution_id INTEGER NOT NULL,
+                organization_id INTEGER NOT NULL,
+                reference_file_id INTEGER NOT NULL,
+                created_at TEXT DEFAULT (datetime('now', 'localtime')),
+                FOREIGN KEY (action_execution_id) REFERENCES action_executions(id) ON DELETE CASCADE,
+                FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+                FOREIGN KEY (reference_file_id) REFERENCES organization_reference_files(id) ON DELETE CASCADE,
+                UNIQUE(action_execution_id, reference_file_id)
+            );
+        """)
+        logger.info("Миграция: таблица action_execution_reference_files создана или уже существует.")
         # --- Конец миграции ---
 
         conn.commit()
@@ -3527,4 +3558,26 @@ class SQLiteDatabaseManager:
             return False
         except Exception as e:
             logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при отвязке справочного файла от шаблона действия: {e}")
+            return False
+
+    def remove_all_reference_files_from_action(self, action_id: int) -> bool:
+        """Отвязать все справочные файлы от шаблона действия."""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM action_reference_files WHERE action_id = ?;",
+                (action_id,)
+            )
+            conn.commit()
+            affected_rows = cursor.rowcount
+            cursor.close()
+            conn.close()
+            logger.info(f"SQLiteDatabaseManager: Отвязано {affected_rows} справочных файлов от шаблона действия ID {action_id}.")
+            return True
+        except sqlite3.Error as e:
+            logger.error(f"SQLiteDatabaseManager: Ошибка при отвязке всех справочных файлов от шаблона действия: {e}")
+            return False
+        except Exception as e:
+            logger.exception(f"SQLiteDatabaseManager: Неизвестная ошибка при отвязке всех справочных файлов от шаблона действия: {e}")
             return False

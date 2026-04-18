@@ -3517,6 +3517,17 @@ class ApplicationData(QObject):
                 return False
         return False
 
+    @Slot(int, result=bool)
+    def removeAllReferenceFilesFromAction(self, action_id: int) -> bool:
+        """Отвязать все справочные файлы от шаблона действия."""
+        if self.database_manager:
+            try:
+                return self.database_manager.remove_all_reference_files_from_action(action_id)
+            except Exception as e:
+                print(f"Python ApplicationData: Ошибка при отвязке всех справочных файлов от шаблона действия: {e}")
+                return False
+        return False
+
     @Slot(result='QVariant')
     def getAllOrganizationsWithReferenceFilesForActionEditor(self):
         """Получить ВСЕ организации с привязанными к ним справочными файлами для редактора действий."""

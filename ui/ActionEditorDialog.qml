@@ -36,6 +36,20 @@ Popup {
         }
     }
 
+    // Функция для добавления справочного файла к действию (вызывается из диалога выбора)
+    function addReferenceFile(orgId, fileId) {
+        if (actionEditorDialog.currentActionId > 0) {
+            var success = appData.addReferenceFileToAction(actionEditorDialog.currentActionId, orgId, fileId);
+            if (success) {
+                console.log("QML ActionEditorDialog: Справочный файл ID", fileId, "добавлен к действию ID", actionEditorDialog.currentActionId);
+            } else {
+                console.error("QML ActionEditorDialog: Ошибка при добавлении справочного файла ID", fileId, "к действию ID", actionEditorDialog.currentActionId);
+            }
+        } else {
+            console.log("QML ActionEditorDialog: Действие еще не сохранено, файл будет добавлен после сохранения");
+        }
+    }
+
     // --- Для выбора файлов ---
     FileDialog {
         id: fileDialog
@@ -884,9 +898,30 @@ Popup {
                     if (isEditMode) {
                         console.log("QML ActionEditorDialog: Отправляем обновление действия ID", currentActionId, "в Python:", JSON.stringify(actionData));
                         result = appData.updateAction(currentActionId, actionData);
+                        
+                        // После обновления действия, обновляем связи с файлами
+                        if (result === true || (typeof result === 'number' && result > 0)) {
+                            // Удаляем все старые связи и добавляем новые
+                            appData.removeAllReferenceFilesFromAction(currentActionId);
+                            for (var i = 0; i < actionEditorDialog.selectedReferenceFiles.length; i++) {
+                                var file = actionEditorDialog.selectedReferenceFiles[i];
+                                appData.addReferenceFileToAction(currentActionId, file.organization_id, file.reference_file_id);
+                            }
+                        }
                     } else {
                         console.log("QML ActionEditorDialog: Отправляем новое действие для алгоритма ID", currentAlgorithmId, "в Python:", JSON.stringify(actionData));
                         result = appData.addAction(actionData);
+                        
+                        // Если действие успешно создано, добавляем связи с файлами
+                        if (typeof result === 'number' && result > 0) {
+                            currentActionId = result; // Сохраняем новый ID действия
+                            console.log("QML ActionEditorDialog: Новое действие создано с ID", currentActionId);
+                            // Добавляем выбранные файлы к новому действию
+                            for (var i = 0; i < actionEditorDialog.selectedReferenceFiles.length; i++) {
+                                var file = actionEditorDialog.selectedReferenceFiles[i];
+                                appData.addReferenceFileToAction(currentActionId, file.organization_id, file.reference_file_id);
+                            }
+                        }
                     }
 
                     if (result === true || (typeof result === 'number' && result > 0)) {

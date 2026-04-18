@@ -259,6 +259,32 @@ CREATE TABLE IF NOT EXISTS organization_reference_files (
     CHECK (file_type IN ('word', 'excel', 'pdf', 'image', 'other'))
 );
 
+-- Таблица для связи шаблонов действий со справочными файлами
+CREATE TABLE IF NOT EXISTS action_reference_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action_id INTEGER NOT NULL,                        -- Ссылка на шаблон действия
+    organization_id INTEGER NOT NULL,                  -- Ссылка на организацию
+    reference_file_id INTEGER NOT NULL,                -- Ссылка на справочный файл организации
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (action_id) REFERENCES actions(id) ON DELETE CASCADE,
+    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    FOREIGN KEY (reference_file_id) REFERENCES organization_reference_files(id) ON DELETE CASCADE,
+    UNIQUE(action_id, reference_file_id)
+);
+
+-- Таблица для связи выполнений действий со справочными файлами
+CREATE TABLE IF NOT EXISTS action_execution_reference_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action_execution_id INTEGER NOT NULL,              -- Ссылка на выполнение действия
+    organization_id INTEGER NOT NULL,                  -- Ссылка на организацию
+    reference_file_id INTEGER NOT NULL,                -- Ссылка на справочный файл организации
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (action_execution_id) REFERENCES action_executions(id) ON DELETE CASCADE,
+    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    FOREIGN KEY (reference_file_id) REFERENCES organization_reference_files(id) ON DELETE CASCADE,
+    UNIQUE(action_execution_id, reference_file_id)
+);
+
 -- === ИНДЕКСЫ ДЛЯ ОРГАНИЗАЦИЙ ===
 
 -- Индекс для ускорения поиска связей по action_execution
@@ -269,3 +295,13 @@ CREATE INDEX IF NOT EXISTS idx_ae_orgs_organization_id ON action_execution_organ
 
 -- Индекс для ускорения поиска файлов по организации
 CREATE INDEX IF NOT EXISTS idx_org_ref_files_organization_id ON organization_reference_files(organization_id);
+
+-- Индексы для action_reference_files
+CREATE INDEX IF NOT EXISTS idx_action_ref_files_action_id ON action_reference_files(action_id);
+CREATE INDEX IF NOT EXISTS idx_action_ref_files_organization_id ON action_reference_files(organization_id);
+CREATE INDEX IF NOT EXISTS idx_action_ref_files_reference_file_id ON action_reference_files(reference_file_id);
+
+-- Индексы для action_execution_reference_files
+CREATE INDEX IF NOT EXISTS idx_ae_ref_files_ae_id ON action_execution_reference_files(action_execution_id);
+CREATE INDEX IF NOT EXISTS idx_ae_ref_files_organization_id ON action_execution_reference_files(organization_id);
+CREATE INDEX IF NOT EXISTS idx_ae_ref_files_reference_file_id ON action_execution_reference_files(reference_file_id);

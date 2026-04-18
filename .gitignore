@@ -1,5 +1,13 @@
 ```
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
 # Database files
 *.db
-local_database.db
+
+# Logs
+*.log
 ```
